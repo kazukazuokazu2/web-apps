@@ -1,0 +1,977 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>住宅ローン返済シミュレーター</title>
+<style>
+  :root {
+    --bg: #f9f9f7;
+    --surface: #fcfcfb;
+    --text: #0b0b0b;
+    --text-2: #52514e;
+    --muted: #898781;
+    --border: rgba(11, 11, 11, 0.10);
+    --grid: #e1e0d9;
+    --axis: #c3c2b7;
+    --input-bg: #ffffff;
+    --accent: #2a78d6;
+    --danger: #d03b3b;
+    --s-fixed: #2a78d6;   /* 系列1：固定 */
+    --s-var: #eb6834;     /* 系列2：変動 */
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d0d0d;
+      --surface: #1a1a19;
+      --text: #f0efec;
+      --text-2: #c3c2b7;
+      --muted: #898781;
+      --border: rgba(255, 255, 255, 0.10);
+      --grid: #2c2c2a;
+      --axis: #383835;
+      --input-bg: #121211;
+      --accent: #3987e5;
+      --danger: #e66767;
+      --s-fixed: #3987e5;
+      --s-var: #d95926;
+      color-scheme: dark;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Yu Gothic UI", Meiryo, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 20px 16px 40px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .lead { color: var(--text-2); margin: 0 0 20px; }
+  h2 { font-size: 15px; margin: 0 0 10px; }
+
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+
+  /* 入力 */
+  .inputs { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .inputs h2 { display: flex; align-items: center; gap: 8px; }
+  .swatch { display: inline-block; width: 14px; height: 4px; border-radius: 2px; }
+  .swatch.fixed { background: var(--s-fixed); }
+  .swatch.var { background: var(--s-var); }
+  .field { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-bottom: 8px; }
+  .field > .name { flex-basis: 100%; color: var(--text-2); font-size: 12px; }
+  .field input, .field select {
+    font: inherit; color: var(--text); background: var(--input-bg);
+    border: 1px solid var(--axis); border-radius: 6px; padding: 5px 8px;
+  }
+  .inputs > .panel { min-width: 0; }
+  .field select { max-width: 100%; min-width: 0; }
+  .field input { width: 6.5em; text-align: right; font-variant-numeric: tabular-nums; }
+  .field input.short { width: 4.5em; }
+  .field input:focus, .field select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .field input.invalid { border-color: var(--danger); outline-color: var(--danger); }
+  .unit { color: var(--text-2); font-size: 13px; }
+  .note { color: var(--muted); font-size: 12px; margin: 4px 0 0; }
+
+  .error-box {
+    border: 1px solid var(--danger); color: var(--danger); border-radius: 8px;
+    padding: 10px 14px; margin-bottom: 20px;
+  }
+
+  /* 結果カード */
+  .results { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; margin-bottom: 12px; }
+  .card { border-top: 4px solid var(--s-fixed); }
+  .card.var { border-top-color: var(--s-var); }
+  .card .rate-text { color: var(--text-2); font-size: 13px; margin: -6px 0 10px; }
+  .hero-label { color: var(--text-2); font-size: 12px; }
+  .hero { font-size: 30px; font-weight: 700; line-height: 1.2; }
+  .hero-sub { color: var(--text-2); font-size: 13px; min-height: 1.5em; }
+  .stats { display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; margin: 12px 0 0; padding-top: 12px; border-top: 1px solid var(--border); }
+  .stats dt { color: var(--text-2); font-size: 13px; }
+  .stats dd { margin: 0; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .stats dd small { font-weight: 400; color: var(--text-2); }
+  .compare { margin: 0 0 20px; padding: 12px 16px; font-size: 15px; }
+  .compare strong { font-size: 17px; }
+
+  /* グラフ */
+  .chart-panel { margin-bottom: 20px; }
+  .chart-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px; margin-bottom: 4px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; color: var(--text-2); font-size: 12px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend svg { overflow: visible; }
+  .chart { position: relative; margin-bottom: 16px; }
+  .chart svg { display: block; width: 100%; }
+  .chart .grid { stroke: var(--grid); stroke-width: 1; }
+  .chart .base { stroke: var(--axis); stroke-width: 1; }
+  .chart .tick { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .chart .dlabel { fill: var(--text-2); font-size: 12px; font-weight: 600; paint-order: stroke; stroke: var(--surface); stroke-width: 4px; }
+  .chart .line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .chart .line.dash { stroke-width: 1.5; stroke-dasharray: 4 4; }
+  .chart .fixed { stroke: var(--s-fixed); }
+  .chart .var { stroke: var(--s-var); }
+  .chart .cross { stroke: var(--axis); stroke-width: 1; }
+  .chart .dot { stroke: var(--surface); stroke-width: 2; }
+  .chart .dot.fixed { fill: var(--s-fixed); }
+  .chart .dot.var { fill: var(--s-var); }
+  .tip {
+    position: absolute; pointer-events: none; z-index: 2;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, .12); padding: 8px 10px; font-size: 12px; white-space: nowrap;
+  }
+  .tip b { display: block; margin-bottom: 4px; }
+  .tip .row { display: flex; align-items: center; gap: 6px; }
+  .tip .row .v { margin-left: auto; padding-left: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .chart-title { font-size: 13px; color: var(--text-2); margin: 0; }
+
+  /* 年ごとの表 */
+  details.panel { margin-bottom: 20px; }
+  summary { cursor: pointer; font-weight: 600; }
+  .tabs { display: flex; gap: 6px; margin: 12px 0 8px; }
+  .tabs button {
+    font: inherit; cursor: pointer; border-radius: 6px; padding: 4px 12px;
+    border: 1px solid var(--axis); background: var(--surface); color: var(--text);
+  }
+  .tabs button[aria-pressed="true"] { background: var(--text); color: var(--surface); border-color: var(--text); }
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 13px; }
+  th, td { padding: 6px 8px; text-align: right; white-space: nowrap; border-top: 1px solid var(--grid); }
+  th { color: var(--text-2); font-weight: 500; font-size: 12px; }
+  th:first-child, td:first-child { text-align: left; }
+
+  .disclaimer { color: var(--muted); font-size: 12px; }
+
+  /* 繰上返済と投資の比較 */
+  .invest-panel { margin-bottom: 20px; }
+  .invest-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px 24px; }
+  .invest-cols h3 { display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 0; color: var(--text-2); }
+  .invest-cols .stats { margin-top: 8px; padding-top: 8px; }
+  .verdict { margin: 10px 0 0; font-size: 15px; }
+  .invest-panel .note { margin-top: 12px; line-height: 1.6; }
+
+  /* 金利の低い銀行 */
+  .bank-panel { margin-bottom: 20px; }
+  .bank-panel .note a { color: inherit; }
+  .bank-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px 24px; }
+  .bank-cols h3 { display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 8px 0 4px; color: var(--text-2); }
+  .bank-rank { list-style: none; margin: 0; padding: 0; }
+  .bank-rank li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 8px 0; border-top: 1px solid var(--grid); }
+  .bank-rank .rk { font-weight: 700; width: 2.5em; }
+  .bank-rank .bn { flex: 1; min-width: 6em; }
+  .bank-rank .br { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .bank-rank li.empty { color: var(--muted); }
+  .bank-panel button {
+    font: inherit; font-size: 12px; cursor: pointer; border-radius: 6px; padding: 3px 8px;
+    border: 1px solid var(--axis); background: var(--surface); color: var(--text);
+  }
+  .bank-panel button:hover { border-color: var(--accent); }
+  .bank-panel button:disabled { cursor: default; color: var(--muted); border-color: var(--grid); }
+  .bank-panel button.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+  .bank-edit { margin-top: 12px; }
+  .bank-edit th, .bank-edit td { text-align: left; }
+  .bank-edit input, .bank-edit select {
+    font: inherit; color: var(--text); background: var(--input-bg);
+    border: 1px solid var(--axis); border-radius: 6px; padding: 4px 6px;
+  }
+  .bank-edit input.bank-name { width: 100%; min-width: 8em; }
+  .bank-edit input.rate { width: 5.5em; text-align: right; }
+  .bank-edit input.invalid { border-color: var(--danger); }
+  .bank-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
+  .confirm-inline { color: var(--danger); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>住宅ローン返済シミュレーター</h1>
+  <p class="lead">固定金利と変動金利を同じ条件で並べて比べます（元利均等返済）。</p>
+
+  <section class="inputs" id="inputs">
+    <div class="panel">
+      <h2>借入条件</h2>
+      <label class="field"><span class="name">借入額（現在の残高）</span>
+        <input type="number" data-key="principal" min="1" step="10"><span class="unit">万円</span></label>
+      <div class="field"><span class="name">残りの返済期間</span>
+        <input type="number" class="short" data-key="years" min="0" max="50" step="1" aria-label="年"><span class="unit">年</span>
+        <input type="number" class="short" data-key="extraMonths" min="0" max="11" step="1" aria-label="か月"><span class="unit">か月</span></div>
+    </div>
+
+    <div class="panel">
+      <h2><span class="swatch fixed"></span>固定金利</h2>
+      <label class="field"><span class="name">金利（全期間）</span>
+        <input type="number" data-key="fixedRate" min="0" max="20" step="0.01"><span class="unit">%</span></label>
+    </div>
+
+    <div class="panel">
+      <h2><span class="swatch var"></span>変動金利</h2>
+      <label class="field"><span class="name">現在の金利</span>
+        <input type="number" data-key="varRate" min="0" max="20" step="0.01"><span class="unit">%</span></label>
+      <div class="field"><span class="name">金利上昇のシナリオ</span>
+        <input type="number" class="short" data-key="varStart" min="0" max="50" step="1" aria-label="何年後から"><span class="unit">年後から</span>
+        <input type="number" class="short" data-key="varEvery" min="0" max="50" step="1" aria-label="何年ごとに"><span class="unit">年ごとに</span>
+        <input type="number" class="short" data-key="varStep" min="0" max="5" step="0.05" aria-label="上昇幅"><span class="unit">%ずつ上昇</span></div>
+      <label class="field"><span class="name">金利の上限</span>
+        <input type="number" data-key="varCap" min="0" max="20" step="0.05"><span class="unit">%</span></label>
+      <p class="note">上昇幅を 0 にすると、金利はずっと同じで計算します。</p>
+    </div>
+
+    <div class="panel">
+      <h2>繰上返済</h2>
+      <label class="field"><span class="name">金額（0 で繰上返済なし）</span>
+        <input type="number" data-key="prepayAmount" min="0" step="10"><span class="unit">万円</span></label>
+      <div class="field"><span class="name">時期</span>
+        <input type="number" class="short" data-key="prepayYear" min="1" max="50" step="1" aria-label="何年後"><span class="unit">年後</span>
+        <select data-key="prepayMode" aria-label="回数">
+          <option value="once">に1回だけ</option>
+          <option value="yearly">から毎年</option>
+        </select></div>
+      <label class="field"><span class="name">種類</span>
+        <select data-key="prepayType">
+          <option value="shorten">期間短縮型</option>
+          <option value="reduce">返済額軽減型</option>
+        </select></label>
+      <p class="note">期間短縮型：毎月の額はそのままで、完済が早まる。<br>返済額軽減型：完済時期はそのままで、毎月の額が下がる。</p>
+      <label class="field"><span class="name">比較用：投資信託の利回り（年）</span>
+        <input type="number" data-key="investRate" min="0" max="20" step="0.1"><span class="unit">%</span></label>
+      <label class="field"><span class="name">運用益にかかる税金</span>
+        <select data-key="investTax">
+          <option value="taxable">課税口座（20.315%）</option>
+          <option value="nisa">NISA（非課税）</option>
+        </select></label>
+    </div>
+  </section>
+
+  <section class="panel bank-panel" id="bankPanel">
+    <div class="chart-head">
+      <h2>金利の低い銀行（上位3位）</h2>
+      <span class="note" id="bankSource"></span>
+    </div>
+    <div class="bank-cols">
+      <div>
+        <h3><span class="swatch fixed"></span>全期間固定金利（35年）</h3>
+        <ol class="bank-rank" id="rankFixed"></ol>
+      </div>
+      <div>
+        <h3><span class="swatch var"></span>変動金利</h3>
+        <ol class="bank-rank" id="rankVar"></ol>
+      </div>
+    </div>
+    <details class="bank-edit">
+      <summary>銀行と金利を編集</summary>
+      <p class="note">金利は毎月変わります。各銀行の公式サイトで最新の金利を確かめて、ここで書き換えてください。順位は自動で並び替わります。</p>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>種類</th><th>銀行名</th><th>金利</th><th></th></tr></thead>
+          <tbody id="bankBody"></tbody>
+        </table>
+      </div>
+      <div class="bank-foot">
+        <button id="btnAddBank">＋ 銀行を追加</button>
+        <span id="bankResetArea"></span>
+      </div>
+    </details>
+  </section>
+
+  <div class="error-box" id="errorBox" hidden></div>
+
+  <div id="output">
+    <section class="results" id="results"></section>
+    <p class="panel compare" id="compare"></p>
+
+    <section class="panel invest-panel" id="investPanel">
+      <h2>繰上返済 と 投資信託で運用 の比較</h2>
+      <div id="investBody"></div>
+    </section>
+
+    <section class="panel chart-panel">
+      <div class="chart-head">
+        <h2>残高の推移</h2>
+        <div class="legend" id="balanceLegend"></div>
+      </div>
+      <div class="chart" id="balanceChart"></div>
+
+      <div class="chart-head">
+        <p class="chart-title">金利の推移</p>
+        <div class="legend" id="rateLegend"></div>
+      </div>
+      <div class="chart" id="rateChart"></div>
+    </section>
+
+    <details class="panel" id="yearTable">
+      <summary>年ごとの返済表</summary>
+      <div class="tabs">
+        <button data-tab="fixed">固定金利</button>
+        <button data-tab="var">変動金利</button>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>年目</th><th>金利</th><th>年間返済額</th><th>うち利息</th><th>うち元金</th><th>繰上返済</th><th>年末残高</th></tr>
+          </thead>
+          <tbody id="yearBody"></tbody>
+        </table>
+      </div>
+    </details>
+  </div>
+
+  <p class="disclaimer">※ 結果は目安です。実際の返済額は金融機関の計算方法（端数処理・5年ルール／125%ルールなど）によって異なります。</p>
+</div>
+
+<script>
+// ===== 設定・初期値 =====
+const STORAGE_KEY = 'loan-sim-v1';
+
+const DEFAULTS = {
+  principal: '3000', years: '35', extraMonths: '0',
+  fixedRate: '1.8',
+  varRate: '0.6', varStart: '5', varEvery: '5', varStep: '0.25', varCap: '2.5',
+  prepayAmount: '100', prepayYear: '10', prepayMode: 'once', prepayType: 'shorten',
+  investRate: '5', investTax: 'taxable',
+};
+const TAX_RATE = 0.20315;   // 課税口座での運用益への税率
+
+// 数値の入力欄の範囲。int: true は整数のみ
+const RULES = {
+  principal: { min: 1, max: 100000 },
+  years: { min: 0, max: 50, int: true },
+  extraMonths: { min: 0, max: 11, int: true },
+  fixedRate: { min: 0, max: 20 },
+  varRate: { min: 0, max: 20 },
+  varStart: { min: 0, max: 50, int: true },
+  varEvery: { min: 0, max: 50, int: true },
+  varStep: { min: 0, max: 5 },
+  varCap: { min: 0, max: 20 },
+  prepayAmount: { min: 0, max: 100000 },
+  prepayYear: { min: 1, max: 50, int: true },
+  investRate: { min: 0, max: 20 },
+};
+
+// 金利の低い銀行の初期データ（ユーザーが画面で編集できる）
+const BANK_SOURCE = {
+  name: 'スゴい住宅ローン探し（リクルート）新規借入 金利ランキング',
+  url: 'https://finance.recruit.co.jp/article/rate-ranking/',
+  date: '2026年10月1日時点',
+};
+const DEFAULT_BANKS = [
+  { id: 1, type: 'var', name: '愛媛銀行', rate: '0.95' },
+  { id: 2, type: 'var', name: '第四北越銀行', rate: '0.95' },
+  { id: 3, type: 'var', name: '四国銀行', rate: '1.075' },
+  { id: 4, type: 'fixed', name: 'SBIアルヒ', rate: '2.5' },
+  { id: 5, type: 'fixed', name: 'ドコモSMTBネット銀行', rate: '2.63' },
+  { id: 6, type: 'fixed', name: '楽天銀行', rate: '2.63' },
+];
+const BANK_TYPES = { fixed: 'fixedRate', var: 'varRate' };   // 種類 → 「この金利で計算」で書き換える入力欄
+
+// ===== 状態 =====
+const state = {
+  inputs: { ...DEFAULTS },   // 入力欄の文字列をそのまま持つ
+  tableTab: 'fixed',         // 年ごとの表で表示中のプラン
+  results: null,             // 計算結果（入力に誤りがあるときは null）
+  banks: DEFAULT_BANKS.map(b => ({ ...b })),   // [{id, type: 'fixed'|'var', name, rate}]
+  banksEdited: false,        // 初期データから編集したか
+  confirmBankReset: false,   // 「初期データに戻す」の確認中か
+};
+let nextBankId = 1;
+
+// ===== 保存・読み込み =====
+function load() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if (saved && saved.inputs) {
+      for (const key of Object.keys(DEFAULTS)) {
+        if (typeof saved.inputs[key] === 'string') state.inputs[key] = saved.inputs[key];
+      }
+      if (saved.tableTab === 'var') state.tableTab = 'var';
+      if (Array.isArray(saved.banks)) {
+        state.banks = saved.banks;
+        state.banksEdited = !!saved.banksEdited;
+      }
+    }
+  } catch (e) { /* 保存領域が使えない環境では初期値で動かす */ }
+}
+
+function save() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      inputs: state.inputs, tableTab: state.tableTab, banks: state.banks, banksEdited: state.banksEdited,
+    }));
+  } catch (e) { /* 保存できなくても画面は動かす */ }
+}
+
+// ===== 入力の読み取りとチェック =====
+// 戻り値: { values } または { errors: [メッセージ], badKeys: [key] }
+function parseInputs(raw) {
+  const values = { prepayMode: raw.prepayMode, prepayType: raw.prepayType, investTax: raw.investTax };
+  const badKeys = [];
+  for (const [key, rule] of Object.entries(RULES)) {
+    const v = raw[key].trim() === '' ? NaN : Number(raw[key]);
+    const ok = Number.isFinite(v) && v >= rule.min && v <= rule.max && (!rule.int || Number.isInteger(v));
+    if (!ok) badKeys.push(key);
+    values[key] = v;
+  }
+  // 繰上返済の金額が 0 のときは時期を使わないので、時期はチェックしない
+  if (values.prepayAmount === 0 && badKeys.includes('prepayYear')) {
+    badKeys.splice(badKeys.indexOf('prepayYear'), 1);
+    values.prepayYear = 1;
+  }
+  const errors = [];
+  if (badKeys.length) errors.push('赤枠の欄を確認してください（範囲外、または空欄です）。');
+  if (badKeys.includes('prepayYear')) {
+    errors.push('繰上返済の時期は「1年後」以降で入力してください（今すぐ返す分は、借入額から引いて入力してください）。');
+  }
+  if (!badKeys.includes('years') && !badKeys.includes('extraMonths') && values.years * 12 + values.extraMonths === 0) {
+    errors.push('残りの返済期間を1か月以上にしてください。');
+    badKeys.push('years');
+  }
+  return errors.length ? { errors, badKeys } : { values };
+}
+
+// ===== 計算 =====
+const round3 = n => Math.round(n * 1000) / 1000;
+
+// 月々の返済額（元利均等）：残高 bal を年利 rate% で k 回で返す
+function pmt(bal, rate, k) {
+  if (k <= 1) return bal + Math.floor(bal * rate / 1200);
+  const i = rate / 1200;
+  if (i === 0) return Math.ceil(bal / k);
+  return Math.round(bal * i / (1 - Math.pow(1 + i, -k)));
+}
+
+// 返済額 pay で残高 bal を返し終わるまでの回数
+function nper(bal, rate, pay) {
+  const i = rate / 1200;
+  if (i === 0) return Math.ceil(bal / pay);
+  return Math.ceil(-Math.log(1 - bal * i / pay) / Math.log(1 + i) - 1e-9);
+}
+
+function isPrepayMonth(m, prepay) {
+  if (prepay.amount <= 0) return false;
+  const start = prepay.year * 12;
+  return prepay.mode === 'once' ? m === start : m >= start && (m - start) % 12 === 0;
+}
+
+// 1か月ずつ返済を計算する。rateAt(m) は m か月目（0始まり）の年利%
+function simulate({ principal, months, prepay }, rateAt, withPrepay) {
+  const rows = [];
+  let bal = principal, end = months, rate = null, payment = 0, totalInterest = 0, totalPrepay = 0;
+
+  for (let m = 0; m < end && bal > 0; m++) {
+    const prevRate = rate;
+    rate = rateAt(m);
+    let recalc = m === 0 || rate !== prevRate;   // 金利が変わったら返済額を計算し直す
+    let pre = 0;
+
+    if (withPrepay && isPrepayMonth(m, prepay)) {
+      pre = Math.min(prepay.amount, bal);
+      bal -= pre;
+      totalPrepay += pre;
+      if (bal === 0) {
+        rows.push({ m, rate, payment: 0, interest: 0, principal: 0, prepay: pre, balance: 0 });
+        break;
+      }
+      if (prepay.type === 'reduce') recalc = true;          // 返済額軽減型：返済額を下げる
+      else end = m + nper(bal, prevRate, payment);          // 期間短縮型：同じ返済額で完済が早まる
+    }
+
+    if (recalc) payment = pmt(bal, rate, end - m);
+    const interest = Math.floor(bal * rate / 1200);
+    const last = m === end - 1 || bal + interest <= payment;
+    const pay = last ? bal + interest : payment;            // 最終回は残高をちょうど払い切る
+    bal -= pay - interest;
+    totalInterest += interest;
+    rows.push({ m, rate, payment: pay, interest, principal: pay - interest, prepay: pre, balance: bal });
+  }
+
+  const paid = rows.filter(r => r.payment > 0);
+  const regular = paid.length > 1 ? paid.slice(0, -1) : paid;   // 端数の最終回は除く
+  const maxPayment = Math.max(0, ...regular.map(r => r.payment));
+  const lastRow = rows[rows.length - 1];
+  return {
+    rows,
+    totalInterest,
+    totalPrepay,
+    totalPaid: principal + totalInterest,
+    firstPayment: paid.length ? paid[0].payment : 0,
+    maxPayment,
+    maxFrom: (regular.find(r => r.payment === maxPayment) || { m: 0 }).m,
+    afterPrepay: (rows.find(r => r.prepay > 0 && r.payment > 0) || {}).payment,
+    payoffMonths: lastRow.payment > 0 ? lastRow.m + 1 : lastRow.m,
+  };
+}
+
+function compute(v) {
+  const months = v.years * 12 + v.extraMonths;
+  const base = {
+    principal: Math.round(v.principal * 10000),
+    months,
+    prepay: { amount: Math.round(v.prepayAmount * 10000), year: v.prepayYear, mode: v.prepayMode, type: v.prepayType },
+  };
+  const fixedRateAt = () => v.fixedRate;
+  const cap = Math.max(v.varCap, v.varRate);
+  const varRateAt = m => {
+    const y = Math.floor(m / 12);
+    if (v.varStep <= 0 || y < v.varStart) return v.varRate;
+    const steps = v.varEvery > 0 ? Math.floor((y - v.varStart) / v.varEvery) + 1 : 1;
+    return Math.min(round3(v.varRate + steps * v.varStep), cap);
+  };
+  return {
+    base, months,
+    fixedRateAt, varRateAt,
+    fixed: simulate(base, fixedRateAt, true),
+    fixedNo: simulate(base, fixedRateAt, false),
+    var: simulate(base, varRateAt, true),
+    varNo: simulate(base, varRateAt, false),
+    hasPrepay: base.prepay.amount > 0 && base.prepay.year * 12 < months,
+  };
+}
+
+function yearly(res) {
+  const years = [];
+  for (const r of res.rows) {
+    const y = Math.floor(r.m / 12);
+    years[y] ??= { year: y + 1, rate: r.rate, payment: 0, interest: 0, principal: 0, prepay: 0, balance: 0 };
+    const t = years[y];
+    t.payment += r.payment;
+    t.interest += r.interest;
+    t.principal += r.principal;
+    t.prepay += r.prepay;
+    t.balance = r.balance;
+  }
+  return years.filter(Boolean);
+}
+
+// ===== 表示用の書式 =====
+const yen = n => Math.round(n).toLocaleString('ja-JP') + '円';
+const man = n => (n / 10000).toLocaleString('ja-JP', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '万円';
+const pct = r => r.toLocaleString('ja-JP', { minimumFractionDigits: 2, maximumFractionDigits: 3 }) + '%';
+const duration = m => `${Math.floor(m / 12)}年` + (m % 12 ? `${m % 12}か月` : '');
+
+// ===== 描画：結果カード =====
+function renderCards() {
+  const R = state.results, v = state.values;
+  const card = (kind, title, rateText, res, resNo) => {
+    let sub = '';
+    if (res.maxPayment > res.firstPayment) sub = `最大 ${yen(res.maxPayment)}（${Math.floor(res.maxFrom / 12) + 1}年目から）`;
+    else if (R.hasPrepay && v.prepayType === 'reduce' && res.afterPrepay) sub = `繰上返済後 ${yen(res.afterPrepay)}`;
+    else sub = '完済まで同じ額';
+    if (res.maxPayment > res.firstPayment && R.hasPrepay && v.prepayType === 'reduce' && res.afterPrepay) {
+      sub += ` ／ 繰上返済後 ${yen(res.afterPrepay)}`;
+    }
+    const shortened = resNo.payoffMonths - res.payoffMonths;
+    const saved = resNo.totalInterest - res.totalInterest;
+    return `<div class="panel card ${kind}">
+      <h2>${title}</h2>
+      <p class="rate-text">${rateText}</p>
+      <div class="hero-label">月々の返済額（最初）</div>
+      <div class="hero">${yen(res.firstPayment)}</div>
+      <div class="hero-sub">${sub}</div>
+      <dl class="stats">
+        <dt>総返済額</dt><dd>${man(res.totalPaid)}</dd>
+        <dt>総利息</dt><dd>${man(res.totalInterest)}</dd>
+        <dt>完済まで</dt><dd>${duration(res.payoffMonths)}${shortened > 0 ? ` <small>（${duration(shortened)}短縮）</small>` : ''}</dd>
+        ${R.hasPrepay ? `
+        <dt>繰上返済の合計</dt><dd>${man(res.totalPrepay)}</dd>
+        <dt>繰上返済で減る利息</dt><dd>${man(saved)}</dd>` : ''}
+      </dl>
+    </div>`;
+  };
+
+  const varRates = [...new Set(Array.from({ length: R.months }, (_, m) => R.varRateAt(m)))];
+  const varMax = Math.max(...varRates);
+  const varText = varMax > v.varRate ? `${pct(v.varRate)} → 最大 ${pct(varMax)}` : `${pct(v.varRate)}（変化なし）`;
+
+  document.getElementById('results').innerHTML =
+    card('fixed', '固定金利', `${pct(v.fixedRate)}（全期間）`, R.fixed, R.fixedNo) +
+    card('var', '変動金利', varText, R.var, R.varNo);
+
+  const diff = R.var.totalInterest - R.fixed.totalInterest;
+  document.getElementById('compare').innerHTML = Math.abs(diff) < 10000
+    ? '総利息は、固定と変動で<strong>ほぼ同じ</strong>です。'
+    : `総利息は<strong>${diff < 0 ? '変動' : '固定'}金利の方が ${man(Math.abs(diff))} 少なく</strong>なります。` +
+      '<span class="note">（変動金利は、入力した金利上昇シナリオどおりに動いた場合の計算です）</span>';
+}
+
+// ===== 計算と描画：繰上返済と投資信託の比較 =====
+// 「繰上返済する」と「繰上返済せず、そのお金を投資信託で運用する」を比べる。
+// 毎月、出ていくお金（返済額＋繰上返済額）が少ない方は、差額を同じ利回りで運用したとして、
+// 当初の完済予定の月に、手元に残る運用資産（税引後）を比べる。
+function compareInvest(withPre, noPre, months, annualPct, taxable) {
+  const i = Math.pow(1 + annualPct / 100, 1 / 12) - 1;   // 年利回りを月の複利に直す
+  const outPre = new Array(months).fill(0), outInv = new Array(months).fill(0);
+  withPre.rows.forEach(r => { outPre[r.m] += r.payment + r.prepay; });
+  noPre.rows.forEach(r => { outInv[r.m] += r.payment; });
+
+  const pre = { bal: 0, put: 0 }, inv = { bal: 0, put: 0 };   // bal: 運用残高, put: 積み立てた元本
+  for (let m = 0; m < months; m++) {
+    const d = outPre[m] - outInv[m];
+    const saver = d > 0 ? inv : pre;   // その月に出ていくお金が少ない方が、差額を運用に回す
+    saver.bal += Math.abs(d);
+    saver.put += Math.abs(d);
+    pre.bal *= 1 + i;
+    inv.bal *= 1 + i;
+  }
+  const afterTax = a => a.bal - (taxable ? Math.max(0, a.bal - a.put) * TAX_RATE : 0);
+  return { pre: afterTax(pre), inv: afterTax(inv) };
+}
+
+function renderInvest() {
+  const R = state.results, v = state.values;
+  const body = document.getElementById('investBody');
+  if (!R.hasPrepay) {
+    body.innerHTML = '<p class="note">繰上返済の金額と時期を入れると、繰上返済と投資信託での運用を比べられます。</p>';
+    return;
+  }
+  const taxable = v.investTax === 'taxable';
+  const col = (kind, title, res, resNo) => {
+    const c = compareInvest(res, resNo, R.months, v.investRate, taxable);
+    const diff = c.inv - c.pre;
+    const verdict = Math.abs(diff) < 10000
+      ? '<strong>どちらもほぼ同じ</strong>です'
+      : `<strong>${diff > 0 ? '投資信託' : '繰上返済'}の方が ${man(Math.abs(diff))} 有利</strong>です`;
+    return `<div>
+      <h3><span class="swatch ${kind}"></span>${title}</h3>
+      <dl class="stats">
+        <dt>繰上返済した場合</dt><dd>${man(c.pre)}</dd>
+        <dt>投資信託で運用した場合</dt><dd>${man(c.inv)}</dd>
+      </dl>
+      <p class="verdict">${verdict}</p>
+    </div>`;
+  };
+  const netRate = v.investRate * (taxable ? 1 - TAX_RATE : 1);
+  body.innerHTML = `<div class="invest-cols">
+      ${col('fixed', `固定金利（${pct(v.fixedRate)}）`, R.fixed, R.fixedNo)}
+      ${col('var', '変動金利（入力したシナリオ）', R.var, R.varNo)}
+    </div>
+    <p class="note">
+      表の金額は、当初の完済予定（${duration(R.months)}後）の時点で、手元に残る運用資産（${taxable ? '税引後' : '非課税'}）です。
+      繰上返済した場合も、毎月の返済額が減った分や、早く完済したあとの分を、同じ利回り（年${pct(v.investRate)}）で運用したとして計算しています。<br>
+      目安：ローンの金利より、${taxable ? '税引後の' : ''}運用利回り（約${pct(round3(netRate))}）の方が高いと、投資信託の方が有利になります。
+      ただし、投資信託の利回りは保証されず、元本割れすることもあります。繰上返済で減る利息は確実です。
+    </p>`;
+}
+
+// ===== 描画：折れ線グラフ（SVG） =====
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+function niceStep(max, count) {
+  const raw = max / count;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const n = raw / mag;
+  return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * mag;
+}
+
+// points は [[x(年), y], ...]。x 以下で最後の点の値を返す
+function valueAt(points, x) {
+  let v = points[0][1];
+  for (const [px, py] of points) { if (px <= x + 1e-9) v = py; else break; }
+  return v;
+}
+
+// opt: { height, xMax, yMax, yStep, yFmt, series: [{name, cls, dash, step, points}], labels, tipTitle, tipFmt }
+function lineChart(host, opt) {
+  const W = Math.max(300, host.clientWidth), H = opt.height;
+  const M = { l: 56, r: 14, t: 10, b: 24 };
+  const x = v => M.l + v / opt.xMax * (W - M.l - M.r);
+  const y = v => M.t + (1 - v / opt.yMax) * (H - M.t - M.b);
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" height="${H}" role="img" aria-label="${opt.ariaLabel}">`;
+  for (let t = 0; t <= opt.yMax + 1e-9; t += opt.yStep) {
+    svg += `<line class="${t === 0 ? 'base' : 'grid'}" x1="${M.l}" x2="${W - M.r}" y1="${y(t)}" y2="${y(t)}"/>`;
+    svg += `<text class="tick" x="${M.l - 8}" y="${y(t) + 4}" text-anchor="end">${opt.yFmt(t)}</text>`;
+  }
+  const xStep = opt.xMax > 40 ? 10 : 5;
+  for (let t = 0; t <= opt.xMax + 1e-9; t += xStep) {
+    svg += `<text class="tick" x="${x(t)}" y="${H - 6}" text-anchor="middle">${t}年</text>`;
+  }
+  for (const s of opt.series) {
+    let d = '';
+    s.points.forEach(([px, py], i) => {
+      if (i === 0) d += `M${x(px)},${y(py)}`;
+      else if (s.step) d += `H${x(px)}V${y(py)}`;
+      else d += `L${x(px)},${y(py)}`;
+    });
+    if (s.step) d += `H${x(opt.xMax)}`;
+    svg += `<path class="line ${s.cls}${s.dash ? ' dash' : ''}" d="${d}"/>`;
+  }
+  // 直接ラベル（重なる場合は上下にずらす）
+  const placed = (opt.labels || []).map(l => ({ ...l, px: x(l.x) + 6, py: y(valueAt(opt.series[l.series].points, l.x)) - 8 }));
+  placed.sort((a, b) => a.py - b.py);
+  for (let i = 1; i < placed.length; i++) {
+    if (Math.abs(placed[i].px - placed[i - 1].px) < 120 && placed[i].py - placed[i - 1].py < 16) placed[i].py = placed[i - 1].py + 16;
+  }
+  for (const l of placed) svg += `<text class="dlabel" x="${l.px}" y="${l.py}">${l.text}</text>`;
+
+  svg += `<g class="hover" visibility="hidden"><line class="cross" y1="${M.t}" y2="${H - M.b}"/>` +
+    opt.series.filter(s => !s.dash).map(s => `<circle class="dot ${s.cls}" r="4"/>`).join('') + '</g>';
+  svg += `<rect x="${M.l}" y="0" width="${W - M.l - M.r}" height="${H}" fill="transparent"/></svg>`;
+  host.innerHTML = svg + '<div class="tip" hidden></div>';
+
+  // ホバー：年単位でスナップして、全系列の値を出す
+  const root = host.querySelector('svg'), hover = root.querySelector('.hover'), tip = host.querySelector('.tip');
+  const solid = opt.series.filter(s => !s.dash);
+  root.querySelector('rect').addEventListener('pointermove', e => {
+    const box = root.getBoundingClientRect();
+    const px = (e.clientX - box.left) * (W / box.width);
+    const year = Math.max(0, Math.min(Math.floor(opt.xMax), Math.round((px - M.l) / (W - M.l - M.r) * opt.xMax)));
+    const cx = x(year);
+    hover.setAttribute('visibility', 'visible');
+    hover.querySelector('line').setAttribute('x1', cx);
+    hover.querySelector('line').setAttribute('x2', cx);
+    hover.querySelectorAll('circle').forEach((c, i) => {
+      c.setAttribute('cx', cx);
+      c.setAttribute('cy', y(valueAt(solid[i].points, year)));
+    });
+    tip.innerHTML = `<b>${opt.tipTitle(year)}</b>` + opt.series.map(s =>
+      `<div class="row">${legendMark(s)}${s.name}<span class="v">${opt.tipFmt(valueAt(s.points, year))}</span></div>`).join('');
+    tip.hidden = false;
+    const left = cx / W * box.width;
+    tip.style.left = (left + tip.offsetWidth + 16 > box.width ? left - tip.offsetWidth - 12 : left + 12) + 'px';
+    tip.style.top = '8px';
+  });
+  root.querySelector('rect').addEventListener('pointerleave', () => {
+    hover.setAttribute('visibility', 'hidden');
+    tip.hidden = true;
+  });
+}
+
+function legendMark(s) {
+  return `<svg width="18" height="6" aria-hidden="true"><line x1="1" x2="17" y1="3" y2="3" stroke="var(--s-${s.cls})"
+    stroke-width="${s.dash ? 1.5 : 2}" stroke-linecap="round" ${s.dash ? 'stroke-dasharray="3 3"' : ''}/></svg>`;
+}
+function renderLegend(el, series) {
+  el.innerHTML = series.map(s => `<span>${legendMark(s)}${s.name}</span>`).join('');
+}
+
+function renderCharts() {
+  const R = state.results;
+  if (!R) return;
+  const xMax = R.months / 12;
+  const balancePoints = res => [[0, R.base.principal], ...res.rows.map(r => [(r.m + 1) / 12, r.balance])];
+
+  const balSeries = [
+    { name: '固定', cls: 'fixed', points: balancePoints(R.fixed) },
+    { name: '変動', cls: 'var', points: balancePoints(R.var) },
+  ];
+  if (R.hasPrepay) {
+    balSeries.push({ name: '固定（繰上返済なし）', cls: 'fixed', dash: true, points: balancePoints(R.fixedNo) });
+    balSeries.push({ name: '変動（繰上返済なし）', cls: 'var', dash: true, points: balancePoints(R.varNo) });
+  }
+  const balStep = niceStep(R.base.principal, 4);
+  renderLegend(document.getElementById('balanceLegend'), balSeries);
+  lineChart(document.getElementById('balanceChart'), {
+    ariaLabel: '固定金利と変動金利の残高の推移',
+    height: 280, xMax,
+    yStep: balStep, yMax: Math.ceil(R.base.principal / balStep) * balStep,
+    yFmt: t => (t / 10000).toLocaleString('ja-JP') + '万',
+    series: balSeries,
+    labels: [
+      { text: '固定', series: 0, x: R.fixed.payoffMonths / 12 * 0.45 },
+      { text: '変動', series: 1, x: R.var.payoffMonths / 12 * 0.45 },
+    ],
+    tipTitle: yr => yr === 0 ? '現在' : `${yr}年後の残高`,
+    tipFmt: man,
+  });
+
+  const ratePoints = rateAt => {
+    const pts = [[0, rateAt(0)]];
+    for (let m = 12; m < R.months; m += 12) {
+      const r = rateAt(m);
+      if (r !== pts[pts.length - 1][1]) pts.push([m / 12, r]);
+    }
+    return pts;
+  };
+  const rateSeries = [
+    { name: '固定', cls: 'fixed', step: true, points: ratePoints(R.fixedRateAt) },
+    { name: '変動', cls: 'var', step: true, points: ratePoints(R.varRateAt) },
+  ];
+  const rMax = Math.max(...rateSeries.flatMap(s => s.points.map(p => p[1])), 0.5);
+  const rStep = niceStep(rMax, 3);
+  renderLegend(document.getElementById('rateLegend'), rateSeries);
+  lineChart(document.getElementById('rateChart'), {
+    ariaLabel: '固定金利と変動金利の金利の推移',
+    height: 130, xMax,
+    yStep: rStep, yMax: Math.ceil(rMax / rStep + 0.01) * rStep,
+    yFmt: t => round3(t) + '%',
+    series: rateSeries,
+    tipTitle: yr => yr === 0 ? '現在の金利' : `${yr}年後の金利`,
+    tipFmt: pct,
+  });
+}
+
+// ===== 描画：年ごとの表 =====
+function renderTable() {
+  const R = state.results;
+  if (!R) return;
+  document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tab === state.tableTab)));
+  document.getElementById('yearBody').innerHTML = yearly(R[state.tableTab]).map(t => `<tr>
+    <td>${t.year}年目</td><td>${pct(t.rate)}</td><td>${yen(t.payment)}</td><td>${yen(t.interest)}</td>
+    <td>${yen(t.principal)}</td><td>${t.prepay ? yen(t.prepay) : '—'}</td><td>${yen(t.balance)}</td>
+  </tr>`).join('');
+}
+
+// ===== 描画：金利の低い銀行 =====
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+const isBankRate = v => String(v).trim() !== '' && Number.isFinite(+v) && +v >= 0 && +v <= 20;
+
+// 種類ごとに金利の低い順に並べ、同じ金利は同順位として 3位以内を返す
+function topBanks(type) {
+  const list = state.banks
+    .filter(b => b.type === type && b.name.trim() && isBankRate(b.rate))
+    .map(b => ({ ...b, r: +b.rate }))
+    .sort((a, b) => a.r - b.r);
+  list.forEach((b, i) => { b.rank = i > 0 && list[i - 1].r === b.r ? list[i - 1].rank : i + 1; });
+  return list.filter(b => b.rank <= 3);
+}
+
+function renderBankRanking() {
+  for (const [type, elId] of [['fixed', 'rankFixed'], ['var', 'rankVar']]) {
+    const current = Number(state.inputs[BANK_TYPES[type]]);
+    const top = topBanks(type);
+    document.getElementById(elId).innerHTML = top.length ? top.map(b => {
+      const using = current === b.r;
+      return `<li><span class="rk">${b.rank}位</span><span class="bn">${escapeHtml(b.name.trim())}</span>
+        <span class="br">${pct(b.r)}</span>
+        <button data-apply="${type}" data-rate="${b.r}" ${using ? 'disabled' : ''}>${using ? '計算に使用中' : 'この金利で計算'}</button></li>`;
+    }).join('') : '<li class="empty">銀行が登録されていません</li>';
+  }
+  document.getElementById('bankSource').innerHTML = (state.banksEdited ? '編集済み（初期値の出典：' : '出典：') +
+    `<a href="${BANK_SOURCE.url}" target="_blank" rel="noopener">${BANK_SOURCE.name}</a>、${BANK_SOURCE.date}、一部の金融機関のみ` +
+    (state.banksEdited ? '）' : '');
+}
+
+// 編集表は、行の追加・削除のときだけ作り直す（入力中にカーソルが外れないように）
+const bankBody = document.getElementById('bankBody');
+
+function renderBankEditor() {
+  bankBody.innerHTML = state.banks.map(b => `<tr data-id="${b.id}">
+    <td><select data-field="type" aria-label="種類">
+      <option value="fixed"${b.type === 'fixed' ? ' selected' : ''}>固定</option>
+      <option value="var"${b.type === 'var' ? ' selected' : ''}>変動</option>
+    </select></td>
+    <td><input class="bank-name" data-field="name" value="${escapeHtml(b.name)}" placeholder="銀行名" aria-label="銀行名"></td>
+    <td><input class="rate" data-field="rate" value="${escapeHtml(b.rate)}" inputmode="decimal" aria-label="金利"> %</td>
+    <td><button data-act="del-bank" aria-label="削除">×</button></td>
+  </tr>`).join('');
+  state.banks.forEach(markBankError);
+  document.getElementById('bankResetArea').innerHTML = state.confirmBankReset
+    ? `<span class="confirm-inline">編集した内容を消して、初期データに戻しますか？
+         <button class="danger" data-act="reset-yes">戻す</button> <button data-act="reset-no">キャンセル</button></span>`
+    : '<button data-act="reset">初期データに戻す</button>';
+}
+
+function markBankError(b) {
+  const el = bankBody.querySelector(`tr[data-id="${b.id}"] [data-field="rate"]`);
+  const bad = String(b.rate).trim() !== '' && !isBankRate(b.rate);
+  el.classList.toggle('invalid', bad);
+  el.title = bad ? '0〜20 の数字で入力してください' : '';
+}
+
+// ===== 全体の更新 =====
+const inputEls = [...document.querySelectorAll('[data-key]')];
+
+function update() {
+  renderBankRanking();   // 「計算に使用中」の表示を入力欄に合わせる
+  const parsed = parseInputs(state.inputs);
+  inputEls.forEach(el => el.classList.toggle('invalid', !!parsed.badKeys?.includes(el.dataset.key)));
+  const errorBox = document.getElementById('errorBox');
+  errorBox.hidden = !parsed.errors;
+  document.getElementById('output').hidden = !!parsed.errors;
+  if (parsed.errors) {
+    errorBox.textContent = parsed.errors.join(' ');
+    state.results = null;
+    return;
+  }
+  state.values = parsed.values;
+  state.results = compute(parsed.values);
+  renderCards();
+  renderInvest();
+  renderCharts();
+  renderTable();
+}
+
+// ===== 起動 =====
+function init() {
+  load();
+  inputEls.forEach(el => { el.value = state.inputs[el.dataset.key]; });
+  document.getElementById('inputs').addEventListener('input', e => {
+    const key = e.target.dataset?.key;
+    if (!key) return;
+    state.inputs[key] = e.target.value;
+    save();
+    update();
+  });
+  document.querySelector('.tabs').addEventListener('click', e => {
+    const tab = e.target.closest('button[data-tab]')?.dataset.tab;
+    if (!tab) return;
+    state.tableTab = tab;
+    save();
+    renderTable();
+  });
+  // 金利の低い銀行
+  nextBankId = Math.max(0, ...state.banks.map(b => b.id)) + 1;
+  const bankPanel = document.getElementById('bankPanel');
+  bankPanel.addEventListener('input', e => {
+    const tr = e.target.closest('tr[data-id]');
+    if (!tr) return;
+    const b = state.banks.find(x => x.id === Number(tr.dataset.id));
+    b[e.target.dataset.field] = e.target.value;
+    state.banksEdited = true;
+    if (e.target.dataset.field === 'rate') markBankError(b);
+    save();
+    renderBankRanking();
+  });
+  bankPanel.addEventListener('click', e => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    if (btn.dataset.apply) {   // 「この金利で計算」：入力欄の金利を書き換えて計算し直す
+      const key = BANK_TYPES[btn.dataset.apply];
+      state.inputs[key] = btn.dataset.rate;
+      document.querySelector(`[data-key="${key}"]`).value = btn.dataset.rate;
+      save();
+      update();
+      return;
+    }
+    const act = btn.dataset.act;
+    if (act === 'del-bank') {
+      state.banks = state.banks.filter(b => b.id !== Number(btn.closest('tr').dataset.id));
+      state.banksEdited = true;
+    } else if (act === 'reset') {
+      state.confirmBankReset = true;
+    } else if (act === 'reset-no') {
+      state.confirmBankReset = false;
+    } else if (act === 'reset-yes') {
+      state.banks = DEFAULT_BANKS.map(b => ({ ...b }));
+      state.banksEdited = false;
+      state.confirmBankReset = false;
+    } else return;
+    save();
+    renderBankEditor();
+    renderBankRanking();
+  });
+  document.getElementById('btnAddBank').addEventListener('click', () => {
+    state.banks.push({ id: nextBankId++, type: 'var', name: '', rate: '' });
+    state.banksEdited = true;
+    save();
+    renderBankEditor();
+    bankBody.querySelector('tr:last-child .bank-name').focus();
+  });
+  renderBankEditor();
+
+  // 画面幅が変わったらグラフを描き直す
+  let lastWidth = 0;
+  new ResizeObserver(entries => {
+    const w = Math.round(entries[0].contentRect.width);
+    if (w !== lastWidth) { lastWidth = w; renderCharts(); }
+  }).observe(document.getElementById('balanceChart'));
+  update();
+}
+
+init();
+</script>
+</body>
+</html>

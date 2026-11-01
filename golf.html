@@ -1,0 +1,600 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ゴルフコンペ成績集計</title>
+<style>
+  :root {
+    --bg: #f4f6f3;
+    --surface: #ffffff;
+    --text: #1d221e;
+    --muted: #6b736d;
+    --border: #e0e5e1;
+    --accent: #1f7a4d;
+    --accent-soft: #e4f2ea;
+    --gold: #b7860b;
+    --gold-soft: #fbf3dc;
+    --danger: #d23c3c;
+    --input-bg: #f8faf8;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121513;
+      --surface: #1a1f1c;
+      --text: #e5e9e6;
+      --muted: #9aa39d;
+      --border: #2b322e;
+      --accent: #4cc08a;
+      --accent-soft: #183326;
+      --gold: #e2b54a;
+      --gold-soft: #332a14;
+      --danger: #f06a6a;
+      --input-bg: #141815;
+      color-scheme: dark;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Yu Gothic UI", Meiryo, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 20px 16px 40px; }
+
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-bottom: 20px; }
+  #title {
+    flex: 1 1 14em; min-width: 0;
+    font: inherit; font-size: 22px; font-weight: 700; color: var(--text);
+    background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 2px 6px;
+  }
+  #title:hover, #title:focus { border-color: var(--border); outline: none; background: var(--surface); }
+  #date {
+    font: inherit; color: var(--text); background: var(--surface);
+    border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px;
+  }
+
+  h2 { font-size: 15px; margin: 0; }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 20px; }
+  .panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 12px 16px; }
+  .hint { color: var(--muted); font-size: 12px; }
+
+  button {
+    font: inherit; cursor: pointer; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--surface); color: var(--text);
+    padding: 6px 12px;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+  button.small { padding: 2px 8px; }
+
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { padding: 6px 8px; text-align: left; white-space: nowrap; border-top: 1px solid var(--border); }
+  th { font-weight: 500; color: var(--muted); font-size: 12px; }
+  .num { text-align: right; }
+  .no { color: var(--muted); width: 1px; }
+
+  /* 入力表 */
+  #inputBody input {
+    font: inherit; color: var(--text); background: var(--input-bg);
+    border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px;
+  }
+  #inputBody input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  #inputBody input.invalid { border-color: var(--danger); outline-color: var(--danger); }
+  .in-name { width: 100%; min-width: 7em; }
+  .in-num { width: 3.6em; text-align: right; }
+  .calc { font-weight: 600; min-width: 3em; }
+  .actions { text-align: right; width: 1px; }
+  .confirm { display: inline-flex; align-items: center; gap: 6px; }
+  .confirm span { color: var(--danger); font-size: 13px; }
+
+  .panel-foot {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 12px 16px; border-top: 1px solid var(--border);
+  }
+  .error-note { color: var(--danger); font-size: 12px; }
+
+  /* 表彰カード */
+  .awards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .award { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .award .label { font-size: 13px; color: var(--muted); font-weight: 600; }
+  .award .who { font-size: 20px; font-weight: 700; margin: 4px 0 2px; word-break: break-all; }
+  .award .sub { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .award.win { background: var(--gold-soft); border-color: var(--gold); }
+  .award.win .label { color: var(--gold); }
+  .award.best { background: var(--accent-soft); border-color: var(--accent); }
+  .award.best .label { color: var(--accent); }
+  .award.none .who { color: var(--muted); font-weight: 400; font-size: 16px; }
+
+  .award .prize { margin-top: 8px; font-size: 13px; font-weight: 600; word-break: break-all; }
+
+  /* 賞品 */
+  .prize-grid {
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 8px 10px; align-items: center; padding: 0 16px 14px;
+  }
+  .prize-grid label, .rank-label { color: var(--muted); font-size: 13px; white-space: nowrap; }
+  #prizePanel input {
+    font: inherit; color: var(--text); background: var(--input-bg);
+    border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; min-width: 0;
+  }
+  #prizePanel input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  #prizePanel input.invalid { border-color: var(--danger); outline-color: var(--danger); }
+  .rank-label input { width: 3.4em; text-align: right; }
+
+  /* 成績一覧 */
+  .prize-cell { white-space: normal; min-width: 8em; }
+  .rank { font-weight: 700; width: 1px; }
+  tr.top td { background: var(--gold-soft); }
+  .badge {
+    display: inline-block; font-size: 11px; font-weight: 600; border-radius: 4px; padding: 0 6px; margin-right: 4px;
+    border: 1px solid currentColor;
+  }
+  .badge.win { color: var(--gold); }
+  .badge.best { color: var(--accent); }
+  .badge.bb, .badge.bm { color: var(--muted); }
+  .pending td { color: var(--muted); }
+  .empty { padding: 24px 16px; text-align: center; color: var(--muted); }
+
+  @media print {
+    button, .actions, .panel-foot, .hint { display: none !important; }
+    body { background: #fff; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <input id="title" aria-label="コンペ名" placeholder="コンペ名">
+    <input id="date" type="date" aria-label="開催日">
+  </header>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>スコア入力</h2>
+      <span class="hint">Enterで次の欄へ移動</span>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th class="no">#</th>
+            <th>名前</th>
+            <th class="num">OUT</th>
+            <th class="num">IN</th>
+            <th class="num">ハンデ</th>
+            <th class="num">グロス</th>
+            <th class="num">ネット</th>
+            <th class="actions"></th>
+          </tr>
+        </thead>
+        <tbody id="inputBody"></tbody>
+      </table>
+    </div>
+    <div class="panel-foot">
+      <button id="btnAdd" class="primary">＋ 参加者を追加</button>
+      <span id="clearArea"></span>
+    </div>
+  </section>
+
+  <section class="panel" id="prizePanel">
+    <div class="panel-head">
+      <h2>賞品</h2>
+      <span class="hint">入力した賞品は表彰と成績一覧に表示されます</span>
+    </div>
+    <div class="prize-grid" id="prizeGrid"></div>
+    <div class="panel-foot">
+      <button id="btnAddPrize">＋ 順位賞を追加</button>
+    </div>
+  </section>
+
+  <section class="awards" id="awards"></section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>成績一覧（ネット順位）</h2>
+      <span class="hint">同ネットはハンデの少ない人 → INの良い人が上位</span>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th class="rank">順位</th>
+            <th>名前</th>
+            <th class="num">OUT</th>
+            <th class="num">IN</th>
+            <th class="num">グロス</th>
+            <th class="num">ハンデ</th>
+            <th class="num">ネット</th>
+            <th></th>
+            <th>賞品</th>
+          </tr>
+        </thead>
+        <tbody id="resultBody"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="resultEmpty" hidden>OUT・IN・ハンデを入力すると、ここに順位が表示されます。</div>
+  </section>
+</div>
+
+<script>
+// ===== 設定 =====
+const STORAGE_KEY = 'golf-compe-v1';
+const INITIAL_ROWS = 4;
+
+// ===== 状態 =====
+const state = {
+  title: '',
+  date: '',
+  players: [],          // [{id, name, out, in, hcp}]（入力欄の文字列をそのまま持つ）
+  confirmDelete: null,  // 削除確認中の参加者 id
+  confirmClear: false,  // 「すべてクリア」の確認中か
+  prizes: null,         // {winner, bestGross, booby, boobyMaker, ranks: [{id, rank, item}]}
+};
+let nextId = 1;
+
+const AWARD_LABELS = { winner: '優勝', bestGross: 'ベスグロ', booby: 'ブービー', boobyMaker: 'ブービーメーカー' };
+
+function newPlayer() { return { id: nextId++, name: '', out: '', in: '', hcp: '' }; }
+function newRankPrize(rank) { return { id: nextId++, rank: String(rank), item: '' }; }
+function defaultPrizes() {
+  return { winner: '', bestGross: '', booby: '', boobyMaker: '', ranks: [newRankPrize(2), newRankPrize(3)] };
+}
+
+function today() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// ===== 保存・読み込み =====
+function load() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if (saved && Array.isArray(saved.players)) {
+      state.title = saved.title || '';
+      state.date = saved.date || today();
+      state.players = saved.players;
+      const ids = state.players.map(p => p.id).concat((saved.prizes?.ranks || []).map(r => r.id));
+      nextId = Math.max(0, ...ids) + 1;
+      state.prizes = saved.prizes || defaultPrizes();
+      return;
+    }
+  } catch (e) { /* 保存領域が使えない環境では初期状態で動かす */ }
+  state.title = 'ゴルフコンペ';
+  state.date = today();
+  state.players = Array.from({ length: INITIAL_ROWS }, newPlayer);
+  state.prizes = defaultPrizes();
+}
+
+function save() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      title: state.title, date: state.date, players: state.players, prizes: state.prizes,
+    }));
+  } catch (e) { /* 保存できなくても画面は動かす */ }
+}
+
+// ===== 計算 =====
+// 全角数字（８５ など）も半角に直して扱う
+function norm(v) {
+  return String(v).replace(/[０-９．]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).trim();
+}
+const isScore = v => /^\d{1,2}$/.test(v) && +v >= 1;             // 1〜99 の整数
+const isHcp = v => /^\d{1,2}(\.\d)?$/.test(v) && +v <= 54;       // 0〜54（小数第1位まで）
+function fieldError(key, raw) {
+  const v = norm(raw);
+  if (v === '') return false;   // 空欄はエラーではなく「未入力」
+  return key === 'hcp' ? !isHcp(v) : !isScore(v);
+}
+
+const round1 = n => Math.round(n * 10) / 10;
+const fmtNum = n => Number.isInteger(n) ? String(n) : n.toFixed(1);
+
+function calc(p) {
+  const out = norm(p.out), inn = norm(p.in), hcp = norm(p.hcp);
+  const gross = isScore(out) && isScore(inn) ? +out + +inn : null;
+  const net = gross !== null && isHcp(hcp) ? round1(gross - +hcp) : null;
+  return { out: +out, in: +inn, hcp: +hcp, gross, net };
+}
+
+// 順位付けと表彰者の決定
+function rank() {
+  const done = [], pending = [];
+  state.players.forEach((p, i) => {
+    const r = { ...calc(p), id: p.id, name: p.name.trim() || `参加者${i + 1}` };
+    (r.net === null ? pending : done).push(r);
+  });
+
+  // ネット → ハンデ → IN の順に小さい方が上位
+  done.sort((a, b) => a.net - b.net || a.hcp - b.hcp || a.in - b.in);
+  done.forEach((r, i) => {
+    const prev = done[i - 1];
+    const tie = prev && prev.net === r.net && prev.hcp === r.hcp && prev.in === r.in;
+    r.rank = tie ? prev.rank : i + 1;
+  });
+
+  const awards = { winner: [], bestGross: [], booby: [], boobyMaker: [] };
+  const n = done.length;
+  if (n > 0) {
+    awards.winner = done.filter(r => r.rank === 1);
+    const minGross = Math.min(...done.map(r => r.gross));
+    awards.bestGross = done.filter(r => r.gross === minGross);
+
+    const ranks = [...new Set(done.map(r => r.rank))];   // 小さい順に並んだ順位の一覧
+    const last = ranks[ranks.length - 1];
+    const secondLast = ranks[ranks.length - 2];
+    // 全員同順位のときや、ブービーが優勝と重なるときは表示しない
+    if (n >= 2 && last !== 1) awards.boobyMaker = done.filter(r => r.rank === last);
+    if (n >= 3 && secondLast !== undefined && secondLast !== 1) awards.booby = done.filter(r => r.rank === secondLast);
+  }
+  return { done, pending, awards, n };
+}
+
+// 順位賞の順位は 2 以上の整数（1位は「優勝」欄で設定する）
+const isPrizeRank = v => /^\d{1,3}$/.test(v) && +v >= 2;
+
+// その人がもらう賞品の一覧（表彰の賞品 → 順位賞の順）
+function prizesFor(r, awards) {
+  const items = Object.keys(AWARD_LABELS)
+    .filter(key => awards[key].some(x => x.id === r.id) && state.prizes[key].trim())
+    .map(key => state.prizes[key].trim());
+  const rankItems = state.prizes.ranks
+    .filter(p => isPrizeRank(norm(p.rank)) && +norm(p.rank) === r.rank && p.item.trim())
+    .map(p => p.item.trim());
+  return items.concat(rankItems);
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// ===== 描画：入力表 =====
+// 文字を打つたびに作り直すとカーソルが外れるため、行の追加・削除のときだけ作り直す
+const inputBody = document.getElementById('inputBody');
+
+function renderInput() {
+  inputBody.innerHTML = state.players.map((p, i) => {
+    const actions = state.confirmDelete === p.id
+      ? `<span class="confirm"><span>削除する？</span>
+           <button class="danger small" data-act="del-yes">削除</button>
+           <button class="small" data-act="del-no">キャンセル</button></span>`
+      : `<button class="small" data-act="del" aria-label="削除">×</button>`;
+    return `<tr data-id="${p.id}">
+      <td class="no">${i + 1}</td>
+      <td><input class="in-name" data-key="name" value="${escapeHtml(p.name)}" placeholder="名前" aria-label="名前"></td>
+      <td class="num"><input class="in-num" data-key="out" value="${escapeHtml(p.out)}" inputmode="numeric" aria-label="OUTスコア"></td>
+      <td class="num"><input class="in-num" data-key="in" value="${escapeHtml(p.in)}" inputmode="numeric" aria-label="INスコア"></td>
+      <td class="num"><input class="in-num" data-key="hcp" value="${escapeHtml(p.hcp)}" inputmode="decimal" aria-label="ハンデ"></td>
+      <td class="num calc gross"></td>
+      <td class="num calc net"></td>
+      <td class="actions">${actions}</td>
+    </tr>`;
+  }).join('');
+  state.players.forEach(updateRow);
+  renderClearArea();
+}
+
+// 1行分のグロス・ネット表示と入力エラー表示だけを更新する
+function updateRow(p) {
+  const tr = inputBody.querySelector(`tr[data-id="${p.id}"]`);
+  if (!tr) return;
+  const c = calc(p);
+  tr.querySelector('.gross').textContent = c.gross === null ? '—' : c.gross;
+  tr.querySelector('.net').textContent = c.net === null ? '—' : fmtNum(c.net);
+  for (const key of ['out', 'in', 'hcp']) {
+    const input = tr.querySelector(`[data-key="${key}"]`);
+    const bad = fieldError(key, p[key]);
+    input.classList.toggle('invalid', bad);
+    input.title = bad ? (key === 'hcp' ? 'ハンデは0〜54（小数第1位まで）' : 'スコアは1〜99の整数') : '';
+  }
+}
+
+function renderClearArea() {
+  document.getElementById('clearArea').innerHTML = state.confirmClear
+    ? `<span class="confirm"><span>参加者とスコアをすべて消しますか？</span>
+         <button class="danger small" data-act="clear-yes">消す</button>
+         <button class="small" data-act="clear-no">キャンセル</button></span>`
+    : `<button data-act="clear">すべてクリア</button>`;
+}
+
+// ===== 描画：賞品 =====
+// 入力表と同じく、行の追加・削除のときだけ作り直す
+const prizeGrid = document.getElementById('prizeGrid');
+
+function renderPrizes() {
+  const fixed = Object.entries(AWARD_LABELS).map(([key, label]) =>
+    `<label for="prize-${key}">${label}</label>
+     <input id="prize-${key}" data-award="${key}" value="${escapeHtml(state.prizes[key])}" placeholder="例: ゴルフボール1ダース">
+     <span></span>`);
+  const ranks = state.prizes.ranks.map(p =>
+    `<span class="rank-label"><input data-rank-id="${p.id}" data-field="rank" value="${escapeHtml(p.rank)}" inputmode="numeric" aria-label="順位"> 位</span>
+     <input data-rank-id="${p.id}" data-field="item" value="${escapeHtml(p.item)}" placeholder="賞品" aria-label="順位賞の賞品">
+     <button class="small" data-act="del-prize" data-rank-id="${p.id}" aria-label="削除">×</button>`);
+  prizeGrid.innerHTML = fixed.concat(ranks).join('');
+  state.prizes.ranks.forEach(markRankError);
+}
+
+function markRankError(p) {
+  const input = prizeGrid.querySelector(`input[data-rank-id="${p.id}"][data-field="rank"]`);
+  const v = norm(p.rank);
+  const bad = v !== '' && !isPrizeRank(v);
+  input.classList.toggle('invalid', bad);
+  input.title = bad ? '2以上の整数を入力（1位は「優勝」欄で設定）' : '';
+}
+
+// ===== 描画：表彰と成績一覧 =====
+function renderResults() {
+  const { done, pending, awards, n } = rank();
+  const names = list => list.map(r => escapeHtml(r.name)).join('・');
+
+  const card = (key, cls, sub, emptyText) => {
+    const list = awards[key], label = AWARD_LABELS[key];
+    const prize = state.prizes[key].trim();
+    const prizeHtml = prize ? `<div class="prize">賞品：${escapeHtml(prize)}</div>` : '';
+    return list.length
+      ? `<div class="award ${cls}"><div class="label">${label}</div>
+           <div class="who">${names(list)}</div><div class="sub">${sub(list[0])}</div>${prizeHtml}</div>`
+      : `<div class="award none"><div class="label">${label}</div>
+           <div class="who">—</div><div class="sub">${emptyText}</div>${prizeHtml}</div>`;
+  };
+
+  const netSub = r => `ネット ${fmtNum(r.net)}（グロス ${r.gross} / HC ${fmtNum(r.hcp)}）`;
+  const needInput = 'スコア入力待ち';
+  document.getElementById('awards').innerHTML = [
+    card('winner', 'win', netSub, needInput),
+    card('bestGross', 'best', r => `グロス ${r.gross}（OUT ${r.out} / IN ${r.in}）`, needInput),
+    card('booby', '', netSub, n === 0 ? needInput : '3人以上で表示'),
+    card('boobyMaker', '', netSub, n === 0 ? needInput : '2人以上で表示'),
+  ].join('');
+
+  const has = (list, r) => list.some(x => x.id === r.id);
+  const doneRows = done.map(r => {
+    const badges = [
+      has(awards.winner, r) && '<span class="badge win">優勝</span>',
+      has(awards.bestGross, r) && '<span class="badge best">ベスグロ</span>',
+      has(awards.booby, r) && '<span class="badge bb">BB</span>',
+      has(awards.boobyMaker, r) && '<span class="badge bm">BM</span>',
+    ].filter(Boolean).join('');
+    return `<tr class="${r.rank === 1 ? 'top' : ''}">
+      <td class="rank">${r.rank}位</td>
+      <td>${escapeHtml(r.name)}</td>
+      <td class="num">${r.out}</td>
+      <td class="num">${r.in}</td>
+      <td class="num">${r.gross}</td>
+      <td class="num">${fmtNum(r.hcp)}</td>
+      <td class="num"><strong>${fmtNum(r.net)}</strong></td>
+      <td>${badges}</td>
+      <td class="prize-cell">${escapeHtml(prizesFor(r, awards).join(' / '))}</td>
+    </tr>`;
+  });
+  // 名前もスコアも空の行は一覧に出さない
+  const pendingRows = pending
+    .filter(r => { const p = state.players.find(x => x.id === r.id); return p.name.trim() || p.out || p.in || p.hcp; })
+    .map(r => `<tr class="pending"><td class="rank">—</td><td>${escapeHtml(r.name)}</td>
+      <td colspan="5" class="num">未入力</td><td></td><td></td></tr>`);
+
+  const rows = doneRows.concat(pendingRows);
+  document.getElementById('resultBody').innerHTML = rows.join('');
+  document.getElementById('resultEmpty').hidden = rows.length > 0;
+}
+
+// ===== 操作 =====
+const findPlayer = id => state.players.find(p => p.id === Number(id));
+
+function addPlayer() {
+  state.players.push(newPlayer());
+  save();
+  renderInput();
+  renderResults();
+  inputBody.querySelector('tr:last-child [data-key="name"]').focus();
+}
+
+inputBody.addEventListener('input', e => {
+  const input = e.target.closest('input[data-key]');
+  if (!input) return;
+  const p = findPlayer(input.closest('tr').dataset.id);
+  p[input.dataset.key] = input.value;
+  save();
+  updateRow(p);
+  renderResults();
+});
+
+// Enter で次の入力欄へ。最後の欄なら参加者を1人追加する
+inputBody.addEventListener('keydown', e => {
+  if (e.key !== 'Enter' || e.isComposing || !e.target.matches('input')) return;
+  e.preventDefault();
+  const inputs = [...inputBody.querySelectorAll('input')];
+  const next = inputs[inputs.indexOf(e.target) + 1];
+  if (next) { next.focus(); next.select(); } else addPlayer();
+});
+
+inputBody.addEventListener('click', e => {
+  const btn = e.target.closest('button[data-act]');
+  if (!btn) return;
+  const id = Number(btn.closest('tr').dataset.id);
+  if (btn.dataset.act === 'del') state.confirmDelete = id;
+  if (btn.dataset.act === 'del-no') state.confirmDelete = null;
+  if (btn.dataset.act === 'del-yes') {
+    state.players = state.players.filter(p => p.id !== id);
+    state.confirmDelete = null;
+    save();
+  }
+  renderInput();
+  renderResults();
+});
+
+document.getElementById('clearArea').addEventListener('click', e => {
+  const act = e.target.closest('button[data-act]')?.dataset.act;
+  if (act === 'clear') state.confirmClear = true;
+  if (act === 'clear-no') state.confirmClear = false;
+  if (act === 'clear-yes') {
+    state.players = Array.from({ length: INITIAL_ROWS }, newPlayer);
+    state.confirmClear = false;
+    state.confirmDelete = null;
+    save();
+    renderInput();
+    renderResults();
+    return;
+  }
+  renderClearArea();
+});
+
+document.getElementById('btnAdd').addEventListener('click', addPlayer);
+
+prizeGrid.addEventListener('input', e => {
+  const t = e.target;
+  if (t.dataset.award) {
+    state.prizes[t.dataset.award] = t.value;
+  } else if (t.dataset.rankId) {
+    const p = state.prizes.ranks.find(x => x.id === Number(t.dataset.rankId));
+    p[t.dataset.field] = t.value;
+    if (t.dataset.field === 'rank') markRankError(p);
+  } else return;
+  save();
+  renderResults();
+});
+
+prizeGrid.addEventListener('click', e => {
+  const btn = e.target.closest('button[data-act="del-prize"]');
+  if (!btn) return;
+  state.prizes.ranks = state.prizes.ranks.filter(p => p.id !== Number(btn.dataset.rankId));
+  save();
+  renderPrizes();
+  renderResults();
+});
+
+// 順位賞を追加：今ある順位の次の数字を初期値にする
+document.getElementById('btnAddPrize').addEventListener('click', () => {
+  const used = state.prizes.ranks.map(p => norm(p.rank)).filter(isPrizeRank).map(Number);
+  const p = newRankPrize(used.length ? Math.max(...used) + 1 : 2);
+  state.prizes.ranks.push(p);
+  save();
+  renderPrizes();
+  prizeGrid.querySelector(`input[data-rank-id="${p.id}"][data-field="item"]`).focus();
+});
+
+// ===== 起動 =====
+function init() {
+  load();
+  const title = document.getElementById('title');
+  const date = document.getElementById('date');
+  title.value = state.title;
+  date.value = state.date;
+  title.addEventListener('input', () => { state.title = title.value; save(); });
+  date.addEventListener('input', () => { state.date = date.value; save(); });
+  renderInput();
+  renderPrizes();
+  renderResults();
+}
+
+init();
+</script>
+</body>
+</html>

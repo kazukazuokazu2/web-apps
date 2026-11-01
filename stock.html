@@ -1,0 +1,518 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>株価ウォッチリスト</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --text: #1c2026;
+    --muted: #6b7280;
+    --border: #e3e6ea;
+    --accent: #2f6fed;
+    --up: #128a4a;
+    --down: #d23c3c;
+    --up-bg: #e6f5ed;
+    --down-bg: #fbeaea;
+    --danger: #d23c3c;
+    --drop: #2f6fed;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121418;
+      --surface: #1b1e24;
+      --text: #e6e8eb;
+      --muted: #9aa1ab;
+      --border: #2c3038;
+      --accent: #5b8ff5;
+      --up: #3fc27c;
+      --down: #f06a6a;
+      --up-bg: #163626;
+      --down-bg: #3a1c1c;
+      --danger: #f06a6a;
+      --drop: #5b8ff5;
+      color-scheme: dark;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Yu Gothic UI", Meiryo, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 20px 16px 40px; }
+
+  header {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+    gap: 8px 16px; margin-bottom: 20px;
+  }
+  h1 { font-size: 20px; margin: 0; }
+  .header-right { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; }
+
+  button {
+    font: inherit; cursor: pointer; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--surface); color: var(--text);
+    padding: 6px 12px;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+  button:disabled { opacity: .35; cursor: default; border-color: var(--border); }
+
+  /* 指数カード */
+  .indices { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px;
+  }
+  .card .label { color: var(--muted); font-size: 13px; }
+  .card .price { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; margin: 2px 0; }
+  .card .chg { font-variant-numeric: tabular-nums; font-weight: 500; }
+
+  .up { color: var(--up); }
+  .down { color: var(--down); }
+  .flat { color: var(--muted); }
+
+  /* 追加フォーム */
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+  .add-form { display: flex; flex-wrap: wrap; gap: 8px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+  .add-form input {
+    font: inherit; padding: 6px 10px; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--bg); color: var(--text);
+  }
+  .add-form input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  #inSymbol { width: 9em; }
+  #inName { flex: 1 1 10em; min-width: 0; }
+  .error { flex-basis: 100%; color: var(--danger); font-size: 13px; margin: 0; }
+
+  .toolbar {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 8px 16px; color: var(--muted); font-size: 13px; min-height: 44px;
+  }
+
+  /* テーブル */
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { padding: 8px 10px; text-align: left; white-space: nowrap; border-top: 1px solid var(--border); }
+  th { font-weight: 500; color: var(--muted); font-size: 13px; user-select: none; }
+  th.sortable { cursor: pointer; }
+  th.sortable:hover { color: var(--text); }
+  th .arrow { display: inline-block; width: 1em; color: var(--accent); }
+  .num { text-align: right; }
+  td.name { white-space: normal; min-width: 8em; }
+  td.sym { font-weight: 600; }
+  .mkt { font-size: 11px; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; margin-left: 4px; font-weight: 400; }
+
+  .handle { cursor: grab; color: var(--muted); padding-right: 0; width: 1px; }
+  .handle span { padding: 4px; }
+  tr.dragging { opacity: .4; }
+  tr.drop-before td { box-shadow: inset 0 2px 0 var(--drop); }
+  tr.drop-after td { box-shadow: inset 0 -2px 0 var(--drop); }
+  .manual-off .handle { cursor: default; opacity: .3; }
+
+  .move { display: inline-flex; gap: 2px; }
+  .move button, .del { padding: 2px 8px; }
+  .actions { text-align: right; }
+  .confirm { display: inline-flex; align-items: center; gap: 6px; }
+  .confirm span { color: var(--danger); font-size: 13px; }
+
+  .badge { border-radius: 4px; padding: 1px 6px; }
+  .badge.up { background: var(--up-bg); }
+  .badge.down { background: var(--down-bg); }
+
+  .empty { padding: 32px 16px; text-align: center; color: var(--muted); }
+
+  @media (max-width: 560px) {
+    .col-chg { display: none; }   /* 狭い画面では前日比（値）を省略し、%のみ表示 */
+    th, td { padding: 8px 6px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>株価ウォッチリスト</h1>
+    <div class="header-right">
+      <span id="updated">—</span>
+      <button id="btnRefresh" class="primary">更新</button>
+    </div>
+  </header>
+
+  <section class="indices" id="indices"></section>
+
+  <section class="panel">
+    <form class="add-form" id="addForm" autocomplete="off">
+      <input id="inSymbol" placeholder="コード（例: 7203, AAPL）" aria-label="銘柄コード">
+      <input id="inName" placeholder="銘柄名（例: トヨタ自動車）" aria-label="銘柄名">
+      <button type="submit" class="primary">追加</button>
+      <p class="error" id="addError" hidden></p>
+    </form>
+
+    <div class="toolbar">
+      <span id="countLabel"></span>
+      <span>
+        <span id="sortLabel"></span>
+        <button id="btnManual" hidden>手動の並び順に戻す</button>
+      </span>
+    </div>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th class="handle"></th>
+            <th class="sortable" data-key="symbol">コード<span class="arrow"></span></th>
+            <th class="sortable" data-key="name">銘柄名<span class="arrow"></span></th>
+            <th class="sortable num" data-key="price">現在値<span class="arrow"></span></th>
+            <th class="sortable num col-chg" data-key="change">前日比<span class="arrow"></span></th>
+            <th class="sortable num" data-key="changePct">前日比%<span class="arrow"></span></th>
+            <th class="sortable num" data-key="monthPct">前月比%<span class="arrow"></span></th>
+            <th class="actions"></th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="empty" hidden>銘柄がありません。上のフォームから追加してください。</div>
+  </section>
+</div>
+
+<script>
+// ===== 設定・初期データ =====
+const STORAGE_KEY = 'stock-watchlist-v1';
+
+const INDICES = [
+  { symbol: '^N225', name: '日経平均', market: 'JP' },
+  { symbol: '^NDX',  name: 'NASDAQ100', market: 'US' },
+  { symbol: '^GSPC', name: 'S&P500',    market: 'US' },
+];
+
+const DEFAULT_WATCHLIST = [
+  { symbol: '7203', name: 'トヨタ自動車', market: 'JP' },
+  { symbol: '6758', name: 'ソニーグループ', market: 'JP' },
+  { symbol: '9984', name: 'ソフトバンクグループ', market: 'JP' },
+  { symbol: 'AAPL', name: 'Apple', market: 'US' },
+  { symbol: 'NVDA', name: 'NVIDIA', market: 'US' },
+  { symbol: 'MSFT', name: 'Microsoft', market: 'US' },
+];
+
+// ダミー用の基準価格（ここにない銘柄はランダムに決める）
+const DUMMY_BASE = {
+  '^N225': 38500, '^NDX': 19800, '^GSPC': 5600,
+  '7203': 2800, '6758': 3300, '9984': 8900,
+  'AAPL': 228, 'NVDA': 132, 'MSFT': 425,
+};
+
+// ===== 状態 =====
+const state = {
+  watchlist: [],          // [{symbol, name, market}]（配列の順番 = 手動の並び順）
+  quotes: {},             // symbol -> {price, prevClose}
+  sort: null,             // null（手動）または {key, dir: 'asc'|'desc'}
+  confirmDelete: null,    // 削除確認中の symbol
+  updatedAt: null,
+};
+
+// ===== 保存・読み込み =====
+function load() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if (saved && Array.isArray(saved.watchlist)) {
+      state.watchlist = saved.watchlist;
+      state.sort = saved.sort || null;
+      return;
+    }
+  } catch (e) { /* 保存領域が使えない環境では初期データで動かす */ }
+  state.watchlist = DEFAULT_WATCHLIST.map(s => ({ ...s }));
+}
+
+function save() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ watchlist: state.watchlist, sort: state.sort }));
+  } catch (e) { /* 保存できなくても画面は動かす */ }
+}
+
+// ===== 株価取得 =====
+// 本物のAPIにするときは、この関数の中身だけを差し替える。
+// 戻り値: { [symbol]: { price, prevClose, monthAgo } }（monthAgo = 1か月前の終値）
+const dummyCache = {};
+async function fetchQuotes(symbols) {
+  const result = {};
+  for (const sym of symbols) {
+    let q = dummyCache[sym];
+    if (!q) {
+      const base = DUMMY_BASE[sym] ?? randomBase(sym);
+      const prevClose = base;
+      const monthAgo = base * (1 + randRange(-0.1, 0.1));
+      q = { prevClose, monthAgo, price: prevClose * (1 + randRange(-0.02, 0.02)) };
+    } else {
+      q = { ...q, price: q.price * (1 + randRange(-0.015, 0.015)) };
+    }
+    dummyCache[sym] = q;
+    result[sym] = { ...q };
+  }
+  return result;
+}
+
+function randRange(min, max) { return min + Math.random() * (max - min); }
+function randomBase(sym) {
+  return guessMarket(sym) === 'JP' ? Math.round(randRange(500, 10000)) : randRange(20, 500);
+}
+
+// ===== ユーティリティ =====
+function guessMarket(symbol) {
+  // 4桁の数字（または 130A のような英数字4文字で先頭が数字）は日本株とみなす
+  return /^\d[0-9A-Z]{3}$/.test(symbol) ? 'JP' : 'US';
+}
+
+const fmt = {
+  JP: new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY', maximumFractionDigits: 0 }),
+  US: new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+  index: new Intl.NumberFormat('ja-JP', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+  pct: new Intl.NumberFormat('ja-JP', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+};
+
+function signed(text, value) { return (value > 0 ? '+' : value < 0 ? '−' : '±') + text; }
+function trendClass(v) { return v > 0 ? 'up' : v < 0 ? 'down' : 'flat'; }
+
+function calc(symbol) {
+  const q = state.quotes[symbol];
+  if (!q) return null;
+  const change = q.price - q.prevClose;
+  return {
+    price: q.price, change, changePct: change / q.prevClose * 100,
+    monthPct: (q.price - q.monthAgo) / q.monthAgo * 100,
+  };
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// ===== 描画 =====
+function renderIndices() {
+  document.getElementById('indices').innerHTML = INDICES.map(ix => {
+    const c = calc(ix.symbol);
+    if (!c) return `<div class="card"><div class="label">${ix.name}</div><div class="price">—</div></div>`;
+    const cls = trendClass(c.change);
+    return `<div class="card">
+      <div class="label">${ix.name}</div>
+      <div class="price">${fmt.index.format(c.price)}</div>
+      <div class="chg ${cls}">${signed(fmt.index.format(Math.abs(c.change)), c.change)}
+        （${signed(fmt.pct.format(Math.abs(c.changePct)), c.changePct)}%）</div>
+    </div>`;
+  }).join('');
+}
+
+function sortedList() {
+  if (!state.sort) return state.watchlist;
+  const { key, dir } = state.sort;
+  const val = s => (key === 'symbol' || key === 'name') ? s[key] : (calc(s.symbol)?.[key] ?? -Infinity);
+  return [...state.watchlist].sort((a, b) => {
+    const va = val(a), vb = val(b);
+    const r = typeof va === 'string' ? va.localeCompare(vb, 'ja') : va - vb;
+    return dir === 'asc' ? r : -r;
+  });
+}
+
+function renderTable() {
+  const manual = !state.sort;
+  const list = sortedList();
+  const tbody = document.getElementById('tbody');
+  tbody.classList.toggle('manual-off', !manual);
+
+  tbody.innerHTML = list.map((s, i) => {
+    const c = calc(s.symbol);
+    const f = fmt[s.market];
+    const cls = c ? trendClass(c.change) : 'flat';
+    const actions = state.confirmDelete === s.symbol
+      ? `<span class="confirm"><span>削除する？</span>
+           <button class="danger" data-act="del-yes">削除</button>
+           <button data-act="del-no">キャンセル</button></span>`
+      : `<span class="move">
+           <button data-act="up" ${!manual || i === 0 ? 'disabled' : ''} aria-label="上へ">▲</button>
+           <button data-act="down" ${!manual || i === list.length - 1 ? 'disabled' : ''} aria-label="下へ">▼</button>
+         </span>
+         <button class="del" data-act="del" aria-label="削除">×</button>`;
+    return `<tr data-symbol="${escapeHtml(s.symbol)}" draggable="${manual}">
+      <td class="handle"><span title="${manual ? 'ドラッグで並べ替え' : '手動の並び順に戻すと並べ替えできます'}">⋮⋮</span></td>
+      <td class="sym">${escapeHtml(s.symbol)}<span class="mkt">${s.market}</span></td>
+      <td class="name">${escapeHtml(s.name)}</td>
+      <td class="num">${c ? f.format(c.price) : '—'}</td>
+      <td class="num col-chg ${cls}">${c ? signed(f.format(Math.abs(c.change)), c.change) : '—'}</td>
+      <td class="num"><span class="badge ${cls}">${c ? signed(fmt.pct.format(Math.abs(c.changePct)), c.changePct) + '%' : '—'}</span></td>
+      <td class="num"><span class="badge ${c ? trendClass(c.monthPct) : 'flat'}">${c ? signed(fmt.pct.format(Math.abs(c.monthPct)), c.monthPct) + '%' : '—'}</span></td>
+      <td class="actions">${actions}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('empty').hidden = list.length > 0;
+  document.getElementById('countLabel').textContent = `${list.length} 銘柄`;
+
+  // 並べ替え状態の表示
+  const labels = { symbol: 'コード', name: '銘柄名', price: '現在値', change: '前日比', changePct: '前日比%', monthPct: '前月比%' };
+  document.querySelectorAll('th.sortable').forEach(th => {
+    const on = state.sort && state.sort.key === th.dataset.key;
+    th.querySelector('.arrow').textContent = on ? (state.sort.dir === 'asc' ? '▲' : '▼') : '';
+  });
+  document.getElementById('sortLabel').textContent = manual ? '手動の並び順' :
+    `${labels[state.sort.key]}で${state.sort.dir === 'asc' ? '昇順' : '降順'} `;
+  document.getElementById('btnManual').hidden = manual;
+}
+
+function renderUpdated() {
+  document.getElementById('updated').textContent = state.updatedAt
+    ? `最終更新 ${state.updatedAt.toLocaleTimeString('ja-JP')}` : '—';
+}
+
+function render() { renderIndices(); renderTable(); renderUpdated(); }
+
+// ===== 操作 =====
+async function refresh() {
+  const btn = document.getElementById('btnRefresh');
+  btn.disabled = true;
+  try {
+    const symbols = [...INDICES, ...state.watchlist].map(s => s.symbol);
+    state.quotes = await fetchQuotes(symbols);
+    state.updatedAt = new Date();
+  } finally {
+    btn.disabled = false;
+    render();
+  }
+}
+
+function showError(msg) {
+  const el = document.getElementById('addError');
+  el.textContent = msg || '';
+  el.hidden = !msg;
+}
+
+async function addStock(e) {
+  e.preventDefault();
+  const symInput = document.getElementById('inSymbol');
+  const nameInput = document.getElementById('inName');
+  const symbol = symInput.value.trim().toUpperCase();
+  const name = nameInput.value.trim();
+
+  if (!symbol) return showError('コードを入力してください。');
+  if (!/^[0-9A-Z.\-^]{1,10}$/.test(symbol)) return showError('コードは英数字（10文字まで）で入力してください。');
+  if (state.watchlist.some(s => s.symbol === symbol) || INDICES.some(s => s.symbol === symbol)) {
+    return showError(`${symbol} はすでにリストにあります。`);
+  }
+  showError('');
+
+  state.watchlist.push({ symbol, name: name || symbol, market: guessMarket(symbol) });
+  save();
+  Object.assign(state.quotes, await fetchQuotes([symbol]));
+  symInput.value = '';
+  nameInput.value = '';
+  symInput.focus();
+  renderTable();
+}
+
+function moveStock(symbol, delta) {
+  const i = state.watchlist.findIndex(s => s.symbol === symbol);
+  const j = i + delta;
+  if (i < 0 || j < 0 || j >= state.watchlist.length) return;
+  const [item] = state.watchlist.splice(i, 1);
+  state.watchlist.splice(j, 0, item);
+  save();
+  renderTable();
+}
+
+function onTableClick(e) {
+  const btn = e.target.closest('button[data-act]');
+  if (!btn) return;
+  const symbol = btn.closest('tr').dataset.symbol;
+  switch (btn.dataset.act) {
+    case 'up': moveStock(symbol, -1); break;
+    case 'down': moveStock(symbol, 1); break;
+    case 'del': state.confirmDelete = symbol; renderTable(); break;
+    case 'del-no': state.confirmDelete = null; renderTable(); break;
+    case 'del-yes':
+      state.watchlist = state.watchlist.filter(s => s.symbol !== symbol);
+      delete state.quotes[symbol];
+      state.confirmDelete = null;
+      save();
+      renderTable();
+      break;
+  }
+}
+
+function onHeaderClick(e) {
+  const th = e.target.closest('th.sortable');
+  if (!th) return;
+  const key = th.dataset.key;
+  state.sort = (state.sort && state.sort.key === key)
+    ? { key, dir: state.sort.dir === 'asc' ? 'desc' : 'asc' }
+    : { key, dir: (key === 'symbol' || key === 'name') ? 'asc' : 'desc' };
+  save();
+  renderTable();
+}
+
+// ===== ドラッグ&ドロップ（手動の並び順のときだけ有効） =====
+let dragSymbol = null;
+
+function clearDropMarks() {
+  document.querySelectorAll('.drop-before, .drop-after').forEach(el => el.classList.remove('drop-before', 'drop-after'));
+}
+
+function setupDragAndDrop(tbody) {
+  tbody.addEventListener('dragstart', e => {
+    const tr = e.target.closest('tr');
+    if (!tr || state.sort) return e.preventDefault();
+    dragSymbol = tr.dataset.symbol;
+    tr.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', dragSymbol);
+  });
+  tbody.addEventListener('dragover', e => {
+    const tr = e.target.closest('tr');
+    if (!dragSymbol || !tr) return;
+    e.preventDefault();
+    clearDropMarks();
+    const rect = tr.getBoundingClientRect();
+    tr.classList.add(e.clientY < rect.top + rect.height / 2 ? 'drop-before' : 'drop-after');
+  });
+  tbody.addEventListener('drop', e => {
+    const tr = e.target.closest('tr');
+    if (!dragSymbol || !tr) return;
+    e.preventDefault();
+    const after = tr.classList.contains('drop-after');
+    const from = state.watchlist.findIndex(s => s.symbol === dragSymbol);
+    const [item] = state.watchlist.splice(from, 1);
+    let to = state.watchlist.findIndex(s => s.symbol === tr.dataset.symbol);
+    if (to < 0) to = from;              // 自分自身の上に落とした場合は元の位置
+    else if (after) to += 1;
+    state.watchlist.splice(to, 0, item);
+    save();
+  });
+  tbody.addEventListener('dragend', () => {
+    dragSymbol = null;
+    clearDropMarks();
+    renderTable();
+  });
+}
+
+// ===== 起動 =====
+function init() {
+  load();
+  const tbody = document.getElementById('tbody');
+  document.getElementById('addForm').addEventListener('submit', addStock);
+  document.getElementById('btnRefresh').addEventListener('click', refresh);
+  document.getElementById('btnManual').addEventListener('click', () => { state.sort = null; save(); renderTable(); });
+  document.querySelector('thead').addEventListener('click', onHeaderClick);
+  tbody.addEventListener('click', onTableClick);
+  setupDragAndDrop(tbody);
+  refresh();
+}
+
+init();
+</script>
+</body>
+</html>
