@@ -1,0 +1,794 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>電力需給実績ビューア</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#184f95">
+<style>
+  :root {
+    --bg: #f9f9f7;
+    --surface: #fcfcfb;
+    --text: #0b0b0b;
+    --text-2: #52514e;
+    --muted: #898781;
+    --border: rgba(11, 11, 11, 0.10);
+    --grid: #e1e0d9;
+    --axis: #c3c2b7;
+    --input-bg: #ffffff;
+    --accent: #2a78d6;
+    --danger: #d03b3b;
+    /* 電源の色（カテゴリ配色。積み上げの順番と同じ順に割り当てる） */
+    --c1: #2a78d6; --c2: #eb6834; --c3: #1baf7a; --c4: #eda100;
+    --c5: #e87ba4; --c6: #008300; --c7: #6250d6; --c8: #e34948;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d0d0d;
+      --surface: #1a1a19;
+      --text: #f0efec;
+      --text-2: #c3c2b7;
+      --muted: #898781;
+      --border: rgba(255, 255, 255, 0.10);
+      --grid: #2c2c2a;
+      --axis: #383835;
+      --input-bg: #121211;
+      --accent: #3987e5;
+      --danger: #e66767;
+      --c1: #3987e5; --c2: #d95926; --c3: #199e70; --c4: #c98500;
+      --c5: #d55181; --c6: #008300; --c7: #9085e9; --c8: #e66767;
+      color-scheme: dark;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Yu Gothic UI", Meiryo, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 20px 16px 40px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .lead { color: var(--text-2); margin: 0 0 16px; }
+  h2 { font-size: 15px; margin: 0; }
+  a { color: var(--accent); }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
+  .note { color: var(--muted); font-size: 12px; margin: 4px 0 0; }
+  button, select {
+    font: inherit; color: var(--text); background: var(--input-bg);
+    border: 1px solid var(--axis); border-radius: 6px; padding: 5px 10px; cursor: pointer;
+  }
+  button:hover, select:hover { border-color: var(--accent); }
+  button:disabled { opacity: .4; cursor: default; border-color: var(--axis); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  /* ファイル選択 */
+  .drop {
+    border: 2px dashed var(--axis); border-radius: 10px; padding: 20px 16px; text-align: center;
+    background: var(--surface); margin-bottom: 16px;
+  }
+  .drop.over { border-color: var(--accent); background: var(--input-bg); }
+  .drop p { margin: 8px 0 0; color: var(--text-2); }
+  .msg { margin: 0 0 16px; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--danger); color: var(--danger); white-space: pre-line; }
+  .empty-help { color: var(--text-2); }
+  .empty-help code { font-size: 12px; }
+
+  /* 日付と設定 */
+  .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  .bar .grow { flex: 1; }
+  .bar label { display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); font-size: 13px; }
+  #dateSel { min-width: 0; max-width: 100%; font-weight: 600; }
+  .partial { color: var(--danger); font-size: 12px; }
+
+  /* まとめ */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .tile { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; }
+  .tile .k { color: var(--text-2); font-size: 12px; }
+  .tile .v { font-size: 22px; font-weight: 700; line-height: 1.3; }
+  .tile .v small { font-size: 12px; font-weight: 400; color: var(--text-2); margin-left: 2px; }
+  .tile .s { color: var(--text-2); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+  /* グラフ */
+  .chart-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; margin-bottom: 6px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--text-2); font-size: 12px; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; }
+  .sw.soft { opacity: .4; }
+  .chart { position: relative; }
+  .chart svg { display: block; width: 100%; }
+  .chart .grid { stroke: var(--grid); stroke-width: 1; }
+  .chart .base { stroke: var(--axis); stroke-width: 1; }
+  .chart .tick { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .chart .area { stroke: var(--surface); stroke-width: 1; stroke-linejoin: round; }
+  .chart .line { fill: none; stroke-linejoin: round; stroke-linecap: round; }
+  .chart .line.dash { stroke-dasharray: 4 4; }
+  .chart .mark { stroke: var(--surface); stroke-width: 2; fill: var(--text); }
+  .chart .mlabel { fill: var(--text-2); font-size: 12px; font-weight: 600; paint-order: stroke; stroke: var(--surface); stroke-width: 4px; }
+  .chart .cross { stroke: var(--axis); stroke-width: 1; }
+  .chart .dot { stroke: var(--surface); stroke-width: 2; }
+  .tip {
+    position: absolute; pointer-events: none; z-index: 2;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, .12); padding: 8px 10px; font-size: 12px; white-space: nowrap;
+  }
+  .tip b { display: block; margin-bottom: 4px; }
+  .tip .row { display: flex; align-items: center; gap: 6px; }
+  .tip .row .v { margin-left: auto; padding-left: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .tip .row.total { border-top: 1px solid var(--grid); margin-top: 3px; padding-top: 3px; }
+
+  /* 表 */
+  details > summary { cursor: pointer; font-weight: 600; }
+  .table-scroll { overflow-x: auto; margin-top: 10px; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 12px; }
+  th, td { padding: 5px 8px; text-align: right; white-space: nowrap; border-top: 1px solid var(--grid); }
+  th { color: var(--text-2); font-weight: 500; }
+  th:first-child, td:first-child { text-align: left; }
+  .map-table td, .map-table th { text-align: left; }
+  .map-table select { padding: 2px 6px; font-size: 12px; }
+  .file-head { margin: 12px 0 0; font-size: 13px; }
+  .file-head:first-child { margin-top: 8px; }
+  .warn { color: var(--danger); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>電力需給実績ビューア</h1>
+  <p class="lead">エリア需給実績の CSV（30分値）を読み込んで、1日の需要と電源の内訳、太陽光の出力、残余需要をグラフにします。</p>
+
+  <div class="drop" id="drop">
+    <button class="primary" id="btnPick">CSV ファイルを選ぶ</button>
+    <input type="file" id="fileInput" accept=".csv,text/csv" multiple hidden>
+    <p>ここにファイルをドラッグ&amp;ドロップしても読み込めます（複数の月をまとめて読み込めます）。<br>
+      ファイルはブラウザの中だけで読み込み、どこにも送信しません。</p>
+  </div>
+  <p class="msg" id="msg" hidden></p>
+
+  <section class="panel empty-help" id="emptyHelp">
+    <h2>使い方</h2>
+    <p>東京エリアの場合は、東京電力パワーグリッドの「エリア需給実績」のページ
+      （<a href="https://www.tepco.co.jp/forecast/html/area_jukyu-j.html" target="_blank" rel="noopener">https://www.tepco.co.jp/forecast/html/area_jukyu-j.html</a>）
+      から、月ごとの CSV（例：<code>eria_jukyu_202610_03.csv</code>）をダウンロードして読み込んでください。</p>
+    <p>ほかのエリアの CSV も、「DATE（日付）」「TIME（時刻）」「エリア需要」などの列があれば読み込めます。列の割り当ては、読み込んだあとで直せます。</p>
+  </section>
+
+  <div id="main" hidden>
+    <section class="panel">
+      <div class="bar">
+        <button id="btnPrev" aria-label="前日">◀ 前日</button>
+        <select id="dateSel" aria-label="日付"></select>
+        <button id="btnNext" aria-label="翌日">翌日 ▶</button>
+        <span class="partial" id="partial"></span>
+        <span class="grow"></span>
+        <label><input type="checkbox" id="optWind"> 残余需要で風力も引く</label>
+        <label>単位 <select id="optUnit"></select></label>
+      </div>
+    </section>
+
+    <section class="tiles" id="tiles"></section>
+
+    <section class="panel">
+      <div class="chart-head"><h2>1日の需要カーブ</h2><div class="legend" id="lgDemand"></div></div>
+      <div class="chart" id="chDemand"></div>
+    </section>
+
+    <section class="panel">
+      <div class="chart-head"><h2>電源別の出力（積み上げ）</h2><div class="legend" id="lgStack"></div></div>
+      <div class="chart" id="chStack"></div>
+      <p class="note">揚水のくみ上げ・蓄電池の充電・連系線での送り出しは、マイナスとして 0 より下に積み上げています。出力制御量は発電していない分なので含めていません。</p>
+    </section>
+
+    <section class="panel">
+      <div class="chart-head"><h2>太陽光の出力</h2><div class="legend" id="lgSolar"></div></div>
+      <div class="chart" id="chSolar"></div>
+    </section>
+
+    <section class="panel">
+      <div class="chart-head"><h2 id="resTitle">残余需要（需要 − 太陽光）</h2><div class="legend" id="lgResidual"></div></div>
+      <div class="chart" id="chResidual"></div>
+      <p class="note">残余需要は、需要のうち太陽光（設定によっては風力も）で賄えなかった分で、火力や水力などで調整する必要がある量の目安です。</p>
+    </section>
+
+    <details class="panel">
+      <summary>30分ごとのデータ表</summary>
+      <div class="table-scroll"><table id="dataTable"></table></div>
+    </details>
+
+    <details class="panel">
+      <summary>読み込んだファイルと列の割り当て</summary>
+      <div id="files"></div>
+      <p class="note">列の判定が違っているときは、プルダウンで直してください。同じ電源に複数の列を割り当てると、合計して表示します。</p>
+      <p><button id="btnClear">読み込んだデータをすべて消す</button></p>
+    </details>
+  </div>
+</div>
+
+<script>
+// ===== 設定 =====
+const PREF_KEY = 'power-viewer-v1';
+const SLOTS = 48;   // 30分ごと × 24時間
+
+// 電源のまとめ方。この順番に下から積み上げ、色もこの順番で割り当てる
+const GROUPS = [
+  { key: 'nuclear', label: '原子力', color: 'var(--c1)' },
+  { key: 'thermal', label: '火力', color: 'var(--c2)' },
+  { key: 'hydro', label: '水力', color: 'var(--c3)' },
+  { key: 'solar', label: '太陽光', color: 'var(--c4)' },
+  { key: 'wind', label: '風力', color: 'var(--c5)' },
+  { key: 'geobio', label: '地熱・バイオマス', color: 'var(--c6)' },
+  { key: 'storage', label: '揚水・蓄電池', color: 'var(--c7)' },
+  { key: 'tieother', label: '連系線・その他', color: 'var(--c8)' },
+];
+const GROUP = Object.fromEntries(GROUPS.map(g => [g.key, g]));
+const INK = 'var(--text)';
+const ROLES = [
+  { key: '', label: '使わない' },
+  { key: 'date', label: '日付' },
+  { key: 'time', label: '時刻' },
+  { key: 'demand', label: 'エリア需要' },
+  ...GROUPS.map(g => ({ key: g.key, label: g.label })),
+  { key: 'solarCurt', label: '太陽光の出力制御量' },
+  { key: 'windCurt', label: '風力の出力制御量' },
+];
+
+// 列の名前から役割を判定する
+function guessRole(name) {
+  const n = String(name).replace(/\s/g, '');
+  if (/^(DATE|日付|年月日)$/i.test(n)) return 'date';
+  if (/^(TIME|時刻|時間)/i.test(n)) return 'time';
+  if (/合計/.test(n)) return '';                       // 合計は二重に数えないように使わない
+  if (/需要/.test(n)) return 'demand';
+  if (/太陽光/.test(n)) return /制御|抑制/.test(n) ? 'solarCurt' : 'solar';
+  if (/風力/.test(n)) return /制御|抑制/.test(n) ? 'windCurt' : 'wind';
+  if (/原子力/.test(n)) return 'nuclear';
+  if (/火力/.test(n)) return 'thermal';
+  if (/揚水|蓄電/.test(n)) return 'storage';
+  if (/水力/.test(n)) return 'hydro';
+  if (/地熱|バイオ/.test(n)) return 'geobio';
+  if (/連系|その他/.test(n)) return 'tieother';
+  return '';
+}
+
+// ===== 状態 =====
+const state = {
+  files: [],          // [{name, unit, header, roles, data: [[セル]], count, bad}]
+  days: new Map(),    // 'YYYY-MM-DD' -> 48コマの配列（各コマは {demand, nuclear, ..., solarCurt, windCurt} か null）
+  dates: [],          // 日付の一覧（昇順）
+  date: null,         // 表示中の日付
+  prefs: { windToo: false, unitMode: 'file' },
+};
+
+function loadPrefs() {
+  try { Object.assign(state.prefs, JSON.parse(localStorage.getItem(PREF_KEY)) || {}); } catch (e) { /* 使えなくても動かす */ }
+}
+function savePrefs() {
+  try { localStorage.setItem(PREF_KEY, JSON.stringify(state.prefs)); } catch (e) { /* 保存できなくても動かす */ }
+}
+
+// ===== CSV の読み込み =====
+// UTF-8 として読めなければ Shift_JIS として読む（同じエリアでも月によって文字コードが違う）
+function decode(buf) {
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(buf).replace(/^﻿/, ''); }
+  catch (e) { return new TextDecoder('shift_jis').decode(buf); }
+}
+
+function parseCsvLine(line) {
+  const out = [];
+  let cur = '', quoted = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (quoted) {
+      if (c === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+      else if (c === '"') quoted = false;
+      else cur += c;
+    } else if (c === '"') quoted = true;
+    else if (c === ',') { out.push(cur.trim()); cur = ''; }
+    else cur += c;
+  }
+  out.push(cur.trim());
+  return out;
+}
+
+function parseFile(name, text) {
+  const rows = text.split(/\r?\n/).filter(l => l.trim() !== '').map(parseCsvLine);
+  // 先頭の説明の行を飛ばして、「日付」と「時刻」の列がある行を見出しとする
+  const hi = rows.findIndex(r => r.some(c => guessRole(c) === 'date') && r.some(c => guessRole(c) === 'time'));
+  if (hi < 0 || hi > 20) throw new Error(`${name}：「DATE（日付）」と「TIME（時刻）」の列が見つかりません。`);
+  let unit = '';
+  for (const r of rows.slice(0, hi)) {
+    for (const c of r) {
+      const m = c.match(/単位\s*[\[［(（]\s*([^\]］)）]+)/);
+      if (m) unit = m[1].trim();
+    }
+  }
+  const header = rows[hi];
+  const roles = header.map(guessRole);
+  // 日付・時刻は最初の1列だけ使う
+  for (const key of ['date', 'time']) roles.forEach((r, i) => { if (r === key && roles.indexOf(key) !== i) roles[i] = ''; });
+  return { name, unit, header, roles, data: rows.slice(hi + 1), count: 0, bad: 0 };
+}
+
+function parseDate(s) {
+  const m = String(s).match(/(\d{4})\D(\d{1,2})\D(\d{1,2})/);
+  return m ? `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}` : null;
+}
+// 「0:00」「0:30」「12:00〜12:30」などから、その日の何コマ目か（0〜47）を返す
+function parseSlot(s) {
+  const m = String(s).match(/(\d{1,2}):(\d{2})/);
+  if (!m) return null;
+  const h = +m[1], mi = +m[2];
+  return h <= 23 && mi <= 59 ? h * 2 + (mi >= 30 ? 1 : 0) : null;
+}
+const num = s => {
+  const t = String(s).replace(/,/g, '').trim();
+  if (t === '') return null;
+  const v = Number(t);
+  return Number.isFinite(v) ? v : null;
+};
+
+// 読み込んだすべてのファイルから、日付ごとの48コマのデータを作り直す
+function buildDays() {
+  state.days = new Map();
+  for (const f of state.files) {
+    const di = f.roles.indexOf('date'), ti = f.roles.indexOf('time');
+    f.count = 0;
+    f.bad = 0;
+    for (const r of f.data) {
+      const date = di >= 0 ? parseDate(r[di] || '') : null;
+      const slot = ti >= 0 ? parseSlot(r[ti] || '') : null;
+      if (!date || slot === null) { f.bad++; continue; }
+      const v = { demand: 0, solarCurt: 0, windCurt: 0 };
+      GROUPS.forEach(g => { v[g.key] = 0; });
+      let hasDemand = false;
+      f.roles.forEach((role, i) => {
+        if (!role || role === 'date' || role === 'time') return;
+        const x = num(r[i] ?? '');
+        if (x === null) return;
+        v[role] += x;
+        if (role === 'demand') hasDemand = true;
+      });
+      if (!hasDemand) { f.bad++; continue; }
+      if (!state.days.has(date)) state.days.set(date, new Array(SLOTS).fill(null));
+      state.days.get(date)[slot] = v;   // 同じ日時が複数のファイルにあれば、あとのファイルを使う
+      f.count++;
+    }
+  }
+  state.dates = [...state.days.keys()].sort();
+  if (!state.days.has(state.date)) state.date = defaultDate();
+}
+
+// 最初に表示する日：48コマそろっている最後の日（なければ最後の日）
+function defaultDate() {
+  const full = state.dates.filter(d => state.days.get(d).every(Boolean));
+  return full.length ? full[full.length - 1] : state.dates[state.dates.length - 1] || null;
+}
+
+async function loadFiles(fileList) {
+  const errors = [];
+  const loaded = [];
+  for (const file of fileList) {
+    try {
+      const f = parseFile(file.name, decode(await file.arrayBuffer()));
+      state.files = state.files.filter(x => x.name !== f.name).concat(f);   // 同じ名前のファイルは置き換える
+      loaded.push(f);
+    } catch (e) {
+      errors.push(e.message || `${file.name}：読み込めませんでした。`);
+    }
+  }
+  buildDays();
+  // 新しく読み込んだファイルがあれば、そのデータの日を表示する
+  if (loaded.length) state.date = defaultDate();
+  for (const f of loaded) {
+    if (f.count === 0) errors.push(`${f.name}：データの行を読み取れませんでした。列の割り当てを確認してください。`);
+  }
+  if (new Set(state.files.map(f => f.unit)).size > 1) errors.push('ファイルによって単位が違います。グラフはそのまま並べているので、注意してください。');
+  showMessage(errors.join('\n'));
+  render();
+}
+
+function showMessage(text) {
+  const el = document.getElementById('msg');
+  el.textContent = text;
+  el.hidden = !text;
+}
+
+// ===== 単位と書式 =====
+function fileUnit() { return (state.files.find(f => f.unit) || {}).unit || ''; }
+function isMW() { return /^MW/i.test(fileUnit()); }
+function factor() { return state.prefs.unitMode === 'man' && isMW() ? 0.1 : 1; }
+function unitLabel() { return factor() === 0.1 ? '万kW' : (fileUnit() || '（単位不明）'); }
+function energyLabel() { return factor() === 0.1 ? '万kWh' : isMW() ? 'MWh' : ''; }
+const fmt = v => v == null ? '—' : (v * factor()).toLocaleString('ja-JP', { maximumFractionDigits: factor() < 1 ? 1 : 0 });
+const slotTime = s => `${Math.floor(s / 2)}:${s % 2 ? '30' : '00'}`;
+const slotRange = s => `${slotTime(s)}〜${s === SLOTS - 1 ? '24:00' : slotTime(s + 1)}`;
+const WEEK = '日月火水木金土';
+function dateLabel(d) {
+  const [y, m, dd] = d.split('-').map(Number);
+  return `${y}年${m}月${dd}日（${WEEK[new Date(y, m - 1, dd).getDay()]}）`;
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// ===== 1日分の計算 =====
+function residualOf(v) { return v.demand - v.solar - (state.prefs.windToo ? v.wind : 0); }
+
+function series(day, fn) { return day.map(v => v ? fn(v) : null); }
+
+function dayStats(day) {
+  const pts = day.map((v, s) => v && { s, v, res: residualOf(v) }).filter(Boolean);
+  const best = (fn, better) => pts.reduce((a, b) => (better(fn(b), fn(a)) ? b : a));
+  const sum = fn => pts.reduce((t, p) => t + fn(p), 0);
+  return {
+    n: pts.length,
+    peak: best(p => p.v.demand, (a, b) => a > b),
+    low: best(p => p.v.demand, (a, b) => a < b),
+    demandSum: sum(p => p.v.demand),
+    solarPeak: best(p => p.v.solar, (a, b) => a > b),
+    solarSum: sum(p => p.v.solar),
+    curtSum: sum(p => p.v.solarCurt),
+    resMin: best(p => p.res, (a, b) => a < b),
+    resMax: best(p => p.res, (a, b) => a > b),
+  };
+}
+
+// ===== グラフ（SVG） =====
+const charts = new Map();   // グラフの id -> { setHover(slot, own) }。時刻の縦線を全グラフでそろえる
+
+function niceStep(range, count) {
+  const raw = range / count;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const n = raw / mag;
+  return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * mag;
+}
+// 目盛りの範囲を切りのよい数にする
+function niceDomain(min, max, count = 4) {
+  if (max === min) max = min + 1;
+  const step = niceStep(max - min, count);
+  return { yMin: Math.floor(min / step) * step, yMax: Math.ceil(max / step) * step, yStep: step };
+}
+
+function swatch(color, kind) {
+  if (kind === 'area') return `<span class="sw" style="background:${color}"></span>`;
+  if (kind === 'soft') return `<span class="sw soft" style="background:${color}"></span>`;
+  return `<svg width="16" height="6" aria-hidden="true"><line x1="1" x2="15" y1="3" y2="3" style="stroke:${color}"
+    stroke-width="2" stroke-linecap="round" ${kind === 'dash' ? 'stroke-dasharray="3 3"' : ''}/></svg>`;
+}
+function legend(el, items) {
+  el.innerHTML = items.map(i => `<span>${swatch(i.color, i.kind)}${i.name}</span>`).join('');
+}
+
+// opt: { id, height, yMin, yMax, yStep, ariaLabel, layers, markers, dots, tipRows(slot) }
+//   layers: { kind: 'area', lo, hi, color, opacity?, edge? } または { kind: 'line', values, color, width?, dash? }
+function drawChart(host, opt) {
+  const W = Math.max(300, host.clientWidth), H = opt.height;
+  const M = { l: 58, r: 12, t: 14, b: 24 };
+  const x = s => M.l + s / (SLOTS - 1) * (W - M.l - M.r);
+  const y = v => M.t + (opt.yMax - v) / (opt.yMax - opt.yMin) * (H - M.t - M.b);
+  const P = (s, v) => `${x(s).toFixed(1)},${y(v).toFixed(1)}`;
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" height="${H}" role="img" aria-label="${opt.ariaLabel}">`;
+  for (let t = opt.yMin; t <= opt.yMax + opt.yStep / 1000; t += opt.yStep) {
+    const zero = Math.abs(t) < opt.yStep / 1000;
+    svg += `<line class="${zero ? 'base' : 'grid'}" x1="${M.l}" x2="${W - M.r}" y1="${y(t)}" y2="${y(t)}"/>`;
+    svg += `<text class="tick" x="${M.l - 6}" y="${y(t) + 4}" text-anchor="end">${fmt(t)}</text>`;
+  }
+  for (let h = 0; h < 24; h += 3) svg += `<text class="tick" x="${x(h * 2)}" y="${H - 6}" text-anchor="middle">${h}時</text>`;
+
+  for (const L of opt.layers) {
+    if (L.kind === 'area') {
+      const idx = [];
+      for (let s = 0; s < SLOTS; s++) if (L.lo[s] != null && L.hi[s] != null) idx.push(s);
+      if (!idx.length) continue;
+      const top = idx.map(s => P(s, L.hi[s])).join(' L');
+      const bottom = idx.slice().reverse().map(s => P(s, L.lo[s])).join(' L');
+      svg += `<path class="area" d="M${top} L${bottom} Z" style="fill:${L.color};fill-opacity:${L.opacity ?? 1}"/>`;
+      if (L.edge) {
+        // 上の縁の点線は、厚みのある範囲（とその両隣）だけに引く
+        const thick = idx.filter(s => L.hi[s] - L.lo[s] > 0);
+        const edge = thick.length ? idx.filter(s => s >= thick[0] - 1 && s <= thick[thick.length - 1] + 1) : [];
+        if (edge.length) svg += `<path class="line dash" d="M${edge.map(s => P(s, L.hi[s])).join(' L')}" style="stroke:${L.color};stroke-width:1.5"/>`;
+      }
+    } else {
+      const idx = [];
+      for (let s = 0; s < SLOTS; s++) if (L.values[s] != null) idx.push(s);
+      if (!idx.length) continue;
+      svg += `<path class="line${L.dash ? ' dash' : ''}" d="M${idx.map(s => P(s, L.values[s])).join(' L')}"
+        style="stroke:${L.color};stroke-width:${L.width || 2}"/>`;
+    }
+  }
+  for (const m of opt.markers || []) {
+    const right = x(m.slot) > W * 0.7;
+    svg += `<circle class="mark" cx="${x(m.slot)}" cy="${y(m.value)}" r="4"/>`;
+    svg += `<text class="mlabel" x="${x(m.slot) + (right ? -8 : 8)}" y="${y(m.value) + (m.below ? 18 : -9)}"
+      text-anchor="${right ? 'end' : 'start'}">${m.text}</text>`;
+  }
+  svg += `<g class="hover" visibility="hidden"><line class="cross" y1="${M.t}" y2="${H - M.b}"/>` +
+    (opt.dots || []).map(d => `<circle class="dot" r="4" style="fill:${d.color}"/>`).join('') + '</g>';
+  svg += `<rect x="${M.l}" y="0" width="${W - M.l - M.r}" height="${H}" fill="transparent"/></svg>`;
+  host.innerHTML = svg + '<div class="tip" hidden></div>';
+
+  const root = host.querySelector('svg'), hover = root.querySelector('.hover'), tip = host.querySelector('.tip');
+  const dotEls = hover.querySelectorAll('circle');
+  charts.set(opt.id, {
+    setHover(slot, own) {
+      if (slot == null) { hover.setAttribute('visibility', 'hidden'); tip.hidden = true; return; }
+      const cx = x(slot);
+      hover.setAttribute('visibility', 'visible');
+      hover.querySelector('line').setAttribute('x1', cx);
+      hover.querySelector('line').setAttribute('x2', cx);
+      (opt.dots || []).forEach((d, i) => {
+        const v = d.values[slot];
+        dotEls[i].setAttribute('visibility', v == null ? 'hidden' : 'visible');
+        if (v != null) { dotEls[i].setAttribute('cx', cx); dotEls[i].setAttribute('cy', y(v)); }
+      });
+      if (!own) { tip.hidden = true; return; }
+      tip.innerHTML = `<b>${slotRange(slot)}</b>` + opt.tipRows(slot).map(r =>
+        `<div class="row${r.total ? ' total' : ''}">${r.color ? swatch(r.color, r.kind) : ''}${r.name}<span class="v">${r.value}</span></div>`).join('');
+      tip.hidden = false;
+      const box = root.getBoundingClientRect();
+      const left = cx / W * box.width;
+      tip.style.left = (left + tip.offsetWidth + 16 > box.width ? Math.max(0, left - tip.offsetWidth - 12) : left + 12) + 'px';
+      tip.style.top = '6px';
+    },
+  });
+  const rect = root.querySelector('rect');
+  rect.addEventListener('pointermove', e => {
+    const box = root.getBoundingClientRect();
+    const px = (e.clientX - box.left) * (W / box.width);
+    const slot = Math.max(0, Math.min(SLOTS - 1, Math.round((px - M.l) / (W - M.l - M.r) * (SLOTS - 1))));
+    charts.forEach((c, id) => c.setHover(slot, id === opt.id));
+  });
+  rect.addEventListener('pointerleave', () => charts.forEach(c => c.setHover(null)));
+}
+
+// ===== 描画 =====
+const $ = id => document.getElementById(id);
+
+function render() {
+  const has = state.dates.length > 0;
+  $('emptyHelp').hidden = has;
+  $('main').hidden = !has;
+  renderFiles();
+  if (!has) return;
+  renderControls();
+  renderDay();
+}
+
+function renderControls() {
+  const sel = $('dateSel');
+  sel.innerHTML = state.dates.map(d => `<option value="${d}"${d === state.date ? ' selected' : ''}>${dateLabel(d)}</option>`).join('');
+  const i = state.dates.indexOf(state.date);
+  $('btnPrev').disabled = i <= 0;
+  $('btnNext').disabled = i >= state.dates.length - 1;
+  $('optWind').checked = state.prefs.windToo;
+  const unitSel = $('optUnit');
+  unitSel.innerHTML = `<option value="file">${escapeHtml(fileUnit() || '（単位不明）')}</option>` + (isMW() ? '<option value="man">万kW</option>' : '');
+  unitSel.value = isMW() ? state.prefs.unitMode : 'file';
+}
+
+function renderDay() {
+  const day = state.days.get(state.date);
+  const n = day.filter(Boolean).length;
+  $('partial').textContent = n < SLOTS ? `この日は ${n}/${SLOTS} コマ分のデータしかありません` : '';
+  const st = dayStats(day);
+  const U = unitLabel(), E = energyLabel();
+  const windToo = state.prefs.windToo;
+  const resName = windToo ? '残余需要（需要 − 太陽光 − 風力）' : '残余需要（需要 − 太陽光）';
+  $('resTitle').textContent = resName;
+
+  // まとめ
+  const tile = (k, v, unit, s) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}<small>${unit}</small></div><div class="s">${s}</div></div>`;
+  $('tiles').innerHTML = [
+    tile('最大需要', fmt(st.peak.v.demand), U, slotRange(st.peak.s)),
+    tile('最小需要', fmt(st.low.v.demand), U, slotRange(st.low.s)),
+    E ? tile('1日の需要電力量', fmt(st.demandSum * 0.5), E, `${n}コマ分の合計`) : '',
+    tile('太陽光の最大出力', fmt(st.solarPeak.v.solar), U, slotRange(st.solarPeak.s)),
+    tile('需要に占める太陽光', (st.demandSum ? st.solarSum / st.demandSum * 100 : 0).toFixed(1), '%', '1日の電力量の割合'),
+    E ? tile('太陽光の出力制御', st.curtSum > 0 ? fmt(st.curtSum * 0.5) : 'なし', st.curtSum > 0 ? E : '',
+      st.curtSum > 0 ? '制御で減らした電力量の合計' : 'この日の出力制御量は 0') : '',
+    tile('残余需要の最小', fmt(st.resMin.res), U, `${slotRange(st.resMin.s)}${windToo ? '（風力も引く）' : ''}`),
+    tile('残余需要の最大', fmt(st.resMax.res), U, slotRange(st.resMax.s)),
+  ].join('');
+
+  const demand = series(day, v => v.demand);
+  const residual = series(day, residualOf);
+  const vals = s => s.filter(v => v != null);
+  const tipVal = v => v == null ? '—' : `${fmt(v)} ${U}`;
+
+  // 1. 需要カーブ（残余需要のグラフと同じ目盛りにして比べやすくする）
+  const shared = niceDomain(Math.min(...vals(residual), ...vals(demand)), Math.max(...vals(demand)));
+  legend($('lgDemand'), [{ name: 'エリア需要', color: INK, kind: 'line' }]);
+  drawChart($('chDemand'), {
+    id: 'demand', height: 240, ...shared, ariaLabel: '1日の需要カーブ',
+    layers: [{ kind: 'line', values: demand, color: INK, width: 2 }],
+    markers: [
+      { slot: st.peak.s, value: st.peak.v.demand, text: `最大 ${fmt(st.peak.v.demand)}（${slotTime(st.peak.s)}）` },
+      { slot: st.low.s, value: st.low.v.demand, text: `最小 ${fmt(st.low.v.demand)}（${slotTime(st.low.s)}）`, below: true },
+    ],
+    dots: [{ values: demand, color: INK }],
+    tipRows: s => [{ name: 'エリア需要', value: tipVal(demand[s]), color: INK, kind: 'line' }],
+  });
+
+  // 2. 電源別の積み上げ：プラスは 0 から上へ、マイナスは 0 から下へ積む
+  const layers = [];
+  const pos = new Array(SLOTS).fill(0), neg = new Array(SLOTS).fill(0);
+  let top = 0, bottom = 0;
+  for (const g of GROUPS) {
+    const upLo = [], upHi = [], dnLo = [], dnHi = [];
+    let anyUp = false, anyDn = false;
+    for (let s = 0; s < SLOTS; s++) {
+      const v = day[s];
+      if (!v) { upLo.push(null); upHi.push(null); dnLo.push(null); dnHi.push(null); continue; }
+      const p = Math.max(0, v[g.key]), m = Math.min(0, v[g.key]);
+      upLo.push(pos[s]); upHi.push(pos[s] + p); pos[s] += p;
+      dnHi.push(neg[s]); dnLo.push(neg[s] + m); neg[s] += m;
+      if (p > 0) anyUp = true;
+      if (m < 0) anyDn = true;
+      top = Math.max(top, pos[s]);
+      bottom = Math.min(bottom, neg[s]);
+    }
+    if (anyUp) layers.push({ kind: 'area', lo: upLo, hi: upHi, color: g.color });
+    if (anyDn) layers.push({ kind: 'area', lo: dnLo, hi: dnHi, color: g.color });
+  }
+  layers.push({ kind: 'line', values: demand, color: INK, width: 2 });
+  legend($('lgStack'), [...GROUPS.map(g => ({ name: g.label, color: g.color, kind: 'area' })), { name: 'エリア需要', color: INK, kind: 'line' }]);
+  drawChart($('chStack'), {
+    id: 'stack', height: 300, ...niceDomain(bottom, Math.max(top, ...vals(demand)), 5), ariaLabel: '電源別の出力の積み上げ',
+    layers,
+    dots: [{ values: demand, color: INK }],
+    tipRows: s => {
+      const v = day[s];
+      if (!v) return [{ name: 'データなし', value: '' }];
+      return [
+        ...GROUPS.slice().reverse().map(g => ({ name: g.label, value: tipVal(v[g.key]), color: g.color, kind: 'area' })),
+        { name: 'エリア需要', value: tipVal(v.demand), color: INK, kind: 'line', total: true },
+      ];
+    },
+  });
+
+  // 3. 太陽光：発電実績の上に、出力制御で減らした分を薄く重ねる
+  const solar = series(day, v => v.solar);
+  const curtTop = series(day, v => v.solar + v.solarCurt);
+  const hasCurt = day.some(v => v && v.solarCurt > 0);
+  const solarColor = GROUP.solar.color;
+  const solarLayers = [{ kind: 'area', lo: series(day, () => 0), hi: solar, color: solarColor }];
+  if (hasCurt) solarLayers.push({ kind: 'area', lo: solar, hi: curtTop, color: solarColor, opacity: 0.35, edge: true });
+  legend($('lgSolar'), [
+    { name: '発電実績', color: solarColor, kind: 'area' },
+    ...(hasCurt ? [{ name: '出力制御量（抑えた分）', color: solarColor, kind: 'soft' }] : []),
+  ]);
+  drawChart($('chSolar'), {
+    id: 'solar', height: 220, ...niceDomain(0, Math.max(1, ...vals(hasCurt ? curtTop : solar))), ariaLabel: '太陽光の出力',
+    layers: solarLayers,
+    markers: st.solarPeak.v.solar > 0 ? [{ slot: st.solarPeak.s, value: st.solarPeak.v.solar, text: `最大 ${fmt(st.solarPeak.v.solar)}（${slotTime(st.solarPeak.s)}）` }] : [],
+    dots: [{ values: solar, color: solarColor }],
+    tipRows: s => {
+      const v = day[s];
+      if (!v) return [{ name: 'データなし', value: '' }];
+      const rows = [{ name: '発電実績', value: tipVal(v.solar), color: solarColor, kind: 'area' }];
+      if (hasCurt) {
+        rows.push({ name: '出力制御量', value: tipVal(v.solarCurt), color: solarColor, kind: 'soft' });
+        rows.push({ name: '制御がなければ', value: tipVal(v.solar + v.solarCurt), total: true });
+      }
+      return rows;
+    },
+  });
+
+  // 4. 残余需要：需要（点線）との間を、太陽光（と風力）で賄った分として塗る
+  const resLayers = [];
+  if (windToo) {
+    resLayers.push({ kind: 'area', lo: residual, hi: series(day, v => residualOf(v) + v.wind), color: GROUP.wind.color, opacity: 0.45 });
+    resLayers.push({ kind: 'area', lo: series(day, v => residualOf(v) + v.wind), hi: demand, color: solarColor, opacity: 0.45 });
+  } else {
+    resLayers.push({ kind: 'area', lo: residual, hi: demand, color: solarColor, opacity: 0.45 });
+  }
+  resLayers.push({ kind: 'line', values: demand, color: INK, width: 1.5, dash: true });
+  resLayers.push({ kind: 'line', values: residual, color: INK, width: 2.5 });
+  legend($('lgResidual'), [
+    { name: '残余需要', color: INK, kind: 'line' },
+    { name: 'エリア需要', color: INK, kind: 'dash' },
+    { name: '太陽光で賄った分', color: solarColor, kind: 'soft' },
+    ...(windToo ? [{ name: '風力で賄った分', color: GROUP.wind.color, kind: 'soft' }] : []),
+  ]);
+  drawChart($('chResidual'), {
+    id: 'residual', height: 240, ...shared, ariaLabel: resName,
+    layers: resLayers,
+    markers: [{ slot: st.resMin.s, value: st.resMin.res, text: `最小 ${fmt(st.resMin.res)}（${slotTime(st.resMin.s)}）`, below: true }],
+    dots: [{ values: residual, color: INK }, { values: demand, color: INK }],
+    tipRows: s => {
+      const v = day[s];
+      if (!v) return [{ name: 'データなし', value: '' }];
+      return [
+        { name: 'エリア需要', value: tipVal(v.demand), color: INK, kind: 'dash' },
+        { name: '太陽光', value: tipVal(v.solar), color: solarColor, kind: 'soft' },
+        ...(windToo ? [{ name: '風力', value: tipVal(v.wind), color: GROUP.wind.color, kind: 'soft' }] : []),
+        { name: '残余需要', value: tipVal(residualOf(v)), color: INK, kind: 'line', total: true },
+      ];
+    },
+  });
+
+  // 30分ごとの表
+  $('dataTable').innerHTML = `<caption class="note" style="caption-side:bottom;text-align:left">単位：${escapeHtml(U)}</caption>
+    <thead><tr><th>時刻</th><th>エリア需要</th>${GROUPS.map(g => `<th>${g.label}</th>`).join('')}
+      <th>太陽光の出力制御量</th><th>残余需要</th></tr></thead><tbody>` +
+    day.map((v, s) => `<tr><td>${slotRange(s)}</td>` + (v
+      ? `<td>${fmt(v.demand)}</td>${GROUPS.map(g => `<td>${fmt(v[g.key])}</td>`).join('')}<td>${fmt(v.solarCurt)}</td><td>${fmt(residualOf(v))}</td>`
+      : `<td colspan="${GROUPS.length + 3}">データなし</td>`) + '</tr>').join('') + '</tbody>';
+}
+
+function renderFiles() {
+  $('files').innerHTML = state.files.map((f, fi) => `
+    <p class="file-head"><strong>${escapeHtml(f.name)}</strong>　単位：${escapeHtml(f.unit || '不明')}　読み込んだ行：${f.count}
+      ${f.bad ? `<span class="warn">　読めなかった行：${f.bad}</span>` : ''}</p>
+    <div class="table-scroll"><table class="map-table"><tbody>
+      ${f.header.map((h, i) => `<tr><td>${escapeHtml(h || `（${i + 1}列目）`)}</td><td>
+        <select data-file="${fi}" data-col="${i}" aria-label="${escapeHtml(h)}の割り当て">
+          ${ROLES.map(r => `<option value="${r.key}"${r.key === f.roles[i] ? ' selected' : ''}>${r.label}</option>`).join('')}
+        </select></td></tr>`).join('')}
+    </tbody></table></div>`).join('');
+}
+
+// ===== 操作 =====
+function moveDate(delta) {
+  const i = state.dates.indexOf(state.date) + delta;
+  if (i < 0 || i >= state.dates.length) return;
+  state.date = state.dates[i];
+  renderControls();
+  renderDay();
+}
+
+function init() {
+  loadPrefs();
+  const input = $('fileInput'), drop = $('drop');
+  $('btnPick').addEventListener('click', () => input.click());
+  input.addEventListener('change', () => { if (input.files.length) loadFiles([...input.files]); input.value = ''; });
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+  drop.addEventListener('drop', e => {
+    e.preventDefault();
+    drop.classList.remove('over');
+    if (e.dataTransfer.files.length) loadFiles([...e.dataTransfer.files]);
+  });
+
+  $('dateSel').addEventListener('change', e => { state.date = e.target.value; renderControls(); renderDay(); });
+  $('btnPrev').addEventListener('click', () => moveDate(-1));
+  $('btnNext').addEventListener('click', () => moveDate(1));
+  $('optWind').addEventListener('change', e => { state.prefs.windToo = e.target.checked; savePrefs(); renderDay(); });
+  $('optUnit').addEventListener('change', e => { state.prefs.unitMode = e.target.value; savePrefs(); renderDay(); });
+
+  $('files').addEventListener('change', e => {
+    const sel = e.target.closest('select[data-file]');
+    if (!sel) return;
+    state.files[+sel.dataset.file].roles[+sel.dataset.col] = sel.value;
+    buildDays();
+    render();
+  });
+  $('btnClear').addEventListener('click', () => {
+    state.files = [];
+    state.date = null;
+    buildDays();
+    showMessage('');
+    render();
+  });
+
+  // 画面幅が変わったらグラフを描き直す
+  let lastWidth = 0;
+  new ResizeObserver(entries => {
+    const w = Math.round(entries[0].contentRect.width);
+    if (w !== lastWidth && state.date) { lastWidth = w; renderDay(); }
+  }).observe($('chDemand'));
+  render();
+}
+
+init();
+
+// オフラインでも開けるように、サービスワーカーを登録する（相対パスなのでサブフォルダ公開でも動く）
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+</script>
+</body>
+</html>

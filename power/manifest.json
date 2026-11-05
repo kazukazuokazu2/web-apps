@@ -1,0 +1,18 @@
+{
+  "id": "./",
+  "name": "電力需給実績ビューア",
+  "short_name": "電力需給",
+  "description": "エリア需給実績のCSVを読み込んで、需要カーブ・電源別の積み上げ・太陽光の出力・残余需要をグラフにします。",
+  "lang": "ja",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "theme_color": "#184f95",
+  "background_color": "#f9f9f7",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
