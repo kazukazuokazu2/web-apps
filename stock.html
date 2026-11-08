@@ -79,6 +79,8 @@
   .card .label { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; color: var(--muted); font-size: 13px; }
   .card .price { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; margin: 2px 0; }
   .card .chg { font-variant-numeric: tabular-nums; font-weight: 500; }
+  .card .ytd { font-size: 12px; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .card .ytd span { font-weight: 500; }
   .card .price .unit { font-size: 14px; font-weight: 500; color: var(--muted); margin-left: 3px; }
 
   .up { color: var(--up); }
@@ -187,6 +189,7 @@
             <th class="sortable num col-chg" data-key="change">前日比<span class="arrow"></span></th>
             <th class="sortable num" data-key="changePct">前日比%<span class="arrow"></span></th>
             <th class="sortable num" data-key="monthPct">前月比%<span class="arrow"></span></th>
+            <th class="sortable num" data-key="ytdPct">年初来%<span class="arrow"></span></th>
             <th class="actions"></th>
           </tr>
         </thead>
@@ -260,7 +263,8 @@ function save() {
 
 // ===== 株価取得 =====
 // 本物のAPIにするときは、この関数の中身だけを差し替える。
-// 戻り値: { [symbol]: { price, prevClose, monthAgo } }（monthAgo = 1か月前の終値）
+// 戻り値: { [symbol]: { price, prevClose, monthAgo, yearStart } }
+//   monthAgo = 1か月前の終値、yearStart = 年初（その年最初の取引日）の終値
 const dummyCache = {};
 async function fetchQuotes(symbols) {
   const result = {};
@@ -270,7 +274,8 @@ async function fetchQuotes(symbols) {
       const base = DUMMY_BASE[sym] ?? randomBase(sym);
       const prevClose = base;
       const monthAgo = base * (1 + randRange(-0.1, 0.1));
-      q = { prevClose, monthAgo, price: prevClose * (1 + randRange(-0.02, 0.02)) };
+      const yearStart = base * (1 + randRange(-0.25, 0.25));
+      q = { prevClose, monthAgo, yearStart, price: prevClose * (1 + randRange(-0.02, 0.02)) };
     } else {
       q = { ...q, price: q.price * (1 + randRange(-0.015, 0.015)) };
     }
@@ -347,6 +352,7 @@ function calc(symbol) {
   return {
     price: q.price, change, changePct: change / q.prevClose * 100,
     monthPct: (q.price - q.monthAgo) / q.monthAgo * 100,
+    ytdPct: (q.price - q.yearStart) / q.yearStart * 100,
   };
 }
 
@@ -367,6 +373,7 @@ function renderIndices() {
       <div class="price">${fmt.index.format(c.price)}${unit ? `<span class="unit">${unit}</span>` : ''}</div>
       <div class="chg ${cls}">${signed(fmt.index.format(Math.abs(c.change)), c.change)}${unit}
         （${signed(fmt.pct.format(Math.abs(c.changePct)), c.changePct)}%）</div>
+      <div class="ytd">年初来 <span class="${trendClass(c.ytdPct)}">${signed(fmt.pct.format(Math.abs(c.ytdPct)), c.ytdPct)}%</span></div>
     </div>`;
   }).join('');
 }
@@ -418,6 +425,7 @@ function renderTable() {
       <td class="num col-chg ${cls}">${c ? signed(money(Math.abs(c.change)), c.change) : '—'}</td>
       <td class="num"><span class="badge ${cls}">${c ? signed(fmt.pct.format(Math.abs(c.changePct)), c.changePct) + '%' : '—'}</span></td>
       <td class="num"><span class="badge ${c ? trendClass(c.monthPct) : 'flat'}">${c ? signed(fmt.pct.format(Math.abs(c.monthPct)), c.monthPct) + '%' : '—'}</span></td>
+      <td class="num"><span class="badge ${c ? trendClass(c.ytdPct) : 'flat'}">${c ? signed(fmt.pct.format(Math.abs(c.ytdPct)), c.ytdPct) + '%' : '—'}</span></td>
       <td class="actions">${actions}</td>
     </tr>`;
   }).join('');
@@ -426,7 +434,7 @@ function renderTable() {
   document.getElementById('countLabel').textContent = `${list.length} 銘柄`;
 
   // 並べ替え状態の表示
-  const labels = { symbol: 'コード', name: '銘柄名', price: '現在値', change: '前日比', changePct: '前日比%', monthPct: '前月比%' };
+  const labels = { symbol: 'コード', name: '銘柄名', price: '現在値', change: '前日比', changePct: '前日比%', monthPct: '前月比%', ytdPct: '年初来%' };
   document.querySelectorAll('th.sortable').forEach(th => {
     const on = state.sort && state.sort.key === th.dataset.key;
     th.querySelector('.arrow').textContent = on ? (state.sort.dir === 'asc' ? '▲' : '▼') : '';
