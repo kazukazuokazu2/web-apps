@@ -54,7 +54,12 @@
     gap: 8px 16px; margin-bottom: 20px;
   }
   h1 { font-size: 20px; margin: 0; }
-  .header-right { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; }
+  .header-right { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; color: var(--muted); font-size: 13px; }
+  .seg { display: inline-flex; }
+  .seg button { border-radius: 0; margin-left: -1px; padding: 6px 10px; font-size: 13px; }
+  .seg button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+  .seg button:last-child { border-radius: 0 6px 6px 0; }
+  .seg button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; position: relative; }
 
   button {
     font: inherit; cursor: pointer; border-radius: 6px;
@@ -74,6 +79,7 @@
   .card .label { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; color: var(--muted); font-size: 13px; }
   .card .price { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; margin: 2px 0; }
   .card .chg { font-variant-numeric: tabular-nums; font-weight: 500; }
+  .card .price .unit { font-size: 14px; font-weight: 500; color: var(--muted); margin-left: 3px; }
 
   .up { color: var(--up); }
   .down { color: var(--down); }
@@ -144,6 +150,10 @@
     <h1>株価ウォッチリスト</h1>
     <div class="header-right">
       <span id="updated">—</span>
+      <span id="fx"></span>
+      <div class="seg" id="currencySeg" role="group" aria-label="表示通貨">
+        <button data-cur="local">現地通貨</button><button data-cur="JPY">円</button><button data-cur="USD">ドル</button>
+      </div>
       <button id="btnRefresh" class="primary">更新</button>
     </div>
   </header>
@@ -211,7 +221,12 @@ const DUMMY_BASE = {
   '^N225': 38500, '^NDX': 19800, '^GSPC': 5600,
   '7203': 2800, '6758': 3300, '9984': 8900,
   'AAPL': 228, 'NVDA': 132, 'MSFT': 425,
+  'USDJPY': 152,
 };
+
+// 為替レート（1ドルが何円か）。株価と一緒に fetchQuotes で取り、指数と並べてカードで表示する
+const FX_SYMBOL = 'USDJPY';
+const FX_CARD = { symbol: FX_SYMBOL, name: 'ドル円（1ドル）', market: 'JP', unit: '円' };
 
 // ===== 状態 =====
 const state = {
@@ -219,6 +234,7 @@ const state = {
   quotes: {},             // symbol -> {price, prevClose}
   sort: null,             // null（手動）または {key, dir: 'asc'|'desc'}
   confirmDelete: null,    // 削除確認中の symbol
+  currency: 'local',      // 表示通貨：'local'（現地通貨）| 'JPY' | 'USD'
   updatedAt: null,
 };
 
@@ -229,6 +245,7 @@ function load() {
     if (saved && Array.isArray(saved.watchlist)) {
       state.watchlist = saved.watchlist;
       state.sort = saved.sort || null;
+      state.currency = ['JPY', 'USD'].includes(saved.currency) ? saved.currency : 'local';
       return;
     }
   } catch (e) { /* 保存領域が使えない環境では初期データで動かす */ }
@@ -237,7 +254,7 @@ function load() {
 
 function save() {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ watchlist: state.watchlist, sort: state.sort }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ watchlist: state.watchlist, sort: state.sort, currency: state.currency }));
   } catch (e) { /* 保存できなくても画面は動かす */ }
 }
 
@@ -278,6 +295,7 @@ function guessMarket(symbol) {
 // 日本版 Yahoo!ファイナンスで決まった形にならない銘柄（例外）。ここに足せば、すぐに反映される
 const CHART_EXCEPTIONS = {
   '^N225': 'https://finance.yahoo.co.jp/quote/998407.O',   // 日経平均
+  'USDJPY': 'https://finance.yahoo.co.jp/quote/USDJPY=FX',   // ドル円
 };
 // 日本版にページがないので、米国版 Yahoo!ファイナンスを使う銘柄（ETF はここに足す）
 const US_YAHOO_ONLY = new Set(['^NDX', 'SOXL']);
@@ -296,9 +314,25 @@ function chartLink(symbol, market, name) {
     <path d="M5 2H2v8h8V7M7 2h3v3M10 2 5.5 6.5"/></svg></a>`;
 }
 
+// ===== 通貨 =====
+const CURRENCY_OF = { JP: 'JPY', US: 'USD' };   // 市場 → 現地通貨
+function fxRate() { return state.quotes[FX_SYMBOL]?.price ?? null; }
+
+// 表示する通貨。現地通貨のときや、為替レートがまだないときは市場の通貨のまま
+function displayCurrency(market) {
+  return state.currency !== 'local' && fxRate() ? state.currency : CURRENCY_OF[market];
+}
+
+// market の現地通貨の金額を、通貨 to に換算する
+function convert(value, market, to) {
+  const from = CURRENCY_OF[market];
+  if (from === to || !fxRate()) return value;
+  return to === 'JPY' ? value * fxRate() : value / fxRate();
+}
+
 const fmt = {
-  JP: new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY', maximumFractionDigits: 0 }),
-  US: new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+  JPY: new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY', maximumFractionDigits: 0 }),
+  USD: new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }),
   index: new Intl.NumberFormat('ja-JP', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
   pct: new Intl.NumberFormat('ja-JP', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
 };
@@ -322,15 +356,16 @@ function escapeHtml(s) {
 
 // ===== 描画 =====
 function renderIndices() {
-  document.getElementById('indices').innerHTML = INDICES.map(ix => {
+  document.getElementById('indices').innerHTML = [...INDICES, FX_CARD].map(ix => {
     const c = calc(ix.symbol);
+    const unit = ix.unit || '';
     const label = `<div class="label"><span>${ix.name}</span>${chartLink(ix.symbol, ix.market, ix.name)}</div>`;
     if (!c) return `<div class="card">${label}<div class="price">—</div></div>`;
     const cls = trendClass(c.change);
     return `<div class="card">
       ${label}
-      <div class="price">${fmt.index.format(c.price)}</div>
-      <div class="chg ${cls}">${signed(fmt.index.format(Math.abs(c.change)), c.change)}
+      <div class="price">${fmt.index.format(c.price)}${unit ? `<span class="unit">${unit}</span>` : ''}</div>
+      <div class="chg ${cls}">${signed(fmt.index.format(Math.abs(c.change)), c.change)}${unit}
         （${signed(fmt.pct.format(Math.abs(c.changePct)), c.changePct)}%）</div>
     </div>`;
   }).join('');
@@ -339,7 +374,14 @@ function renderIndices() {
 function sortedList() {
   if (!state.sort) return state.watchlist;
   const { key, dir } = state.sort;
-  const val = s => (key === 'symbol' || key === 'name') ? s[key] : (calc(s.symbol)?.[key] ?? -Infinity);
+  // 金額の列は、円とドルが混ざらないように同じ通貨にそろえて比べる（現地通貨のときは円）
+  const sortCur = state.currency === 'local' ? 'JPY' : state.currency;
+  const val = s => {
+    if (key === 'symbol' || key === 'name') return s[key];
+    const v = calc(s.symbol)?.[key];
+    if (v == null) return -Infinity;
+    return key === 'price' || key === 'change' ? convert(v, s.market, sortCur) : v;
+  };
   return [...state.watchlist].sort((a, b) => {
     const va = val(a), vb = val(b);
     const r = typeof va === 'string' ? va.localeCompare(vb, 'ja') : va - vb;
@@ -355,7 +397,9 @@ function renderTable() {
 
   tbody.innerHTML = list.map((s, i) => {
     const c = calc(s.symbol);
-    const f = fmt[s.market];
+    const cur = displayCurrency(s.market);
+    const f = fmt[cur];
+    const money = v => f.format(convert(v, s.market, cur));
     const cls = c ? trendClass(c.change) : 'flat';
     const actions = state.confirmDelete === s.symbol
       ? `<span class="confirm"><span>削除する？</span>
@@ -370,8 +414,8 @@ function renderTable() {
       <td class="handle"><span title="${manual ? 'ドラッグで並べ替え' : '手動の並び順に戻すと並べ替えできます'}">⋮⋮</span></td>
       <td class="sym">${escapeHtml(s.symbol)}<span class="mkt">${s.market}</span></td>
       <td class="name">${escapeHtml(s.name)}${chartLink(s.symbol, s.market, s.name)}</td>
-      <td class="num">${c ? f.format(c.price) : '—'}</td>
-      <td class="num col-chg ${cls}">${c ? signed(f.format(Math.abs(c.change)), c.change) : '—'}</td>
+      <td class="num">${c ? money(c.price) : '—'}</td>
+      <td class="num col-chg ${cls}">${c ? signed(money(Math.abs(c.change)), c.change) : '—'}</td>
       <td class="num"><span class="badge ${cls}">${c ? signed(fmt.pct.format(Math.abs(c.changePct)), c.changePct) + '%' : '—'}</span></td>
       <td class="num"><span class="badge ${c ? trendClass(c.monthPct) : 'flat'}">${c ? signed(fmt.pct.format(Math.abs(c.monthPct)), c.monthPct) + '%' : '—'}</span></td>
       <td class="actions">${actions}</td>
@@ -395,16 +439,22 @@ function renderTable() {
 function renderUpdated() {
   document.getElementById('updated').textContent = state.updatedAt
     ? `最終更新 ${state.updatedAt.toLocaleTimeString('ja-JP')}` : '—';
+  const rate = fxRate();
+  document.getElementById('fx').textContent = rate ? `1ドル＝${fmt.index.format(rate)}円` : '';
 }
 
-function render() { renderIndices(); renderTable(); renderUpdated(); }
+function renderCurrencySeg() {
+  document.querySelectorAll('#currencySeg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.cur === state.currency)));
+}
+
+function render() { renderIndices(); renderTable(); renderUpdated(); renderCurrencySeg(); }
 
 // ===== 操作 =====
 async function refresh() {
   const btn = document.getElementById('btnRefresh');
   btn.disabled = true;
   try {
-    const symbols = [...INDICES, ...state.watchlist].map(s => s.symbol);
+    const symbols = [...INDICES, ...state.watchlist].map(s => s.symbol).concat(FX_SYMBOL);
     state.quotes = await fetchQuotes(symbols);
     state.updatedAt = new Date();
   } finally {
@@ -533,6 +583,14 @@ function init() {
   document.getElementById('addForm').addEventListener('submit', addStock);
   document.getElementById('btnRefresh').addEventListener('click', refresh);
   document.getElementById('btnManual').addEventListener('click', () => { state.sort = null; save(); renderTable(); });
+  document.getElementById('currencySeg').addEventListener('click', e => {
+    const cur = e.target.closest('button[data-cur]')?.dataset.cur;
+    if (!cur) return;
+    state.currency = cur;
+    save();
+    renderTable();
+    renderCurrencySeg();
+  });
   document.querySelector('thead').addEventListener('click', onHeaderClick);
   tbody.addEventListener('click', onTableClick);
   setupDragAndDrop(tbody);
