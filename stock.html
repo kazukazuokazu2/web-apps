@@ -71,7 +71,7 @@
   .card {
     background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px;
   }
-  .card .label { color: var(--muted); font-size: 13px; }
+  .card .label { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; color: var(--muted); font-size: 13px; }
   .card .price { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; margin: 2px 0; }
   .card .chg { font-variant-numeric: tabular-nums; font-weight: 500; }
 
@@ -106,6 +106,10 @@
   th .arrow { display: inline-block; width: 1em; color: var(--accent); }
   .num { text-align: right; }
   td.name { white-space: normal; min-width: 8em; }
+  .chart-link { font-size: 12px; color: var(--accent); text-decoration: none; white-space: nowrap; }
+  .chart-link:hover, .chart-link:focus-visible { text-decoration: underline; }
+  .chart-link .ext { width: 10px; height: 10px; margin-left: 3px; vertical-align: -1px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+  td.name .chart-link { margin-left: 8px; }
   td.sym { font-weight: 600; }
   .mkt { font-size: 11px; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; margin-left: 4px; font-weight: 400; }
 
@@ -270,6 +274,28 @@ function guessMarket(symbol) {
   return /^\d[0-9A-Z]{3}$/.test(symbol) ? 'JP' : 'US';
 }
 
+// ===== チャートのリンク先 =====
+// 日本版 Yahoo!ファイナンスで決まった形にならない銘柄（例外）。ここに足せば、すぐに反映される
+const CHART_EXCEPTIONS = {
+  '^N225': 'https://finance.yahoo.co.jp/quote/998407.O',   // 日経平均
+};
+// 日本版にページがないので、米国版 Yahoo!ファイナンスを使う銘柄（ETF はここに足す）
+const US_YAHOO_ONLY = new Set(['^NDX', 'SOXL']);
+
+function chartUrl(symbol, market) {
+  if (CHART_EXCEPTIONS[symbol]) return CHART_EXCEPTIONS[symbol];
+  const code = encodeURIComponent(symbol);   // ^ は %5E になる
+  if (US_YAHOO_ONLY.has(symbol)) return `https://finance.yahoo.com/quote/${code}`;
+  if (market === 'JP') return `https://finance.yahoo.co.jp/quote/${code}.T`;   // 日本の個別株（東証）
+  return `https://finance.yahoo.co.jp/quote/${code}`;   // 米国の個別株・S&P500
+}
+
+function chartLink(symbol, market, name) {
+  return `<a class="chart-link" href="${escapeHtml(chartUrl(symbol, market))}" target="_blank" rel="noopener" draggable="false"
+    aria-label="${escapeHtml(name)}のチャート（新しいタブで開く）">チャート<svg class="ext" viewBox="0 0 12 12" aria-hidden="true">
+    <path d="M5 2H2v8h8V7M7 2h3v3M10 2 5.5 6.5"/></svg></a>`;
+}
+
 const fmt = {
   JP: new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY', maximumFractionDigits: 0 }),
   US: new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }),
@@ -298,10 +324,11 @@ function escapeHtml(s) {
 function renderIndices() {
   document.getElementById('indices').innerHTML = INDICES.map(ix => {
     const c = calc(ix.symbol);
-    if (!c) return `<div class="card"><div class="label">${ix.name}</div><div class="price">—</div></div>`;
+    const label = `<div class="label"><span>${ix.name}</span>${chartLink(ix.symbol, ix.market, ix.name)}</div>`;
+    if (!c) return `<div class="card">${label}<div class="price">—</div></div>`;
     const cls = trendClass(c.change);
     return `<div class="card">
-      <div class="label">${ix.name}</div>
+      ${label}
       <div class="price">${fmt.index.format(c.price)}</div>
       <div class="chg ${cls}">${signed(fmt.index.format(Math.abs(c.change)), c.change)}
         （${signed(fmt.pct.format(Math.abs(c.changePct)), c.changePct)}%）</div>
@@ -342,7 +369,7 @@ function renderTable() {
     return `<tr data-symbol="${escapeHtml(s.symbol)}" draggable="${manual}">
       <td class="handle"><span title="${manual ? 'ドラッグで並べ替え' : '手動の並び順に戻すと並べ替えできます'}">⋮⋮</span></td>
       <td class="sym">${escapeHtml(s.symbol)}<span class="mkt">${s.market}</span></td>
-      <td class="name">${escapeHtml(s.name)}</td>
+      <td class="name">${escapeHtml(s.name)}${chartLink(s.symbol, s.market, s.name)}</td>
       <td class="num">${c ? f.format(c.price) : '—'}</td>
       <td class="num col-chg ${cls}">${c ? signed(f.format(Math.abs(c.change)), c.change) : '—'}</td>
       <td class="num"><span class="badge ${cls}">${c ? signed(fmt.pct.format(Math.abs(c.changePct)), c.changePct) + '%' : '—'}</span></td>
