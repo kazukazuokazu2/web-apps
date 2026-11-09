@@ -139,6 +139,7 @@
   .badge.down { background: var(--down-bg); }
 
   .empty { padding: 32px 16px; text-align: center; color: var(--muted); }
+  .missing { margin: 0; padding: 10px 16px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; }
 
   @media (max-width: 560px) {
     .col-chg { display: none; }   /* 狭い画面では前日比（値）を省略し、%のみ表示 */
@@ -197,6 +198,7 @@
       </table>
     </div>
     <div class="empty" id="empty" hidden>銘柄がありません。上のフォームから追加してください。</div>
+    <p class="missing" id="missing" hidden></p>
   </section>
 </div>
 
@@ -238,7 +240,7 @@ const state = {
   sort: null,             // null（手動）または {key, dir: 'asc'|'desc'}
   confirmDelete: null,    // 削除確認中の symbol
   currency: 'local',      // 表示通貨：'local'（現地通貨）| 'JPY' | 'USD'
-  updatedAt: null,
+  source: null,           // 株価の出どころ：{kind: 'real', updatedAt} | {kind: 'dummy'}
 };
 
 // ===== 保存・読み込み =====
@@ -262,11 +264,32 @@ function save() {
 }
 
 // ===== 株価取得 =====
-// 本物のAPIにするときは、この関数の中身だけを差し替える。
+// 株価は GitHub Actions（.github/workflows/quotes.yml）が平日の取引時間中に約30分ごとに取得し、
+// data/quotes.json に保存している（scripts/fetch_quotes.py）。取得する銘柄は data/symbols.json に書く。
 // 戻り値: { [symbol]: { price, prevClose, monthAgo, yearStart } }
-//   monthAgo = 1か月前の終値、yearStart = 年初（その年最初の取引日）の終値
-const dummyCache = {};
+//   monthAgo = 1か月前の終値、yearStart = 前年末の終値（年初来%の基準）
+const QUOTES_URL = 'data/quotes.json';
 async function fetchQuotes(symbols) {
+  try {
+    const res = await fetch(QUOTES_URL, { cache: 'no-cache' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    state.source = { kind: 'real', updatedAt: new Date(data.updatedAt) };
+    const result = {};
+    for (const sym of symbols) {
+      const q = data.quotes?.[sym];
+      if (q && q.price > 0 && q.prevClose > 0) result[sym] = q;
+    }
+    return result;
+  } catch (e) {
+    // ファイルを直接開いたときや、quotes.json がまだないときは、ダミーデータで動かす
+    state.source = { kind: 'dummy' };
+    return dummyQuotes(symbols);
+  }
+}
+
+const dummyCache = {};
+function dummyQuotes(symbols) {
   const result = {};
   for (const sym of symbols) {
     let q = dummyCache[sym];
@@ -349,11 +372,16 @@ function calc(symbol) {
   const q = state.quotes[symbol];
   if (!q) return null;
   const change = q.price - q.prevClose;
+  const pctFrom = base => base > 0 ? (q.price - base) / base * 100 : null;   // 基準の値がなければ null
   return {
     price: q.price, change, changePct: change / q.prevClose * 100,
-    monthPct: (q.price - q.monthAgo) / q.monthAgo * 100,
-    ytdPct: (q.price - q.yearStart) / q.yearStart * 100,
+    monthPct: pctFrom(q.monthAgo),
+    ytdPct: pctFrom(q.yearStart),
   };
+}
+
+function pctBadge(v) {
+  return v == null ? '—' : `<span class="badge ${trendClass(v)}">${signed(fmt.pct.format(Math.abs(v)), v)}%</span>`;
 }
 
 function escapeHtml(s) {
@@ -373,7 +401,7 @@ function renderIndices() {
       <div class="price">${fmt.index.format(c.price)}${unit ? `<span class="unit">${unit}</span>` : ''}</div>
       <div class="chg ${cls}">${signed(fmt.index.format(Math.abs(c.change)), c.change)}${unit}
         （${signed(fmt.pct.format(Math.abs(c.changePct)), c.changePct)}%）</div>
-      <div class="ytd">年初来 <span class="${trendClass(c.ytdPct)}">${signed(fmt.pct.format(Math.abs(c.ytdPct)), c.ytdPct)}%</span></div>
+      ${c.ytdPct == null ? '' : `<div class="ytd">年初来 <span class="${trendClass(c.ytdPct)}">${signed(fmt.pct.format(Math.abs(c.ytdPct)), c.ytdPct)}%</span></div>`}
     </div>`;
   }).join('');
 }
@@ -423,15 +451,21 @@ function renderTable() {
       <td class="name">${escapeHtml(s.name)}${chartLink(s.symbol, s.market, s.name)}</td>
       <td class="num">${c ? money(c.price) : '—'}</td>
       <td class="num col-chg ${cls}">${c ? signed(money(Math.abs(c.change)), c.change) : '—'}</td>
-      <td class="num"><span class="badge ${cls}">${c ? signed(fmt.pct.format(Math.abs(c.changePct)), c.changePct) + '%' : '—'}</span></td>
-      <td class="num"><span class="badge ${c ? trendClass(c.monthPct) : 'flat'}">${c ? signed(fmt.pct.format(Math.abs(c.monthPct)), c.monthPct) + '%' : '—'}</span></td>
-      <td class="num"><span class="badge ${c ? trendClass(c.ytdPct) : 'flat'}">${c ? signed(fmt.pct.format(Math.abs(c.ytdPct)), c.ytdPct) + '%' : '—'}</span></td>
+      <td class="num">${pctBadge(c?.changePct)}</td>
+      <td class="num">${pctBadge(c?.monthPct)}</td>
+      <td class="num">${pctBadge(c?.ytdPct)}</td>
       <td class="actions">${actions}</td>
     </tr>`;
   }).join('');
 
   document.getElementById('empty').hidden = list.length > 0;
   document.getElementById('countLabel').textContent = `${list.length} 銘柄`;
+
+  // 実際の株価を表示しているのに、データがない銘柄（data/symbols.json に入っていない銘柄）を知らせる
+  const missing = state.source?.kind === 'real' ? list.filter(s => !state.quotes[s.symbol]).map(s => s.symbol) : [];
+  const missingEl = document.getElementById('missing');
+  missingEl.hidden = missing.length === 0;
+  missingEl.textContent = `株価データがない銘柄：${missing.join('、')}。リポジトリの data/symbols.json に追加すると、数分後に表示されます。`;
 
   // 並べ替え状態の表示
   const labels = { symbol: 'コード', name: '銘柄名', price: '現在値', change: '前日比', changePct: '前日比%', monthPct: '前月比%', ytdPct: '年初来%' };
@@ -445,8 +479,16 @@ function renderTable() {
 }
 
 function renderUpdated() {
-  document.getElementById('updated').textContent = state.updatedAt
-    ? `最終更新 ${state.updatedAt.toLocaleTimeString('ja-JP')}` : '—';
+  const el = document.getElementById('updated');
+  const src = state.source;
+  if (src?.kind === 'real') {
+    const t = src.updatedAt.toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    el.textContent = `株価 ${t} 取得`;
+    el.title = '平日の取引時間中に約30分ごとに自動で取得しています（Yahoo!ファイナンスの値。数十分遅れることがあります）';
+  } else {
+    el.textContent = src ? 'ダミーデータ' : '—';
+    el.title = src ? '株価データ（data/quotes.json）を読めなかったので、ダミーの値を表示しています' : '';
+  }
   const rate = fxRate();
   document.getElementById('fx').textContent = rate ? `1ドル＝${fmt.index.format(rate)}円` : '';
 }
@@ -464,7 +506,6 @@ async function refresh() {
   try {
     const symbols = [...INDICES, ...state.watchlist].map(s => s.symbol).concat(FX_SYMBOL);
     state.quotes = await fetchQuotes(symbols);
-    state.updatedAt = new Date();
   } finally {
     btn.disabled = false;
     render();

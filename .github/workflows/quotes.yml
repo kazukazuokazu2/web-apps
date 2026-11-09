@@ -1,0 +1,52 @@
+name: 株価データを更新
+
+on:
+  schedule:
+    # 平日の取引時間中に30分ごとに実行する（時刻は UTC。GitHub の混み具合で数分〜十数分遅れることがある）
+    - cron: '15,45 0-6 * * 1-5'    # 東証：日本時間 9:15〜15:45
+    - cron: '15,45 13-21 * * 1-5'  # 米国市場：日本時間 22:15〜翌6:45（夏時間・冬時間の両方をカバー）
+  workflow_dispatch:   # GitHub の Actions の画面から、手動でも実行できる
+  push:
+    branches: [main]
+    paths:             # 銘柄の一覧や取得の仕組みを変えたときは、すぐに取得し直す
+      - data/symbols.json
+      - scripts/fetch_quotes.py
+      - .github/workflows/quotes.yml
+
+permissions:
+  contents: write   # data/quotes.json をコミットするため
+
+concurrency:
+  group: quotes
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # yfinance は Yahoo!ファイナンスの仕様変更に合わせて頻繁に更新されるので、毎回最新を入れる
+      - name: yfinance をインストール
+        run: pip install --upgrade yfinance
+
+      - name: 株価を取得
+        run: python scripts/fetch_quotes.py
+
+      - name: 変更があればコミット
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/quotes.json
+          if git diff --cached --quiet; then
+            echo "変更なし"
+            exit 0
+          fi
+          git commit -m "株価データを更新"
+          git pull --rebase
+          git push
