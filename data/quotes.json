@@ -1,5 +1,5 @@
 {
- "updatedAt": "2026-11-10T21:21:45+00:00",
+ "updatedAt": "2026-11-10T22:20:05+00:00",
  "source": "Yahoo!ファイナンス（yfinance で取得）",
  "quotes": {
   "^N225": {
@@ -24,32 +24,32 @@
    "date": "2026-11-10"
   },
   "USDJPY": {
-   "price": 158.711,
+   "price": 158.688,
    "prevClose": 158.292,
    "monthAgo": 158.063,
    "yearStart": 156.413,
    "date": "2026-11-10"
   },
   "7203": {
-   "price": 3491.0,
-   "prevClose": 3338.0,
+   "price": 3414.0,
+   "prevClose": 3491.0,
    "monthAgo": 2910.5,
    "yearStart": 3356.0,
-   "date": "2026-11-09"
+   "date": "2026-11-10"
   },
   "6758": {
-   "price": 4297.0,
-   "prevClose": 4142.0,
+   "price": 4237.0,
+   "prevClose": 4297.0,
    "monthAgo": 3814.0,
    "yearStart": 4024.0,
-   "date": "2026-11-09"
+   "date": "2026-11-10"
   },
   "9984": {
-   "price": 3400.0,
-   "prevClose": 3549.0,
+   "price": 3872.0,
+   "prevClose": 3400.0,
    "monthAgo": 5803.0,
    "yearStart": 4400.0,
-   "date": "2026-11-09"
+   "date": "2026-11-10"
   },
   "AAPL": {
    "price": 348.51,
