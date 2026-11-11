@@ -20,6 +20,7 @@
     --ok: #006300;
     --charge: #2a78d6;      /* 充電（系列1） */
     --discharge: #eb6834;   /* 放電（系列2） */
+    --resp: #6250d6;        /* 周波数応動を含む値（系列7） */
     color-scheme: light;
   }
   @media (prefers-color-scheme: dark) {
@@ -38,6 +39,7 @@
       --ok: #0ca30c;
       --charge: #3987e5;
       --discharge: #d95926;
+      --resp: #9085e9;
       color-scheme: dark;
     }
   }
@@ -240,6 +242,19 @@
     </section>
 
     <section class="panel">
+      <h2>周波数応動を重ねる（ダミーの周波数）</h2>
+      <div class="fields">
+        <div class="field"><span class="name">重ねるかどうか</span><label class="check"><input type="checkbox" data-key="overlayOn"> 計画に周波数応動を重ねる</label></div>
+        <label class="field"><span class="name">1日分のダミーの周波数</span><select data-key="overlayPattern">
+          <option value="noise">ノイズ入り（平常時の細かい揺れ）</option>
+          <option value="stepnoise">階段状 ＋ ノイズ</option>
+          <option value="slow">ゆっくりした変動</option>
+        </select></label>
+      </div>
+      <p class="note">計画どおりに売り買いしながら、周波数に合わせて FSM・LFSM で応動したときの、充電率・収益・サイクル数の変わり方を見ます。調定率・不感帯・遅れ・ノイズの大きさなどは、「周波数応動（FSM・LFSM）」タブの値を使います。</p>
+    </section>
+
+    <section class="panel">
       <h2>計算の前提</h2>
       <ul class="assume" id="assume"></ul>
     </section>
@@ -258,6 +273,14 @@
         ※ <b>動的計画法</b>は、「直前の出力（定格の5%刻み）× 充電率（使える範囲を240に区切る）」の点ごとに、1日の終わりまでに得られる最大の収益を後ろから計算し、0:00 から前向きに出力を選びます（前向きでは定格の0.5%刻みで選びます）。区切りによる近似のため、本当の最適から <strong>1%程度ずれることがあります</strong>。先に放電してあとで充電し直す動きも考えます。</p>
 
       <section class="tiles" id="tiles"></section>
+
+      <section class="panel" id="overlayPanel" hidden>
+        <h2 id="overlayTitle">周波数応動を重ねた結果</h2>
+        <div class="table-scroll"><table class="compare" id="overlayTable"></table></div>
+        <p class="note" id="overlayNote"></p>
+        <div class="chart-head" style="margin-top:12px"><h2>周波数（ダミー）</h2><div class="legend" id="lgPlanFreq"></div></div>
+        <div class="chart" id="chPlanFreq"></div>
+      </section>
 
       <section class="panel">
         <div class="chart-head"><h2>価格カーブと充放電</h2><div class="legend" id="lgPrice"></div></div>
@@ -394,7 +417,7 @@ const DEFAULT_INPUTS = {
   // 蓄電池
   capacity: '10', power: '5', efficiency: '90', socInit: '50', socMin: '10', socMax: '90',
   // ① 計画
-  socEndMin: '50', rampOn: 'true', rampValue: '10', rampUnit: 'min',
+  socEndMin: '50', rampOn: 'true', rampValue: '10', rampUnit: 'min', overlayOn: 'false', overlayPattern: 'noise',
   // ② 周波数応動（第22回 グリッドコード検討会 資料5 の案・解析条件）
   fBase: '50', droop: '5', lfsmOn: 'true', lfsmDb: '0.2', fsmOn: 'true', fsmDb: '0.01',
   deadTime: '0.7', tauDetect: '0.2', tauOut: '0.1', respRate: '100', baseOut: '0',
@@ -538,12 +561,20 @@ function splitArea(a, b, h) {
 }
 
 // 1コマの電力量。出力 p0 → p1 の変化は、コマの境目から上限 ramp（kW/分）の速さで始まり、着いたら p1 を保つ
+// cross：変化の途中で出力が 0 をまたぐとき、またぐまでの電力量（その時点で充電率がいちばん高く／低くなる）
 function slotEnergy(p0, p1, ramp) {
   const tauH = ramp === Infinity || p0 === p1 ? 0 : Math.min(SLOT_HOURS, Math.abs(p1 - p0) / ramp / 60);
   const r = splitArea(p0, p1, tauH);
   const hold = SLOT_HOURS - tauH;
-  return { dis: r.dis + Math.max(p1, 0) * hold, chg: r.chg + Math.max(-p1, 0) * hold, tauMin: tauH * 60 };
+  let cross = null;
+  if (tauH > 0 && p0 * p1 < 0) {
+    const area = Math.abs(p0) * (p0 / (p0 - p1)) * tauH / 2;
+    cross = p0 > 0 ? { dis: area, chg: 0 } : { dis: 0, chg: area };
+  }
+  return { dis: r.dis + Math.max(p1, 0) * hold, chg: r.chg + Math.max(-p1, 0) * hold, tauMin: tauH * 60, cross };
 }
+// 電池の中の量の変化（kWh）
+const batteryDelta = (m, d) => m.chg * d.etaC - m.dis / d.etaD;
 
 // 動的計画法。状態 =（直前の出力, 充電率）、選ぶもの = そのコマの出力。収益が最大になる計画を探す
 //   1. 後ろ向き：24:00 から逆順に、「出力 × 充電率の区切り点」ごとに、そこから1日の終わりまでに得られる最大の収益を求める
@@ -561,7 +592,7 @@ function planDP(prices, b, opts = {}) {
     for (let j = 0; j < np; j++) {
       if (Math.abs(levels[j] - levels[i]) > d.ramp * SLOT_MIN + 1e-9) continue;
       const m = slotEnergy(levels[i], levels[j], d.ramp);
-      trans[i * np + j] = { dE: m.chg * d.etaC - m.dis / d.etaD, net: m.dis - m.chg };
+      trans[i * np + j] = { dE: batteryDelta(m, d), dECross: m.cross ? batteryDelta(m.cross, d) : 0, net: m.dis - m.chg };
     }
   }
   const span = Math.max(d.eMax - d.eMin, 1e-12);
@@ -589,7 +620,7 @@ function planDP(prices, b, opts = {}) {
           const m = trans[i * np + j];
           if (!m) continue;
           const e2 = e + m.dE;
-          if (!inRange(e2)) continue;
+          if (!inRange(e2) || !inRange(e + m.dECross)) continue;   // コマの途中（0 をまたぐ時点）も上下限の中
           const v = price * m.net + (t === SLOTS - 1 ? terminal(e2) : interp(Vn, j, e2));
           if (v > best) best = v;
         }
@@ -614,8 +645,8 @@ function planDP(prices, b, opts = {}) {
     for (const q of fine) {
       if (Math.abs(q - p) > d.ramp * SLOT_MIN + 1e-9) continue;
       const m = slotEnergy(p, q, d.ramp);
-      const e2 = e + m.chg * d.etaC - m.dis / d.etaD;
-      if (!inRange(e2)) continue;
+      const e2 = e + batteryDelta(m, d);
+      if (!inRange(e2) || (m.cross && !inRange(e + batteryDelta(m.cross, d)))) continue;
       const v = prices[t] * (m.dis - m.chg) + (t === SLOTS - 1 ? terminal(e2) : interp2(V[t + 1], q, e2));
       if (v > best + 1e-9 || (Math.abs(v - best) <= 1e-9 && Math.abs(q - p) < Math.abs(bestP - p))) { best = v; bestP = q; bestM = m; }
     }
@@ -642,6 +673,15 @@ function evaluate(plan, prices, b) {
     if (s > d.limit + 1e-6) problems.push(`${slotRange(t)}：放電が出力の上限を超えている`);
     // ランプのある計画では、出力が 0 をまたいで変わるコマに充電と放電の両方が入ることがある
     if (!plan.ramped && c > EPS && s > EPS) problems.push(`${slotRange(t)}：同じコマで充電と放電をしている`);
+    // ランプのある計画は、コマの途中で 0 をまたぐ時点の充電率も確かめる（そこで充電率がいちばん高く／低くなる）
+    if (plan.ramped && plan.power) {
+      const m = slotEnergy(t ? plan.power[t - 1] : 0, plan.power[t], d.ramp);
+      if (m.cross) {
+        const ec = e + batteryDelta(m.cross, d);
+        if (ec > d.eMax + 1e-6) problems.push(`${slotRange(t)}：コマの途中で充電率が上限を超えている`);
+        if (ec < d.eMin - 1e-6) problems.push(`${slotRange(t)}：コマの途中で充電率が下限を下回っている`);
+      }
+    }
     e += c * d.etaC - s / d.etaD;
     if (e > d.eMax + 1e-6) problems.push(`${slotRange(t)}：充電率が上限を超えている`);
     if (e < d.eMin - 1e-6) problems.push(`${slotRange(t)}：充電率が下限を下回っている`);
@@ -689,39 +729,50 @@ function droopResponse(df, c) {
 }
 
 // freq：周波数（Hz）の配列、dt：データの間隔（秒）、events：[{t, before, after}]（階段状の変化の時刻と前後の周波数）
-function simulateResponse(freq, dt, c, b, events = []) {
-  const h = Math.min(0.05, dt);                 // 計算の刻み（秒）
+// opts.baseKw(t)：時刻 t（秒）の運転点（kW）。省略すると c.baseOut（%）で一定
+// opts.prices：48コマの価格。渡すと、出力の電力量をそのコマの価格で売り買いした収益も計算する
+// opts.h：計算の刻み（秒）
+// 出力 ＝ 運転点 ＋ 応動分。応動分だけが、遅れ・変化速度の上限を通る（周波数が一定なら、出力は運転点そのもの）
+function simulateResponse(freq, dt, c, b, events = [], opts = {}) {
+  const h = opts.h || Math.min(0.05, dt);       // 計算の刻み（秒）
   const total = freq.length * dt;
   const steps = Math.round(total / h);
   const d = derive({ ...b, socEndMin: b.socInit, rampOn: false });
+  const basePct = opts.baseKw ? t => opts.baseKw(t) / b.power * 100 : () => c.baseOut;
   const recEvery = Math.max(1, Math.round(Math.max(dt, total / 4000) / h));
   const rec = { t: [], f: [], req: [], out: [], soc: [] };
+  const slotSoc = [];   // 30分ごとの境目の充電率（kWh）
   const delayN = Math.max(0, Math.round(c.deadTime / h));
   const buf = new Float64Array(delayN + 1).fill(freq[0]);
-  let fMeas = freq[0], cmd = c.baseOut, out = c.baseOut, e = d.e0;
-  let dis = 0, chg = 0, battOut = 0, limitedSec = 0, socMin = e, socMax = e;
-  const ev = events.map(x => ({ ...x, need: clampPct(c.baseOut + droopResponse(x.after - c.fBase, c)) - clampPct(c.baseOut + droopResponse(x.before - c.fBase, c)), started: null, done: null, out0: null }));
+  let fMeas = freq[0], cmd = 0, resp = 0, out = basePct(0), e = d.e0;
+  let dis = 0, chg = 0, battOut = 0, revenue = 0, limitedSec = 0, limitedPowerSec = 0, limitedSocSec = 0, socMin = e, socMax = e;
+  const ev = events.map(x => ({ ...x, need: clampPct(basePct(x.t) + droopResponse(x.after - c.fBase, c)) - clampPct(basePct(x.t) + droopResponse(x.before - c.fBase, c)), started: null, done: null, out0: null }));
   for (let k = 0; k < steps; k++) {
     const t = k * h;
     const f = freq[Math.min(freq.length - 1, Math.floor(t / dt + 1e-9))];
     fMeas = c.tauDetect > 0 ? fMeas + (f - fMeas) * Math.min(1, h / c.tauDetect) : f;
     buf[k % buf.length] = fMeas;
     const fDelayed = buf[(k + 1) % buf.length];   // むだ時間前の値
-    const req = clampPct(c.baseOut + droopResponse(fDelayed - c.fBase, c));
-    // 充電率が上限・下限に着いたら、その向きには動かせない
-    let target = req;
-    if (e <= d.eMin + 1e-9 && target > 0) target = 0;
-    if (e >= d.eMax - 1e-9 && target < 0) target = 0;
-    if (target !== req) limitedSec += h;
+    const base = basePct(t + h / 2);               // 刻みの真ん中の運転点（直線の動きを正確に積分するため）
+    const raw = base + droopResponse(fDelayed - c.fBase, c);
+    const req = clampPct(raw);                     // 出力は ±定格まで
     const maxStep = c.respRate * h;
-    cmd += Math.max(-maxStep, Math.min(maxStep, target - cmd));
-    out = c.tauOut > 0 ? out + (cmd - out) * Math.min(1, h / c.tauOut) : cmd;
+    cmd += Math.max(-maxStep, Math.min(maxStep, (req - base) - cmd));
+    resp = c.tauOut > 0 ? resp + (cmd - resp) * Math.min(1, h / c.tauOut) : cmd;
+    out = clampPct(base + resp);
+    // 調定率どおりの出力が ±定格を超えるときは「出力の上限で応動できない」。充電率が上限・下限に着いたら、その向きには動かせない
+    let limited = false;
+    if (Math.abs(raw) > 100 + 1e-9) { limitedPowerSec += h; limited = true; }
+    if ((e <= d.eMin + 1e-9 && out > 1e-9) || (e >= d.eMax - 1e-9 && out < -1e-9)) { out = 0; limitedSocSec += h; limited = true; }
+    if (limited) limitedSec += h;
     const p = out / 100 * b.power, hh = h / 3600;   // kW、時間
     if (p > 0) { dis += p * hh; battOut += p * hh / d.etaD; e -= p * hh / d.etaD; }
     else { chg += -p * hh; e += -p * hh * d.etaC; }
+    if (opts.prices) revenue += opts.prices[Math.min(SLOTS - 1, Math.floor(t / 1800))] * p * hh;
     e = Math.max(d.eMin, Math.min(d.eMax, e));
     socMin = Math.min(socMin, e);
     socMax = Math.max(socMax, e);
+    if (Math.floor((t + h) / 1800 + 1e-9) > Math.floor(t / 1800 + 1e-9)) slotSoc.push(e);
     for (const x of ev) {
       if (t + h / 2 < x.t || Math.abs(x.need) < 0.1) continue;
       if (x.out0 === null) x.out0 = out;
@@ -734,11 +785,35 @@ function simulateResponse(freq, dt, c, b, events = []) {
     }
   }
   return {
-    rec, total, events: ev,
+    rec, total, events: ev, slotSoc, revenue,
     dis, chg, cycles: battOut / b.capacity, perDay: battOut / b.capacity * 86400 / total,
-    socStart: d.e0 / b.capacity * 100, socEnd: e / b.capacity * 100,
-    socMin: socMin / b.capacity * 100, socMax: socMax / b.capacity * 100, limitedSec,
+    socStart: d.e0 / b.capacity * 100, socEnd: e / b.capacity * 100, eEnd: e,
+    socMin: socMin / b.capacity * 100, socMax: socMax / b.capacity * 100, limitedSec, limitedPowerSec, limitedSocSec,
   };
+}
+
+// 計画の出力の動き（kW）を、時刻 t（秒）の関数にする。ランプのある計画は、コマの境目から上限の速さで動く
+function planPowerAt(plan, b) {
+  const d = derive(b);
+  return t => {
+    const s = Math.max(0, Math.min(SLOTS - 1, Math.floor(t / 1800)));
+    const p0 = s ? plan.power[s - 1] : 0, p1 = plan.power[s];
+    if (!plan.ramped || d.ramp === Infinity || p0 === p1) return p1;
+    const minutes = (t - s * 1800) / 60, tau = Math.abs(p1 - p0) / d.ramp;
+    return minutes >= tau ? p1 : p0 + Math.sign(p1 - p0) * d.ramp * minutes;
+  };
+}
+
+// 計画に周波数応動を重ねる（1日分のダミーの周波数）。パターンは入力が変わらないかぎり使い回す
+let overlayCache = { key: '', data: null };
+function overlayPattern(c) {
+  const key = JSON.stringify([c.fBase, c.overlayPattern, c.stepHz, c.slowAmp, c.slowPeriod, c.noiseHz]);
+  if (overlayCache.key !== key) overlayCache = { key, data: makePattern(c, { ...c, pattern: c.overlayPattern, duration: 86400 }) };
+  return overlayCache.data;
+}
+function simulateOverlay(plan, prices, b, c) {
+  const pat = overlayPattern(c);
+  return simulateResponse(pat.f, pat.dt, c, b, [], { baseKw: planPowerAt(plan, b), prices, h: 0.1 });
 }
 function clampPct(v) { return Math.max(-100, Math.min(100, v)); }
 
@@ -828,6 +903,7 @@ function parseFreqInputs(raw) {
   c.fsmOn = bool(raw.fsmOn);
   c.pattern = raw.pattern;
   c.duration = Number(raw.duration);
+  c.overlayPattern = raw.overlayPattern;
   return { c, bad, errors };
 }
 
@@ -948,7 +1024,7 @@ function renderAssumptions(b) {
     '1日を30分ごとの48コマに分けて計算します（<b>1コマ ＝ 0.5時間</b>）。',
     '定格出力は系統側（電気を売り買いする側）で数えます。1コマで売り買いできるのは、最大で「定格出力 × 0.5時間」です。',
     '往復効率は、充電と放電に半分ずつ分けます：<b>充電効率 ＝ 放電効率 ＝ √往復効率</b>。系統から c kWh 買うと電池に c × 充電効率 kWh 貯まり、電池から e kWh 取り出すと系統に e × 放電効率 kWh 売れます。',
-    '充電率は、各コマの終わりに下限と上限の間に収めます（コマの途中は確かめません）。1日の終わり（24:00）の充電率は、「終わりの充電率の下限」以上にします。',
+    '充電率は、各コマの終わりに下限と上限の間に収めます。ランプの途中で充電と放電が切り替わるコマは、切り替わる時点（そこで充電率がいちばん高く／低くなる）も確かめます。1日の終わり（24:00）の充電率は、「終わりの充電率の下限」以上にします。',
     '<b>出力変化速度の上限（動的計画法のみ）</b>：出力の変化は<b>コマの境目から始まり</b>、上限の速さで直線的に変わって、目標の出力に着いたらコマの終わりまで保ちます。変化はそのコマの中で終わる必要があります。0:00 の出力は 0 kW から始めます。変化の途中で充電から放電に（またはその逆に）切り替わるときは、0 をまたぐ前後で、充電効率と放電効率を分けて計算します。',
     '収益 ＝ Σ 価格 ×（売った量 − 買った量）。サイクル数 ＝ 電池から取り出した量 ÷ 容量。',
   ];
@@ -978,7 +1054,57 @@ function updatePlan() {
     results[key] = { plan, r: evaluate(plan, state.prices, b), ramp: checkRamp(plan, b), ms: performance.now() - t0 };
   }
   renderCompare(results, b);
-  renderPlan(results[state.showPlan], results, b);
+  // 周波数応動を重ねる（表示中の計画に）
+  let overlay = null;
+  if (bool(state.inputs.overlayOn)) {
+    const pf = parseFreqInputs(state.inputs);
+    overlay = pf.bad.size
+      ? { error: '周波数応動の条件に誤りがあります。「周波数応動（FSM・LFSM）」タブで、赤枠の欄を確認してください。' }
+      : { res: simulateOverlay(results[state.showPlan].plan, state.prices, b, pf.c), c: pf.c };
+  }
+  renderOverlay(overlay, results[state.showPlan], b);
+  renderPlan(results[state.showPlan], results, b, overlay);
+}
+
+function renderOverlay(ov, sel, b) {
+  $('overlayPanel').hidden = !ov;
+  if (!ov) return;
+  if (ov.error) { $('overlayTable').innerHTML = ''; $('chPlanFreq').innerHTML = ''; $('overlayNote').textContent = ov.error; return; }
+  const { res, c } = ov, r = sel.r;
+  const pct = e => e / b.capacity * 100;
+  let maxDev = 0, at = 0;
+  res.slotSoc.forEach((e, s) => { const dv = e - r.soc[s]; if (Math.abs(dv) > Math.abs(maxDev)) { maxDev = dv; at = s; } });
+  const endOk = res.eEnd >= derive(b).eEnd - 1e-6;
+  $('overlayTitle').textContent = `周波数応動を重ねた結果（${PLAN_NAMES[state.showPlan]}の計画）`;
+  const row = (name, a, z, diff, cls = '') => `<tr><td>${name}</td><td>${a}</td><td class="${cls}">${z}</td><td>${diff}</td></tr>`;
+  $('overlayTable').innerHTML = `<thead><tr><th></th><th>計画だけ</th><th>応動を重ねる</th><th>差</th></tr></thead><tbody>` +
+    row('収益', signedNum(r.revenue, 1) + ' 円', signedNum(res.revenue, 1) + ' 円', plusNum(res.revenue - r.revenue, 2) + ' 円') +
+    row('充電量（買った量）', num(r.buy, 2) + ' kWh', num(res.chg, 2) + ' kWh', plusNum(res.chg - r.buy, 3) + ' kWh') +
+    row('放電量（売った量）', num(r.sell, 2) + ' kWh', num(res.dis, 2) + ' kWh', plusNum(res.dis - r.sell, 3) + ' kWh') +
+    row('サイクル数', num(r.cycles, 3) + ' 回', num(res.cycles, 3) + ' 回', plusNum(res.cycles - r.cycles, 4) + ' 回') +
+    row('終わりの充電率', num(pct(r.endSoc), 2) + '%', num(pct(res.eEnd), 2) + '%', plusNum(pct(res.eEnd - r.endSoc), 2) + ' ポイント', endOk ? 'ok' : 'ng') +
+    row('計画からの充電率のずれ（いちばん大きいとき）', '—', `${plusNum(pct(maxDev), 2)} ポイント`, `${slotRange(at)} の終わり`) +
+    row('出力の上限（±定格）で応動できなかった時間', '—', `${num(res.limitedPowerSec, 1)} 秒`, '', res.limitedPowerSec > 0 ? 'ng' : 'ok') +
+    row('充電率の上下限で動けなかった時間', '—', `${num(res.limitedSocSec, 1)} 秒`, '', res.limitedSocSec > 0 ? 'ng' : 'ok') + '</tbody>';
+  $('overlayNote').innerHTML =
+    `計画は応動を考えずに作っています（応動のための出力や充電率の余裕は取っていません）。応動で増えた・減った電力量は、<b>そのコマの価格で売り買いしたとみなした</b>ダミーの計算です。実際の精算は、需給調整市場やインバランスの仕組みによって異なります。` +
+    (endOk ? '' : `<br><span class="msg-ng">応動の分だけ、1日の終わりの充電率が「終わりの充電率の下限」（${num(b.socEndMin, 1)}%）を下回りました。</span>`);
+
+  const rec = res.rec;
+  const refs = [];
+  if (c.fsmOn) refs.push({ value: c.fBase + c.fsmDb, label: `FSM 不感帯 ±${c.fsmDb}` }, { value: c.fBase - c.fsmDb, label: '' });
+  if (c.lfsmOn) refs.push({ value: c.fBase + c.lfsmDb, label: `LFSM 不感帯 +${c.lfsmDb}` }, { value: c.fBase - c.lfsmDb, label: `−${c.lfsmDb}` });
+  let fMin = Infinity, fMax = -Infinity;
+  for (const v of rec.f) { fMin = Math.min(fMin, v); fMax = Math.max(fMax, v); }
+  $('lgPlanFreq').innerHTML = legendHtml([['周波数', INK, 'line'], ['不感帯', MUTED, 'dash']]);
+  const idxAt = xv => { const t = xv * 3600; let lo = 0, hi = rec.t.length - 1; while (lo < hi) { const m = (lo + hi) >> 1; if (rec.t[m] < t) lo = m + 1; else hi = m; } return lo; };
+  drawChart($('chPlanFreq'), {
+    group: 'plan', id: 'pfreq', height: 160, xMax: 24, xTicks: HOUR_TICKS,
+    ...niceDomain(Math.min(fMin, c.fBase - 0.02), Math.max(fMax, c.fBase + 0.02)), yFmt: v => num(v, 2),
+    ariaLabel: 'ダミーの周波数', refs, lines: [{ points: rec.t.map((t, i) => [t / 3600, rec.f[i]]), color: INK, width: 1 }],
+    hoverAt: xv => { const i = idxAt(xv); return { x: rec.t[i] / 3600, title: clock(rec.t[i]), dots: [{ x: rec.t[i] / 3600, y: rec.f[i], color: INK }],
+      rows: [{ name: '周波数', value: `${num(rec.f[i], 3)} Hz` }, { name: '出力（計画＋応動）', value: `${plusNum(rec.out[i] / 100 * b.power, 2)} kW` }, { name: '充電率', value: `${num(rec.soc[i], 2)}%` }] }; },
+  });
 }
 
 function renderCompare(res, b) {
@@ -1019,8 +1145,10 @@ function powerPoints(plan, b) {
   return pts;
 }
 
-function renderPlan(sel, res, b) {
+function renderPlan(sel, res, b, ov) {
   const { plan, r } = sel;
+  const ovRes = ov && ov.res ? ov.res : null;
+  const RESP = 'var(--resp)';
   const other = res[state.showPlan === 'dp' ? 'greedy' : 'dp'];
   const pct = e => e / b.capacity * 100;
   const tile = (k, v, unit, s, ng) => `<div class="tile${ng ? ' ng' : ''}"><div class="k">${k}</div><div class="v">${v}<small>${unit}</small></div><div class="s">${s}</div></div>`;
@@ -1046,6 +1174,7 @@ function renderPlan(sel, res, b) {
         { name: '放電（売る）', value: `${num(plan.discharge[s], 3)} kWh`, color: DISCHARGE, kind: 'area' },
         { name: 'コマの出力（目標）', value: `${plusNum(plan.power[s], 2)} kW` },
         { name: 'コマの終わりの充電率', value: `${num(pct(r.soc[s]), 1)}%` },
+        ...(ovRes ? [{ name: '応動を含む充電率', value: `${num(pct(ovRes.slotSoc[s]), 2)}%`, color: RESP, kind: 'line' }] : []),
       ],
     };
   };
@@ -1074,21 +1203,24 @@ function renderPlan(sel, res, b) {
   });
 
   const selName = PLAN_NAMES[state.showPlan], otherName = PLAN_NAMES[state.showPlan === 'dp' ? 'greedy' : 'dp'];
-  $('lgPower').innerHTML = legendHtml([[selName, INK, 'line'], [otherName, MUTED, 'dash']]);
+  $('lgPower').innerHTML = legendHtml([[selName, INK, 'line'], [otherName, MUTED, 'dash'], ...(ovRes ? [['計画＋周波数応動', RESP, 'line']] : [])]);
   drawChart($('chPower'), {
     group: 'plan', id: 'power', height: 200, xMax: 24, xTicks: HOUR_TICKS,
     ...niceDomain(-b.power, b.power), yFmt: v => num(v, v % 1 ? 1 : 0),
     ariaLabel: '出力の推移', bands,
-    lines: [{ points: powerPoints(other.plan, b), color: MUTED, width: 1.5, dash: true }, { points: powerPoints(plan, b), color: INK, width: 2 }],
+    lines: [{ points: powerPoints(other.plan, b), color: MUTED, width: 1.5, dash: true },
+      ...(ovRes ? [{ points: ovRes.rec.t.map((t, i) => [t / 3600, ovRes.rec.out[i] / 100 * b.power]), color: RESP, width: 1 }] : []),
+      { points: powerPoints(plan, b), color: INK, width: 2 }],
     hoverAt: hoverAt(s => [{ x: (s + 0.5) / 2, y: plan.power[s], color: INK }]),
   });
 
   const socPts = res => [[0, b.socInit], ...res.r.soc.map((e, s) => [(s + 1) / 2, pct(e)])];
-  $('lgSoc').innerHTML = legendHtml([[selName, INK, 'line'], [otherName, MUTED, 'dash'], ['下限・上限', MUTED, 'dash']]);
+  $('lgSoc').innerHTML = legendHtml([[selName, INK, 'line'], [otherName, MUTED, 'dash'], ...(ovRes ? [['周波数応動を含む', RESP, 'line']] : []), ['下限・上限', MUTED, 'dash']]);
   drawChart($('chSoc'), {
     group: 'plan', id: 'soc', height: 200, xMax: 24, xTicks: HOUR_TICKS, yMin: 0, yMax: 100, yStep: 25, yFmt: v => `${v}%`,
     ariaLabel: '充電率の推移', bands,
-    lines: [{ points: socPts(other), color: MUTED, width: 1.5, dash: true }, { points: socPts(sel), color: INK, width: 2 }],
+    lines: [{ points: socPts(other), color: MUTED, width: 1.5, dash: true }, { points: socPts(sel), color: INK, width: 2 },
+      ...(ovRes ? [{ points: ovRes.rec.t.map((t, i) => [t / 3600, ovRes.rec.soc[i]]), color: RESP, width: 1.5 }] : [])],
     refs: [{ value: b.socMax, label: `上限 ${num(b.socMax, 0)}%` }, { value: b.socMin, label: `下限 ${num(b.socMin, 0)}%` }],
     hoverAt: hoverAt(s => [{ x: (s + 1) / 2, y: pct(r.soc[s]), color: INK }]),
   });
@@ -1582,6 +1714,37 @@ function runTests() {
     const res = simulateResponse(stepTo(49.5, 40, 5), 0.1, { ...fc, respRate: 1 }, fb, [{ t: 5, before: 50, after: 49.5 }]);
     const e = res.events[0];
     return { ok: e.done !== null && e.done > 5 && close(lastOut(res), 12, 0.05), detail: `90% ${e.done === null ? '届かない' : num(e.done, 2) + ' 秒'}、最後の出力 ${num(lastOut(res), 3)}%` };
+  });
+
+  // ---------- 計画に周波数応動を重ねる ----------
+  group('計画に周波数応動を重ねる');
+  const day = v => new Float32Array(864000).fill(v);   // 0.1秒ごと × 24時間
+  const fsm = { ...fc, fsmOn: true };
+  const prices = dummyPrices();
+  for (const [label, planner, bb] of [['動的計画法・上限10%/分', planDP, withRamp(base, 10)], ['簡易法', planGreedy, base]]) {
+    test(`周波数が1日中 50.00Hz → ${label}の計画と、収益・充電率が一致する`, () => {
+      const x = run(planner, prices, bb);
+      const res = simulateResponse(day(50), 0.1, fsm, bb, [], { baseKw: planPowerAt(x.plan, bb), prices, h: 0.1 });
+      const dev = Math.max(...res.slotSoc.map((e, s) => Math.abs(e - x.r.soc[s])));
+      return { ok: close(res.revenue, x.r.revenue, 0.01) && dev < 1e-3 && res.limitedSec === 0,
+        detail: `収益 計画 ${num(x.r.revenue, 3)} / 重ねた ${num(res.revenue, 3)} 円、充電率のずれ最大 ${num(dev, 5)} kWh、動けなかった時間 ${num(res.limitedSec, 1)} 秒` };
+    });
+  }
+  test('何もしない計画で、周波数が1日中 49.90Hz（FSM で +3.6% 応動）→ 放電は 定格5kW × 3.6% × 24時間 ≒ 4.32 kWh', () => {
+    const bb = { ...base, capacity: 100 };   // 充電率の上下限に当たらない大きさ
+    const idlePlan = { power: new Array(SLOTS).fill(0), ramped: false };
+    const res = simulateResponse(day(49.9), 0.1, fsm, bb, [], { baseKw: planPowerAt(idlePlan, bb), prices, h: 0.1 });
+    const expected = bb.power * 0.036 * 24;
+    return { ok: close(res.dis, expected, 0.01) && res.chg === 0 && res.limitedSec === 0,
+      detail: `期待 ${num(expected, 3)} kWh / 放電 ${num(res.dis, 3)} kWh、充電 ${num(res.chg, 3)} kWh、充電率 ${num(res.socStart, 2)} → ${num(res.socEnd, 2)}%` };
+  });
+  test('計画で定格いっぱいに放電しているコマで周波数が下がる → 出力の上限で応動できない時間が出る', () => {
+    const power = new Array(SLOTS).fill(0);
+    power[36] = base.power;   // 18:00〜18:30 だけ定格で放電
+    const plan = { power, ramped: false };
+    const f = Float32Array.from({ length: 864000 }, (_, k) => (k >= 36 * 18000 && k < 37 * 18000 ? 49.5 : 50));
+    const res = simulateResponse(f, 0.1, fc, base, [], { baseKw: planPowerAt(plan, base), prices, h: 0.1 });
+    return { ok: res.limitedPowerSec > 1700, detail: `出力の上限で応動できなかった時間 ${num(res.limitedPowerSec, 1)} 秒` };
   });
   return results;
 }
