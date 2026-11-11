@@ -3,6 +3,7 @@
   "symbols": [
     "^N225", "^NDX", "^GSPC", "USDJPY",
     "7203", "6758", "9984",
-    "AAPL", "NVDA", "MSFT", "TSLA", "SOXL"
+    "AAPL", "NVDA", "MSFT", "TSLA", "SOXL",
+    "DAL", "GEV", "OKLO", "SPCX", "CRWD", "PANW"
   ]
 }
