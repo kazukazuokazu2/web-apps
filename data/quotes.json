@@ -1,5 +1,5 @@
 {
- "updatedAt": "2026-11-11T21:04:27+00:00",
+ "updatedAt": "2026-11-11T22:09:54+00:00",
  "source": "Yahoo!ファイナンス（yfinance で取得）",
  "quotes": {
   "^N225": {
@@ -24,32 +24,32 @@
    "date": "2026-11-11"
   },
   "USDJPY": {
-   "price": 159.867,
+   "price": 159.721,
    "prevClose": 157.983,
    "monthAgo": 158.063,
    "yearStart": 156.413,
    "date": "2026-11-11"
   },
   "7203": {
-   "price": 3414.0,
-   "prevClose": 3491.0,
+   "price": 3435.0,
+   "prevClose": 3414.0,
    "monthAgo": 2910.5,
    "yearStart": 3356.0,
-   "date": "2026-11-10"
+   "date": "2026-11-11"
   },
   "6758": {
-   "price": 4237.0,
-   "prevClose": 4297.0,
+   "price": 4200.0,
+   "prevClose": 4237.0,
    "monthAgo": 3814.0,
    "yearStart": 4024.0,
-   "date": "2026-11-10"
+   "date": "2026-11-11"
   },
   "9984": {
-   "price": 3872.0,
-   "prevClose": 3400.0,
+   "price": 3855.0,
+   "prevClose": 3872.0,
    "monthAgo": 5803.0,
    "yearStart": 4400.0,
-   "date": "2026-11-10"
+   "date": "2026-11-11"
   },
   "AAPL": {
    "price": 355.63,
@@ -73,35 +73,35 @@
    "date": "2026-11-11"
   },
   "TSLA": {
-   "price": 390.8163,
+   "price": 390.84,
    "prevClose": 379.78,
    "monthAgo": 382.7,
    "yearStart": 449.72,
    "date": "2026-11-11"
   },
   "SOXL": {
-   "price": 66.07,
+   "price": 66.03,
    "prevClose": 56.06,
    "monthAgo": 139.76,
    "yearStart": 42.03,
    "date": "2026-11-11"
   },
   "DAL": {
-   "price": 91.3,
+   "price": 91.32,
    "prevClose": 92.2,
    "monthAgo": 82.17,
    "yearStart": 69.4,
    "date": "2026-11-11"
   },
   "GEV": {
-   "price": 808.19,
+   "price": 808.24,
    "prevClose": 797.04,
    "monthAgo": 1004.73,
    "yearStart": 653.57,
    "date": "2026-11-11"
   },
   "OKLO": {
-   "price": 25.865,
+   "price": 25.86,
    "prevClose": 25.09,
    "monthAgo": 34.7,
    "yearStart": 71.76,
