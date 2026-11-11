@@ -1,5 +1,5 @@
 {
- "updatedAt": "2026-11-11T07:59:03+00:00",
+ "updatedAt": "2026-11-11T10:20:48+00:00",
  "source": "Yahoo!ファイナンス（yfinance で取得）",
  "quotes": {
   "^N225": {
@@ -24,7 +24,7 @@
    "date": "2026-11-10"
   },
   "USDJPY": {
-   "price": 158.867,
+   "price": 158.937,
    "prevClose": 157.983,
    "monthAgo": 158.063,
    "yearStart": 156.413,
@@ -84,6 +84,48 @@
    "prevClose": 56.2,
    "monthAgo": 139.76,
    "yearStart": 42.03,
+   "date": "2026-11-10"
+  },
+  "DAL": {
+   "price": 92.2,
+   "prevClose": 91.8,
+   "monthAgo": 82.17,
+   "yearStart": 69.4,
+   "date": "2026-11-10"
+  },
+  "GEV": {
+   "price": 797.04,
+   "prevClose": 829.34,
+   "monthAgo": 1004.73,
+   "yearStart": 653.57,
+   "date": "2026-11-10"
+  },
+  "OKLO": {
+   "price": 25.09,
+   "prevClose": 26.84,
+   "monthAgo": 34.7,
+   "yearStart": 71.76,
+   "date": "2026-11-10"
+  },
+  "SPCX": {
+   "price": 143.09,
+   "prevClose": 142.07,
+   "monthAgo": 162.57,
+   "yearStart": null,
+   "date": "2026-11-10"
+  },
+  "CRWD": {
+   "price": 225.76,
+   "prevClose": 228.58,
+   "monthAgo": 275.04,
+   "yearStart": 117.19,
+   "date": "2026-11-10"
+  },
+  "PANW": {
+   "price": 326.36,
+   "prevClose": 330.89,
+   "monthAgo": 418.78,
+   "yearStart": 184.2,
    "date": "2026-11-10"
   }
  },
