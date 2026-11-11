@@ -1,10 +1,10 @@
 {
- "updatedAt": "2026-11-11T01:19:20+00:00",
+ "updatedAt": "2026-11-11T02:28:53+00:00",
  "source": "Yahoo!ファイナンス（yfinance で取得）",
  "quotes": {
   "^N225": {
-   "price": 60657.8203,
-   "prevClose": 58775.5,
+   "price": 60885.6992,
+   "prevClose": 60459.5781,
    "monthAgo": 69030.9219,
    "yearStart": 50339.4805,
    "date": "2026-11-11"
@@ -24,67 +24,67 @@
    "date": "2026-11-10"
   },
   "USDJPY": {
-   "price": 158.938,
+   "price": 158.838,
    "prevClose": 157.983,
    "monthAgo": 158.063,
    "yearStart": 156.413,
    "date": "2026-11-11"
   },
   "7203": {
-   "price": 3397.0,
+   "price": 3404.0,
    "prevClose": 3414.0,
    "monthAgo": 2910.5,
    "yearStart": 3356.0,
    "date": "2026-11-11"
   },
   "6758": {
-   "price": 4271.0,
+   "price": 4253.0,
    "prevClose": 4237.0,
    "monthAgo": 3814.0,
    "yearStart": 4024.0,
    "date": "2026-11-11"
   },
   "9984": {
-   "price": 3633.0,
+   "price": 3716.0,
    "prevClose": 3872.0,
    "monthAgo": 5803.0,
    "yearStart": 4400.0,
    "date": "2026-11-11"
   },
   "AAPL": {
-   "price": 350.69,
-   "prevClose": 342.37,
+   "price": 348.51,
+   "prevClose": 350.69,
    "monthAgo": 336.64,
    "yearStart": 271.86,
-   "date": "2026-11-09"
+   "date": "2026-11-10"
   },
   "NVDA": {
-   "price": 178.67,
-   "prevClose": 186.64,
+   "price": 168.89,
+   "prevClose": 178.67,
    "monthAgo": 229.28,
    "yearStart": 186.5,
-   "date": "2026-11-09"
+   "date": "2026-11-10"
   },
   "MSFT": {
-   "price": 545.18,
-   "prevClose": 530.61,
+   "price": 533.16,
+   "prevClose": 545.18,
    "monthAgo": 535.07,
    "yearStart": 483.62,
-   "date": "2026-11-09"
+   "date": "2026-11-10"
   },
   "TSLA": {
-   "price": 378.05,
-   "prevClose": 358.22,
+   "price": 379.78,
+   "prevClose": 378.05,
    "monthAgo": 382.7,
    "yearStart": 449.72,
-   "date": "2026-11-09"
+   "date": "2026-11-10"
   },
   "SOXL": {
-   "price": 56.2,
-   "prevClose": 45.97,
+   "price": 56.06,
+   "prevClose": 56.2,
    "monthAgo": 139.76,
    "yearStart": 42.03,
-   "date": "2026-11-09"
+   "date": "2026-11-10"
   }
  },
  "errors": {}
