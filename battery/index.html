@@ -93,7 +93,8 @@
   .msg-ng { color: var(--danger); font-size: 13px; white-space: pre-line; }
 
   /* タブ */
-  .tabs { display: flex; gap: 0; margin: 0 0 16px; border-bottom: 1px solid var(--axis); }
+  .tabs { display: flex; flex-wrap: wrap; gap: 0; margin: 0 0 16px; border-bottom: 1px solid var(--axis); }
+  .tabs button { white-space: nowrap; }
   .tabs button { border: none; border-bottom: 3px solid transparent; border-radius: 0; background: transparent; padding: 8px 14px; color: var(--text-2); font-weight: 600; }
   .tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
 
@@ -132,6 +133,16 @@
   .field.has-error > .name, .field.has-error > .unit:first-child { color: var(--danger); font-weight: 700; }
   .field.has-error input.invalid, .field.has-error select.invalid { background: color-mix(in srgb, var(--danger) 12%, var(--input-bg)); border-width: 2px; }
   .field-msg { flex-basis: 100%; color: var(--danger); font-size: 12px; line-height: 1.4; }
+  /* 内訳 */
+  .bars-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px 24px; }
+  .bars-grid h3 { margin: 4px 0; }
+  .bars svg { display: block; width: 100%; }
+  .bars .lab { fill: var(--text-2); font-size: 12px; }
+  .bars .val { fill: var(--text); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .bars .zero { stroke: var(--axis); stroke-width: 1; }
+  .wf svg { display: block; width: 100%; }
+  .stale { color: var(--danger); font-weight: 600; }
+  .compare td.sum { font-weight: 700; border-top: 2px solid var(--axis); }
   .tabs button.has-error::after { content: "●"; color: var(--danger); margin-left: 6px; font-size: 10px; vertical-align: 2px; }
   .violations { margin: 0; padding-left: 1.2em; font-size: 13px; color: var(--danger); }
   .violations li { margin: 2px 0; }
@@ -206,6 +217,7 @@
   <div class="tabs" role="tablist">
     <button role="tab" data-tab="plan" aria-selected="true">30分ごとの充放電計画</button>
     <button role="tab" data-tab="freq" aria-selected="false">周波数応動（FSM・LFSM）</button>
+    <button role="tab" data-tab="break" aria-selected="false">内訳</button>
   </div>
 
   <!-- ================= ① 30分ごとの充放電計画 ================= -->
@@ -431,6 +443,47 @@
     </div>
   </div>
 
+  <!-- ================= ③ 収益の内訳 ================= -->
+  <div id="tabBreak" hidden>
+    <section class="panel">
+      <h2>使っている条件</h2>
+      <p id="breakCond" style="margin:0"></p>
+      <p class="note">条件は、上の「蓄電池の条件」と、「30分ごとの充放電計画」タブ（終わりの充電率の下限・出力変化速度の上限・価格・手動の計画）で変えられます。変えると、内訳はすぐに計算し直します。</p>
+    </section>
+
+    <div class="error-box" id="breakErrorBox" hidden></div>
+
+    <div id="breakOutput">
+      <section class="panel">
+        <h2>計画ごとの収益の内訳</h2>
+        <div class="table-scroll"><table class="compare" id="breakTable"></table></div>
+        <p class="note" id="breakEq"></p>
+      </section>
+
+      <section class="panel">
+        <div class="chart-head"><h2>収入・コスト・ロス・純収益（3つの計画を同じ目盛りで）</h2><div class="legend" id="lgBars"></div></div>
+        <div class="bars-grid" id="breakBars"></div>
+        <p class="note">ロスの額は、放電の収入と充電のコストの中に含まれている「効率で失った分」を取り出して示したものです（収入とコストに上乗せされる別の支出ではありません）。</p>
+      </section>
+
+      <section class="panel">
+        <h2>理想から現実までの差（動的計画法）</h2>
+        <div class="row-buttons">
+          <button class="primary" id="btnWaterfall">差を計算する</button>
+          <span id="wfState" class="note" style="margin:0"></span>
+        </div>
+        <div class="chart" id="chWaterfall"></div>
+        <div class="table-scroll"><table class="compare" id="wfTable"></table></div>
+        <p class="note" id="wfNote"></p>
+      </section>
+
+      <section class="panel">
+        <h2>損失の定義と式</h2>
+        <ul class="assume" id="breakAssume"></ul>
+      </section>
+    </div>
+  </div>
+
   <details class="panel" id="testPanel">
     <summary>計算のテスト</summary>
     <p class="note">計算の関数が正しく動くかを確かめるテストです。入力欄の値は使わず、テスト用の条件で計算します（「今の入力の蓄電池」のテストだけは、今の入力を使います）。動的計画法のテストは数秒かかります。</p>
@@ -489,7 +542,7 @@ function load() {
       for (const k of Object.keys(DEFAULT_INPUTS)) if (typeof saved.inputs?.[k] === 'string') state.inputs[k] = saved.inputs[k];
       if (Array.isArray(saved.prices) && saved.prices.length === SLOTS && saved.prices.every(Number.isFinite)) state.prices = saved.prices;
       if (typeof saved.priceSource === 'string') state.priceSource = saved.priceSource;
-      if (saved.tab === 'freq') state.tab = 'freq';
+      if (saved.tab === 'freq' || saved.tab === 'break') state.tab = saved.tab;
       if (saved.showPlan === 'greedy' || saved.showPlan === 'manual') state.showPlan = saved.showPlan;
       if (Array.isArray(saved.manual) && saved.manual.length === SLOTS &&
           saved.manual.every(s => MANUAL_ORDER.includes(s?.m) && (s.kw === null || (Number.isFinite(s.kw) && s.kw >= 0)))) state.manual = saved.manual;
@@ -651,6 +704,9 @@ function planDP(prices, b, opts = {}) {
     return (1 - w) * Vt[j * width + k0] + w * Vt[j * width + k0 + 1];
   };
   const inRange = e => e >= d.eMin - 1e-9 && e <= d.eMax + 1e-9;
+  // コマの途中（0 をまたぐ時点）は、evaluate と同じく 1e-6 kWh までのはみ出しを許す
+  // （ランプ上限がとても大きいときの、ごくわずかなはみ出しで計画を捨てないように）
+  const inRangeCross = e => e >= d.eMin - 1e-6 && e <= d.eMax + 1e-6;
   for (let t = SLOTS - 1; t >= 0; t--) {
     const Vt = new Float64Array(np * width), Vn = V[t + 1], price = prices[t];
     for (let i = 0; i < np; i++) {
@@ -661,7 +717,7 @@ function planDP(prices, b, opts = {}) {
           const m = trans[i * np + j];
           if (!m) continue;
           const e2 = e + m.dE;
-          if (!inRange(e2) || !inRange(e + m.dECross)) continue;   // コマの途中（0 をまたぐ時点）も上下限の中
+          if (!inRange(e2) || !inRangeCross(e + m.dECross)) continue;   // コマの途中（0 をまたぐ時点）も上下限の中
           const v = price * m.net + (t === SLOTS - 1 ? terminal(e2) : interp(Vn, j, e2));
           if (v > best) best = v;
         }
@@ -687,7 +743,7 @@ function planDP(prices, b, opts = {}) {
       if (Math.abs(q - p) > d.ramp * SLOT_MIN + 1e-9) continue;
       const m = slotEnergy(p, q, d.ramp);
       const e2 = e + batteryDelta(m, d);
-      if (!inRange(e2) || (m.cross && !inRange(e + batteryDelta(m.cross, d)))) continue;
+      if (!inRange(e2) || (m.cross && !inRangeCross(e + batteryDelta(m.cross, d)))) continue;
       const v = prices[t] * (m.dis - m.chg) + (t === SLOTS - 1 ? terminal(e2) : interp2(V[t + 1], q, e2));
       if (v > best + 1e-9 || (Math.abs(v - best) <= 1e-9 && Math.abs(q - p) < Math.abs(bestP - p))) { best = v; bestP = q; bestM = m; }
     }
@@ -710,6 +766,8 @@ function evaluate(plan, prices, b) {
   const add = (t, why) => issues.push({ t, why });
   const pctOf = e => `${num(e / b.capacity * 100, 1)}%`;
   let e = d.e0, revenue = 0, buy = 0, sell = 0, out = 0;
+  // 収益の内訳（同じループで足し上げるので、収益とずれない）
+  const bd = { income: 0, cost: 0, stored: 0, lossKwhC: 0, lossKwhD: 0, lossYenC: 0, lossYenD: 0, ideal: 0 };
   for (let t = 0; t < SLOTS; t++) {
     const c = plan.charge[t], s = plan.discharge[t];
     if (c < -EPS || s < -EPS) add(t, '充電量か放電量がマイナス');
@@ -740,10 +798,31 @@ function evaluate(plan, prices, b) {
     buy += c;
     sell += s;
     out += s / d.etaD;
+    const pr = prices[t], st = c * d.etaC, ot = s / d.etaD;   // 電池に貯まった量・電池から取り出した量
+    bd.income += pr * s;
+    bd.cost += pr * c;
+    bd.stored += st;
+    bd.lossKwhC += c - st;            // 買った量 ×（1 − 充電効率）
+    bd.lossKwhD += ot - s;            // 取り出した量 ×（1 − 放電効率）
+    bd.lossYenC += pr * (c - st);
+    bd.lossYenD += pr * (ot - s);
+    bd.ideal += pr * (ot - st);
   }
+  bd.net = bd.income - bd.cost;
+  bd.out = out;
   if (e < d.eEnd - 1e-6) add(SLOTS - 1, `24:00 の充電率 ${pctOf(e)} が、終わりの下限 ${num(b.socEndMin, 1)}% を下回る`);
   const problems = issues.map(x => `${slotRange(x.t)}：${x.why}`);
-  return { revenue, buy, sell, cycles: out / b.capacity, soc, endSoc: e, issues, problems };
+  return { revenue, buy, sell, cycles: out / b.capacity, soc, endSoc: e, issues, problems, breakdown: bd };
+}
+
+// 理想から現実までの差（動的計画法）。A：効率100%・ランプ上限なし、B：実際の効率・ランプ上限なし、C：実際の効率・今のランプ上限
+// cRevenue を渡すと、C はそれを使う（画面ではいま表示している動的計画法の収益）
+function waterfallCalc(prices, b, cRevenue) {
+  const bA = { ...b, efficiency: 100, rampOn: false }, bB = { ...b, rampOn: false };
+  const A = evaluate(planDP(prices, bA), prices, bA).revenue;
+  const B = evaluate(planDP(prices, bB), prices, bB).revenue;
+  const C = cRevenue ?? evaluate(planDP(prices, b), prices, b).revenue;
+  return { A, B, C, eff: A - B, ramp: B - C };
 }
 
 // ===== 手動の計画 =====
@@ -1150,20 +1229,13 @@ function renderAssumptions(b) {
 let planCache = { key: '', results: null };
 let lastPlanResults = null;   // 「動的計画法の計画を写す」で使う
 
-function updatePlan() {
-  const { b, bad, errors, manualOk } = parsePlanInputs(state.inputs);
-  if (manualOk) state.lastManualPct = b.manualPct;
-  const n = showFieldErrors();
-  // 計画の切り替えと手動計画の操作画面は、エラーがあっても隠さない（エラーを直すための欄がそこにあるため）
-  $('manualBox').hidden = state.showPlan !== 'manual';
-  if (state.prices.some(p => !Number.isFinite(p))) errors.push('価格に数字でない値があります。「48コマの価格を見る・直す」で、赤枠の欄を直してください。');
-  $('errorBox').hidden = !errors.length;
-  $('errorBox').textContent = errors.join(' ') + (bad.size ? ` 赤く色を変えた欄（${n} か所）を直してください。` : '');
-  $('output').hidden = !!errors.length;
-  renderAssumptions(bad.size ? null : b);
-  if (errors.length) return;
+// 条件と価格を表すキー（簡易法・動的計画法の使い回しと、ウォーターフォールが古くなったかの判定に使う）
+const planKey = b => JSON.stringify([b.capacity, b.power, b.efficiency, b.socInit, b.socMin, b.socMax, b.socEndMin, b.rampOn, b.rampPctPerMin, state.prices]);
+
+// 3つの計画（簡易法・動的計画法・手動の計画）を計算する。①のタブと「内訳」タブで同じ結果を使う
+function computePlanResults(b) {
   // 簡易法と動的計画法は、条件と価格が変わらないかぎり使い回す（手動の計画を直すたびに計算し直さない）
-  const key = JSON.stringify([b.capacity, b.power, b.efficiency, b.socInit, b.socMin, b.socMax, b.socEndMin, b.rampOn, b.rampPctPerMin, state.prices]);
+  const key = planKey(b);
   if (planCache.key !== key) {
     planCache = { key, results: {} };
     for (const [name, fn] of [['greedy', planGreedy], ['dp', planDP]]) {
@@ -1177,6 +1249,22 @@ function updatePlan() {
   const manualPlan = planFromManual(state.manual, b);
   results.manual = { plan: manualPlan, r: evaluate(manualPlan, state.prices, b), ramp: checkRamp(manualPlan, b), ms: performance.now() - t0 };
   lastPlanResults = results;
+  return results;
+}
+
+function updatePlan() {
+  const { b, bad, errors, manualOk } = parsePlanInputs(state.inputs);
+  if (manualOk) state.lastManualPct = b.manualPct;
+  const n = showFieldErrors();
+  // 計画の切り替えと手動計画の操作画面は、エラーがあっても隠さない（エラーを直すための欄がそこにあるため）
+  $('manualBox').hidden = state.showPlan !== 'manual';
+  if (state.prices.some(p => !Number.isFinite(p))) errors.push('価格に数字でない値があります。「48コマの価格を見る・直す」で、赤枠の欄を直してください。');
+  $('errorBox').hidden = !errors.length;
+  $('errorBox').textContent = errors.join(' ') + (bad.size ? ` 赤く色を変えた欄（${n} か所）を直してください。` : '');
+  $('output').hidden = !!errors.length;
+  renderAssumptions(bad.size ? null : b);
+  if (errors.length) return;
+  const results = computePlanResults(b);
   renderCompare(results, b);
   // 周波数応動を重ねる（表示中の計画に）
   let overlay = null;
@@ -1511,6 +1599,175 @@ function renderFreq(res, c, b) {
     ariaLabel: '充電率', refs: [{ value: b.socMax, label: `上限 ${b.socMax}%` }, { value: b.socMin, label: `下限 ${b.socMin}%` }],
     lines: [{ points: pts(rec.soc), color: INK, width: 1.5 }], hoverAt: hoverAt('soc'),
   });
+}
+
+// ===== ③ 収益の内訳 =====
+let wfResult = null;   // 理想から現実までの差：{key, A, B, C, eff, ramp, rampOn, ms}（ボタンを押したときに計算）
+const PLAN_KEYS3 = ['greedy', 'dp', 'manual'];
+const fmtErr = v => (Math.abs(v) < 1e-12 ? '0' : v.toExponential(1));
+
+function updateBreakdown() {
+  const { b, bad, errors } = parsePlanInputs(state.inputs);
+  const n = showFieldErrors();
+  if (state.prices.some(p => !Number.isFinite(p))) errors.push('価格に数字でない値があります。「30分ごとの充放電計画」タブの「48コマの価格を見る・直す」で直してください。');
+  $('breakErrorBox').hidden = !errors.length;
+  $('breakErrorBox').textContent = errors.join(' ') + (bad.size ? ` 赤く色を変えた欄（${n} か所）を直してください。` : '');
+  $('breakOutput').hidden = !!errors.length;
+  renderBreakAssumptions();
+  if (bad.size) { $('breakCond').textContent = '—（条件に、直す必要のある欄があります）'; }
+  if (errors.length) return;
+  const d = derive(b);
+  $('breakCond').innerHTML = `容量 <b>${num(b.capacity, 1)} kWh</b>、定格出力 <b>${num(b.power, 1)} kW</b>、往復効率 <b>${num(b.efficiency, 1)}%</b>` +
+    `（充電効率・放電効率 <b>${num(d.etaC * 100, 2)}%</b>）、出力変化速度の上限 <b>${b.rampOn ? `${num(b.rampPctPerMin, b.rampPctPerMin % 1 ? 1 : 0)}%/分` : '使わない'}</b>、` +
+    `充電率 <b>${num(b.socMin, 0)}〜${num(b.socMax, 0)}%</b>（初め ${num(b.socInit, 0)}%・終わりの下限 ${num(b.socEndMin, 0)}%）、価格：<b>${escapeHtml(state.priceSource)}</b>`;
+  const res = computePlanResults(b);
+  renderBreakTable(res);
+  renderBars(res);
+  renderWaterfall(b, res);
+}
+
+function renderBreakTable(res) {
+  const bd = k => res[k].r.breakdown;
+  const yen = v => `${signedNum(v, 2)} 円`, kwh = v => `${num(v, 3)} kWh`;
+  const row = (name, fn, cls = '') => `<tr><td class="${cls}">${name}</td>${PLAN_KEYS3.map(k => `<td class="${cls}">${fn(bd(k), res[k])}</td>`).join('')}</tr>`;
+  const head = k => PLAN_NAMES[k] + (k === 'manual' && (res.manual.r.issues.length || res.manual.ramp.length) ? '（違反あり・参考値）' : '');
+  $('breakTable').innerHTML = `<thead><tr><th></th>${PLAN_KEYS3.map(k => `<th>${head(k)}</th>`).join('')}</tr></thead><tbody>` +
+    row('放電の収入（Σ 価格 × 売った量）', x => yen(x.income)) +
+    row('充電のコスト（Σ 価格 × 買った量）', x => yen(x.cost)) +
+    row('純収益（収入 − コスト）', x => yen(x.net), 'sum') +
+    row('　既存の収益との差（0 なら一致）', (x, r) => fmtErr(x.net - r.r.revenue)) +
+    row('売った量 ／ 買った量', (x, r) => `${kwh(r.r.sell)} ／ ${kwh(r.r.buy)}`) +
+    row('電池から取り出した量 ／ 電池に貯まった量', x => `${kwh(x.out)} ／ ${kwh(x.stored)}`) +
+    row('効率ロスの量（充電側：買った量 ×（1 − 充電効率））', x => kwh(x.lossKwhC)) +
+    row('効率ロスの量（放電側：取り出した量 ×（1 − 放電効率））', x => kwh(x.lossKwhD)) +
+    row('効率ロスの額（充電側）', x => yen(x.lossYenC)) +
+    row('効率ロスの額（放電側）', x => yen(x.lossYenD)) +
+    row('理想の収益（Σ 価格 × 取り出した量 − Σ 価格 × 貯まった量）', x => yen(x.ideal), 'sum') +
+    row('検算：理想の収益 − ロスの額（充電側＋放電側）− 純収益', x => fmtErr(x.ideal - x.lossYenC - x.lossYenD - x.net)) + '</tbody>';
+  const x = bd('dp');
+  $('breakEq').innerHTML = `動的計画法：理想の収益 <b>${yen(x.ideal)}</b> − 充電側のロス <b>${yen(x.lossYenC)}</b> − 放電側のロス <b>${yen(x.lossYenD)}</b> ＝ <b>${yen(x.ideal - x.lossYenC - x.lossYenD)}</b> ＝ 純収益 <b>${yen(x.net)}</b>（誤差 ${fmtErr(x.ideal - x.lossYenC - x.lossYenD - x.net)} 円）`;
+}
+
+// 横向きの棒グラフ（計画ごと・同じ目盛り）
+const BAR_ROWS = [
+  ['放電の収入', x => x.income, 'var(--discharge)'],
+  ['充電のコスト', x => -x.cost, 'var(--charge)'],
+  ['ロス（充電側）', x => -x.lossYenC, 'var(--muted)'],
+  ['ロス（放電側）', x => -x.lossYenD, 'var(--muted)'],
+  ['純収益', x => x.net, 'var(--text)'],
+];
+function hbarsSvg(rows, lo, hi, width, title) {
+  const L = 104, R = 76, rowH = 26, H = rows.length * rowH + 6;
+  const x = v => L + (v - lo) / (hi - lo) * (width - L - R);
+  let s = `<svg viewBox="0 0 ${width} ${H}" height="${H}" role="img" aria-label="${title}の収入・コスト・ロス・純収益">`;
+  rows.forEach((r, i) => {
+    const y = 3 + i * rowH, x0 = x(Math.min(0, r.value)), x1 = x(Math.max(0, r.value));
+    s += `<text class="lab" x="${L - 8}" y="${y + 16}" text-anchor="end">${r.label}</text>`;
+    s += `<rect x="${x0.toFixed(1)}" y="${y + 4}" width="${Math.max(Math.abs(r.value) > 1e-9 ? 1 : 0, x1 - x0).toFixed(1)}" height="16" rx="3" style="fill:${r.color}"><title>${r.label}：${signedNum(r.value, 2)} 円</title></rect>`;
+    s += `<text class="val" x="${width - 4}" y="${y + 16}" text-anchor="end">${signedNum(r.value, 1)} 円</text>`;
+  });
+  s += `<line class="zero" x1="${x(0)}" x2="${x(0)}" y1="0" y2="${H}"/></svg>`;
+  return s;
+}
+function renderBars(res) {
+  const all = PLAN_KEYS3.flatMap(k => BAR_ROWS.map(([, fn]) => fn(res[k].r.breakdown)));
+  let lo = Math.min(0, ...all), hi = Math.max(0, ...all);
+  if (hi - lo < 1e-9) { lo = -1; hi = 1; }
+  const host = $('breakBars');
+  $('lgBars').innerHTML = legendHtml([['放電の収入', 'var(--discharge)', 'area'], ['充電のコスト', 'var(--charge)', 'area'], ['ロス', 'var(--muted)', 'area'], ['純収益', 'var(--text)', 'area']]);
+  // 先に枠を作り、それぞれの枠の実際の幅で描く（縮めて表示すると文字が小さくなるため）
+  host.innerHTML = PLAN_KEYS3.map(k => `<div class="bars" data-plan="${k}"><h3>${PLAN_NAMES[k]}</h3><div class="svg-host"></div></div>`).join('');
+  host.querySelectorAll('.bars').forEach(div => {
+    const k = div.dataset.plan, width = Math.max(260, div.clientWidth || 300);
+    div.querySelector('.svg-host').innerHTML = hbarsSvg(BAR_ROWS.map(([label, fn, color]) => ({ label, value: fn(res[k].r.breakdown), color })), lo, hi, width, PLAN_NAMES[k]);
+  });
+}
+
+// 理想から現実までの差（階段状のグラフ）
+function waterfallSvg(w, width) {
+  const items = [
+    { label: 'A', sub: '効率100%・ランプなし', lo: Math.min(0, w.A), hi: Math.max(0, w.A), color: 'var(--text)', value: w.A },
+    { label: '効率の影響', sub: 'A − B', lo: Math.min(w.A, w.B), hi: Math.max(w.A, w.B), color: 'var(--muted)', value: -w.eff },
+    { label: 'B', sub: '実際の効率・ランプなし', lo: Math.min(0, w.B), hi: Math.max(0, w.B), color: 'var(--text)', value: w.B },
+    { label: 'ランプの影響', sub: 'B − C', lo: Math.min(w.B, w.C), hi: Math.max(w.B, w.C), color: 'var(--muted)', value: -w.ramp },
+    { label: 'C', sub: '実際の効率・ランプあり', lo: Math.min(0, w.C), hi: Math.max(0, w.C), color: 'var(--text)', value: w.C },
+  ];
+  const dom = niceDomain(Math.min(0, w.A, w.B, w.C), Math.max(0, w.A, w.B, w.C), 4);
+  const H = 240, M = { l: 50, r: 8, t: 22, b: 40 };
+  const slot = (width - M.l - M.r) / items.length, bw = Math.min(70, slot * 0.6);
+  const y = v => M.t + (dom.yMax - v) / (dom.yMax - dom.yMin) * (H - M.t - M.b);
+  let s = `<svg viewBox="0 0 ${width} ${H}" height="${H}" role="img" aria-label="理想から現実までの差">`;
+  for (let t = dom.yMin; t <= dom.yMax + dom.yStep / 1000; t += dom.yStep) {
+    s += `<line class="${Math.abs(t) < dom.yStep / 1000 ? 'base' : 'grid'}" x1="${M.l}" x2="${width - M.r}" y1="${y(t)}" y2="${y(t)}"/>`;
+    s += `<text class="tick" x="${M.l - 6}" y="${y(t) + 4}" text-anchor="end">${num(t, t % 1 ? 1 : 0)}</text>`;
+  }
+  items.forEach((it, i) => {
+    const cx = M.l + slot * (i + 0.5), x0 = cx - bw / 2;
+    const top = y(it.hi), h = Math.max(1, y(it.lo) - y(it.hi));
+    s += `<rect x="${x0}" y="${top}" width="${bw}" height="${h}" rx="3" style="fill:${it.color}"><title>${it.label}（${it.sub}）：${signedNum(it.value, 2)} 円</title></rect>`;
+    s += `<text class="tick" x="${cx}" y="${top - 6}" text-anchor="middle" style="fill:var(--text);font-weight:600">${(i % 2 ? (it.value > 0 ? '+' : '') : '') + signedNum(it.value, 1)}</text>`;
+    s += `<text class="tick" x="${cx}" y="${H - 22}" text-anchor="middle" style="fill:var(--text-2)">${it.label}</text>`;
+    if (slot >= 110) s += `<text class="tick" x="${cx}" y="${H - 8}" text-anchor="middle">${it.sub}</text>`;   // 狭いときは省く（表に同じ内容がある）
+    if (i < items.length - 1) {   // 次の棒へのつなぎの線
+      const level = i % 2 === 0 ? it.value : (i === 1 ? w.B : w.C);
+      s += `<line class="ref" x1="${x0 + bw}" x2="${x0 + slot}" y1="${y(level)}" y2="${y(level)}"/>`;
+    }
+  });
+  return s + '</svg>';
+}
+function renderWaterfall(b, res) {
+  const key = planKey(b);
+  if (!wfResult) {
+    $('wfState').textContent = 'まだ計算していません。「差を計算する」を押すと、A と B を計算します（1秒ほどかかります）。';
+    $('chWaterfall').innerHTML = '';
+    $('wfTable').innerHTML = '';
+    $('wfNote').textContent = '';
+    return;
+  }
+  const w = wfResult, stale = w.key !== key;
+  $('wfState').innerHTML = stale
+    ? '<span class="stale">条件か価格が変わったので、下の数字は前の条件のものです。もう一度「差を計算する」を押してください。</span>'
+    : `計算済み（${num(w.ms, 0)} ミリ秒）`;
+  $('chWaterfall').innerHTML = `<div class="wf" style="${stale ? 'opacity:.45' : ''}">${waterfallSvg(w, Math.max(320, $('chWaterfall').clientWidth || 600))}</div>`;
+  const row = (name, v, note = '') => `<tr><td>${name}</td><td>${signedNum(v, 2)} 円</td><td>${note}</td></tr>`;
+  $('wfTable').innerHTML = `<thead><tr><th></th><th>収益</th><th></th></tr></thead><tbody>` +
+    row('A：効率100%、ランプ上限なし', w.A) +
+    row('B：実際の効率、ランプ上限なし', w.B) +
+    row('C：実際の効率、ランプ上限あり（今の動的計画法）', w.C) +
+    row('効率の影響（A − B）', -w.eff, w.A > 1e-6 ? `A の ${num(w.eff / w.A * 100, 1)}%` : '') +
+    row('ランプ制約の影響（B − C）', -w.ramp, w.A > 1e-6 ? `A の ${num(w.ramp / w.A * 100, 1)}%` : '') + '</tbody>';
+  const notes = [];
+  if (!w.rampOn) notes.push('出力変化速度の上限を「使わない」設定なので、B と C は同じ計画になり、ランプ制約の影響は 0 円です。');
+  notes.push(`動的計画法は近似（本当の最適から1%程度ずれることがある）なので、A の1%（いまは ${num(Math.abs(w.A) * 0.01, 2)} 円）くらいまでの差は、誤差の範囲と考えてください。`);
+  if (w.eff < -1e-6 || w.ramp < -1e-6) notes.push('条件を厳しくしたのに収益が増えている段があるのも、この誤差によるものです。');
+  $('wfNote').textContent = notes.join(' ');
+}
+function runWaterfall() {
+  const { b, errors } = parsePlanInputs(state.inputs);
+  if (errors.length || state.prices.some(p => !Number.isFinite(p))) return;
+  $('wfState').textContent = '計算中…';
+  setTimeout(() => {
+    const res = computePlanResults(b);
+    const t0 = performance.now();
+    wfResult = { key: planKey(b), ...waterfallCalc(state.prices, b, res.dp.r.revenue), rampOn: b.rampOn };
+    wfResult.ms = performance.now() - t0;
+    updateBreakdown();
+  }, 30);
+}
+
+function renderBreakAssumptions() {
+  const items = [
+    'コマごとに、系統から<b>買った量 c</b>、系統に<b>売った量 s</b>、電池に<b>貯まった量 ＝ c × 充電効率</b>、電池から<b>取り出した量 ＝ s ÷ 放電効率</b> を使います。どれも、①の計算（簡易法・動的計画法・手動の計画）と同じ値です。',
+    '<b>放電の収入</b> ＝ Σ 価格 × 売った量、<b>充電のコスト</b> ＝ Σ 価格 × 買った量、<b>純収益</b> ＝ 放電の収入 − 充電のコスト（①の収益と同じ）。',
+    '<b>効率ロスの量</b>：充電側 ＝ 買った量 ×（1 − 充電効率）＝ 買った量 − 貯まった量、放電側 ＝ 取り出した量 ×（1 − 放電効率）＝ 取り出した量 − 売った量。',
+    '<b>効率ロスの額</b>：上の量に、そのコマの価格を掛けて合計します（充電側・放電側を分けて）。',
+    '<b>理想の収益</b> ＝ Σ 価格 × 取り出した量 − Σ 価格 × 貯まった量。同じ計画のまま、充電でも放電でも電気が目減りしなかったら得られた収益です。',
+    '<b>理想の収益 − ロスの額（充電側＋放電側）＝ 純収益</b> は、コマごとに必ず成り立ちます：価格 ×（取り出した量 − 貯まった量）− 価格 ×（買った量 − 貯まった量）− 価格 ×（取り出した量 − 売った量）＝ 価格 ×（売った量 − 買った量）。',
+    '価格がマイナスのコマで充放電すると、そのコマのロスの額はマイナス（得）になります。ランプの途中で充電と放電が同じコマに入る場合も、両方を数えます。',
+    '<b>理想から現実までの差</b>：動的計画法で、A（効率100%・ランプ上限なし）、B（実際の効率・ランプ上限なし）、C（実際の効率・今のランプ上限）の3つの最適な収益を求め、<b>効率の影響 ＝ A − B</b>、<b>ランプ制約の影響 ＝ B − C</b> とします。A・B は、そのたびに計画を作り直した場合の最適な収益です（同じ計画のロスではありません）。',
+    '手動の計画に違反があるときは、内訳も参考値です（実際にはその計画どおりには動けません）。',
+  ];
+  $('breakAssume').innerHTML = items.map(t => `<li>${t}</li>`).join('');
 }
 
 // ===== CSV の読み込み（共通） =====
@@ -1997,6 +2254,54 @@ function runTests() {
     const dp = run(planDP, flat(10), mb);
     return { ok: dp.r.revenue === 0 && optimalPct(5, dp.r.revenue) === null && close(optimalPct(60, 120), 50), detail: `動的計画法 ${num(dp.r.revenue, 2)} 円 → 割合 ${optimalPct(5, dp.r.revenue)}、60円÷120円 → ${num(optimalPct(60, 120), 1)}%` };
   });
+
+  // ---------- 収益の内訳 ----------
+  group('収益の内訳（損失の見える化）');
+  const identityErr = r => Math.abs(r.breakdown.ideal - r.breakdown.lossYenC - r.breakdown.lossYenD - r.breakdown.net);
+  test('理想の収益 − 効率ロスの額 ＝ 純収益、純収益 ＝ 既存の収益（3つの計画 × ランダムな価格・条件 12通り、誤差 1e-6 以内）', () => {
+    let worstId = 0, worstNet = 0, cases = 0;
+    for (let k = 0; k < 12; k++) {
+      const { b, prices: pr } = randomCase();
+      const bb = k % 2 ? withRamp({ ...b, manualPct: 70 }, 10) : { ...b, manualPct: 70 };
+      // 手動の計画：安い4コマで充電、高い4コマで放電（違反があっても内訳の式は成り立つはず）
+      const order = [...Array(SLOTS).keys()].sort((a, z) => pr[a] - pr[z]);
+      const man = manualOf(Object.fromEntries([...order.slice(0, 4).map(s => [s, 'charge']), ...order.slice(-4).map(s => [s, 'discharge'])]));
+      for (const plan of [planGreedy(pr, bb), planDP(pr, bb, { np: 21, ne: 120 }), planFromManual(man, bb)]) {
+        const r = evaluate(plan, pr, bb);
+        worstId = Math.max(worstId, identityErr(r));
+        worstNet = Math.max(worstNet, Math.abs(r.breakdown.net - r.revenue));
+        cases++;
+      }
+    }
+    return { ok: worstId <= 1e-6 && worstNet <= 1e-6, detail: `${cases} 計画：式のいちばん大きい誤差 ${fmtErr(worstId)}、純収益と既存の収益の差 ${fmtErr(worstNet)}` };
+  });
+  test('効率100% → 効率ロスの量も額もゼロ、理想の収益 ＝ 純収益、A ＝ B', () => {
+    const bb = withRamp({ ...base, efficiency: 100 }, 10);
+    const r = run(planDP, prices, bb).r, x = r.breakdown;
+    const w = waterfallCalc(prices, bb);
+    const zero = [x.lossKwhC, x.lossKwhD, x.lossYenC, x.lossYenD].every(v => Math.abs(v) < 1e-9);
+    return { ok: zero && close(x.ideal, x.net) && close(w.A, w.B, 1e-9) && close(w.eff, 0, 1e-9),
+      detail: `ロス ${[x.lossKwhC, x.lossKwhD, x.lossYenC, x.lossYenD].map(v => fmtErr(v)).join(' / ')}、A ${num(w.A, 4)} / B ${num(w.B, 4)} 円` };
+  });
+  test('ランプ上限を十分に大きく（1億%/分）→ B ＝ C（動的計画法の近似の誤差 1% 以内。理論上は一致）', () => {
+    const bb = withRamp(base, 1e8);
+    const w = waterfallCalc(prices, bb);
+    return { ok: Math.abs(w.ramp) <= Math.abs(w.B) * 0.01, detail: `B ${num(w.B, 4)} / C ${num(w.C, 4)} 円、差 ${num(w.ramp, 4)} 円（B の ${num(Math.abs(w.ramp) / Math.abs(w.B) * 100, 3)}%）` };
+  });
+  test('ランプ上限を使わない設定 → B と C は同じ計画で、ランプ制約の影響は 0 円', () => {
+    const w = waterfallCalc(prices, base);
+    return { ok: w.ramp === 0, detail: `B ${num(w.B, 4)} / C ${num(w.C, 4)} 円` };
+  });
+  test('効率の影響・ランプ制約の影響の向き：A ≥ B ≥ C（上限10%/分、近似の誤差 1% までは許す）', () => {
+    const w = waterfallCalc(prices, withRamp(base, 10));
+    return { ok: w.B <= w.A * 1.01 + 1e-6 && w.C <= w.B * 1.01 + 1e-6 && w.A > w.C, detail: `A ${num(w.A, 2)} → B ${num(w.B, 2)} → C ${num(w.C, 2)} 円（効率の影響 ${num(w.eff, 2)}、ランプ制約の影響 ${num(w.ramp, 2)}）` };
+  });
+  test('価格が1日中同じ → 3つの計画とも何もしない計画になり、内訳もすべてゼロ', () => {
+    const bb = withRamp(mb, 10);
+    const rs = [run(planGreedy, flat(10), bb).r, run(planDP, flat(10), bb).r, evaluate(planFromManual(emptyManual(), bb), flat(10), bb)];
+    const allZero = rs.every(r => Object.values(r.breakdown).every(v => v === 0));
+    return { ok: allZero, detail: rs.map((r, i) => `${['簡易法', '動的計画法', '手動の計画'][i]}：${Object.entries(r.breakdown).filter(([, v]) => v !== 0).map(([k, v]) => `${k}=${v}`).join(', ') || 'すべて 0'}`).join(' ／ ') };
+  });
   return results;
 }
 
@@ -2041,10 +2346,15 @@ function setTab(tab) {
   document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === tab)));
   $('tabPlan').hidden = tab !== 'plan';
   $('tabFreq').hidden = tab !== 'freq';
+  $('tabBreak').hidden = tab !== 'break';
   save();
   update();
 }
-function update() { if (state.tab === 'plan') updatePlan(); else updateFreq(); }
+function update() {
+  if (state.tab === 'plan') updatePlan();
+  else if (state.tab === 'freq') updateFreq();
+  else updateBreakdown();
+}
 
 let timer = null;
 function scheduleUpdate() { clearTimeout(timer); timer = setTimeout(update, 150); }
@@ -2123,6 +2433,8 @@ function init() {
   for (const id of ['freqCsvStart', 'freqCsvTime', 'freqCsvFreq', 'freqCsvDt']) $(id).addEventListener('input', () => state.freqCsv && refreshFreqCsv());
   $('btnFreqCsvLoad').addEventListener('click', () => state.freqCsv && loadFreqCsv());
   $('btnFreqCsvCancel').addEventListener('click', () => { state.freqCsv = null; $('freqCsvBox').hidden = true; });
+
+  $('btnWaterfall').addEventListener('click', runWaterfall);
 
   $('btnTest').addEventListener('click', () => {
     $('testSummary').textContent = '実行中…';
