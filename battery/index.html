@@ -127,6 +127,12 @@
   .show-plan { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0 0; font-size: 13px; color: var(--text-2); }
   .manual-box { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
   .manual-box .field input { width: 5em; }
+  .manual-box .manual-pct { display: inline-flex; flex-wrap: wrap; }
+  /* 直す必要のある欄：欄の名前を赤字、入力欄を赤枠と薄い赤の背景にし、欄の下に理由を出す */
+  .field.has-error > .name, .field.has-error > .unit:first-child { color: var(--danger); font-weight: 700; }
+  .field.has-error input.invalid, .field.has-error select.invalid { background: color-mix(in srgb, var(--danger) 12%, var(--input-bg)); border-width: 2px; }
+  .field-msg { flex-basis: 100%; color: var(--danger); font-size: 12px; line-height: 1.4; }
+  .tabs button.has-error::after { content: "●"; color: var(--danger); margin-left: 6px; font-size: 10px; vertical-align: 2px; }
   .violations { margin: 0; padding-left: 1.2em; font-size: 13px; color: var(--danger); }
   .violations li { margin: 2px 0; }
   .violations b { font-variant-numeric: tabular-nums; }
@@ -269,24 +275,29 @@
       <ul class="assume" id="assume"></ul>
     </section>
 
+    <!-- 計画の切り替えと手動計画の操作画面は、エラーがあっても隠さない（#output の外に置く） -->
+    <section class="panel">
+      <h2>表示する計画</h2>
+      <div class="show-plan" style="margin-top:0">グラフと表に表示する計画：
+        <select id="showPlan"><option value="dp">動的計画法</option><option value="greedy">簡易法</option><option value="manual">手動の計画（手動計画モード）</option></select>
+      </div>
+      <div class="manual-box" id="manualBox" hidden>
+        <p class="note" style="margin-top:0"><b>手動計画モード</b>：下の「価格カーブと充放電」のグラフで、コマをクリック（タップ）すると <b>待機 → 充電 → 放電 → 待機</b> の順に切り替わります。「コマごとの表」でも、動きと出力（kW）を直せます。</p>
+        <div class="row-buttons">
+          <label class="field manual-pct"><span class="unit">充電・放電の出力：定格の</span>
+            <input type="number" data-key="manualPct" min="0" max="100" step="any" aria-label="手動計画の出力（定格の％）"><span class="unit">%</span></label>
+          <button id="btnManualClear">すべて待機に戻す</button>
+          <button id="btnManualCopy">動的計画法の計画を写す</button>
+        </div>
+      </div>
+    </section>
+
     <div class="error-box" id="errorBox" hidden></div>
 
     <div id="output">
       <section class="panel">
         <h2>簡易法と動的計画法の比較</h2>
         <div class="table-scroll"><table class="compare" id="compareTable"></table></div>
-        <div class="show-plan">グラフと表に表示する計画：
-          <select id="showPlan"><option value="dp">動的計画法</option><option value="greedy">簡易法</option><option value="manual">手動の計画（手動計画モード）</option></select>
-        </div>
-        <div class="manual-box" id="manualBox" hidden>
-          <p class="note" style="margin-top:0"><b>手動計画モード</b>：下の「価格カーブと充放電」のグラフで、コマをクリック（タップ）すると <b>待機 → 充電 → 放電 → 待機</b> の順に切り替わります。「コマごとの表」でも、動きと出力（kW）を直せます。</p>
-          <div class="row-buttons">
-            <label class="field" style="display:inline-flex"><span class="unit">充電・放電の出力：定格の</span>
-              <input type="number" data-key="manualPct" min="0" max="100" step="any" style="width:5em" aria-label="手動計画の出力（定格の％）"><span class="unit">%</span></label>
-            <button id="btnManualClear">すべて待機に戻す</button>
-            <button id="btnManualCopy">動的計画法の計画を写す</button>
-          </div>
-        </div>
       </section>
       <p class="caution">※ <b>簡易法</b>（貪欲法：1kWh あたりの利益が大きい「充電するコマと放電するコマの組み合わせ」から順に割り当てる方法）は、<strong>最適な計画になるとは限りません。</strong>先に放電してあとで充電し直す動きは考えず、出力を瞬時に切り替える前提なので、出力変化速度の上限も考えていません。<br>
         ※ <b>動的計画法</b>は、「直前の出力（定格の5%刻み）× 充電率（使える範囲を240に区切る）」の点ごとに、1日の終わりまでに得られる最大の収益を後ろから計算し、0:00 から前向きに出力を選びます（前向きでは定格の0.5%刻みで選びます）。区切りによる近似のため、本当の最適から <strong>1%程度ずれることがあります</strong>。先に放電してあとで充電し直す動きも考えます。</p>
@@ -465,6 +476,7 @@ const state = {
   tab: 'plan',
   showPlan: 'dp',                   // グラフと表に表示する計画：'dp' | 'greedy' | 'manual'
   manual: null,                     // 手動の計画（48コマ）。初めはすべて待機
+  lastManualPct: 100,               // 手動計画の出力（定格の％）の、直前の正しい値
   csv: null,                        // 読み込み中の価格 CSV：{name, enc, rows, width}
   freqCsv: null,                    // 読み込み中の周波数 CSV
   freqData: null,                   // 読み込んだ周波数データ：{name, dt, values: Float32Array}（保存はしない）
@@ -484,6 +496,8 @@ function load() {
     }
   } catch (e) { /* 保存領域が使えない環境では初期値で動かす */ }
   if (!state.manual) state.manual = emptyManual();
+  const pct = Number(state.inputs.manualPct);
+  if (pct > 0 && pct <= 100) state.lastManualPct = pct;
   if (state.inputs.pattern === 'csv') state.inputs.pattern = 'step';   // CSV のデータは保存しないので、開き直したら作ったパターンに戻す
 }
 function save() {
@@ -920,47 +934,57 @@ function makePattern(c, p) {
 }
 
 // ===== 入力のチェック =====
+// どの欄を直せばよいかを画面で色分けできるように、エラーは欄ごとの理由（msgs: {欄のキー: 理由}）で返す。
+// errors は画面上部に出す短いまとめ、bad は計算を止めるエラーのある欄。
 const bool = v => v === 'true';
+function rangeMessage(min, max, incl) {
+  const lo = `${min}${incl ? ' 以上' : ' より大きく'}`;
+  return max >= 1e6 ? `${min}${incl ? ' 以上' : ' より大きい'}の数で入力してください` : `${lo} ${max} 以下の数で入力してください`;
+}
 function parseNumbers(raw, rules) {
-  const v = {}, bad = new Set();
+  const v = {}, msgs = {};
   for (const [k, [min, max, incl]] of Object.entries(rules)) {
-    const x = String(raw[k]).trim() === '' ? NaN : Number(raw[k]);
+    const empty = String(raw[k]).trim() === '';
+    const x = empty ? NaN : Number(raw[k]);
     v[k] = x;
-    if (!Number.isFinite(x) || x > max || (incl ? x < min : x <= min)) bad.add(k);
+    if (empty) msgs[k] = '空欄です。数字を入力してください';
+    else if (!Number.isFinite(x) || x > max || (incl ? x < min : x <= min)) msgs[k] = rangeMessage(min, max, incl);
   }
-  return { v, bad };
+  return { v, msgs };
 }
 const BATTERY_RULES = {
   capacity: [0, 1e7, false], power: [0, 1e7, false], efficiency: [1, 100, true],
   socInit: [0, 100, true], socMin: [0, 100, true], socMax: [0, 100, true],
 };
+const PLAN_KEYS = ['socEndMin', 'rampValue', 'manualPct'];   // 「30分ごとの充放電計画」タブの欄
 function parseBattery(raw) {
-  const { v: b, bad } = parseNumbers(raw, BATTERY_RULES);
-  const errors = [];
-  if (bad.size) errors.push('蓄電池の条件で、赤枠の欄を確認してください（空欄か、範囲外の値です。容量と出力は0より大きく、%は0〜100）。');
-  if (!bad.has('socMin') && !bad.has('socMax') && b.socMin >= b.socMax) { errors.push('充電率の下限は、上限より小さくしてください。'); bad.add('socMin'); bad.add('socMax'); }
-  if (!errors.length && (b.socInit < b.socMin || b.socInit > b.socMax)) { errors.push('初めの充電率は、充電率の下限と上限の間にしてください。'); bad.add('socInit'); }
-  return { b, bad, errors };
+  const { v: b, msgs } = parseNumbers(raw, BATTERY_RULES);
+  if (!msgs.socMin && !msgs.socMax && b.socMin >= b.socMax) { msgs.socMin = '充電率の上限より小さくしてください'; msgs.socMax = '充電率の下限より大きくしてください'; }
+  if (!Object.keys(msgs).length && (b.socInit < b.socMin || b.socInit > b.socMax)) msgs.socInit = `充電率の下限（${b.socMin}%）と上限（${b.socMax}%）の間にしてください`;
+  const bad = new Set(Object.keys(msgs));
+  return { b, msgs, bad, errors: bad.size ? ['蓄電池の条件に、直す必要のある欄があります。'] : [] };
 }
 function parsePlanInputs(raw) {
   const pb = parseBattery(raw);
-  const { b, bad, errors } = pb;
+  const { b } = pb;
+  const msgs = { ...pb.msgs };
   const end = parseNumbers(raw, { socEndMin: [0, 100, true] });
   b.socEndMin = end.v.socEndMin;
-  if (end.bad.size) { bad.add('socEndMin'); errors.push('終わりの充電率の下限を、0〜100 で入力してください。'); }
-  else if (!pb.bad.size && (b.socEndMin < b.socMin || b.socEndMin > b.socMax)) { bad.add('socEndMin'); errors.push('終わりの充電率の下限は、充電率の下限と上限の間にしてください。'); }
+  if (end.msgs.socEndMin) msgs.socEndMin = end.msgs.socEndMin;
+  else if (!pb.bad.size && (b.socEndMin < b.socMin || b.socEndMin > b.socMax)) msgs.socEndMin = `充電率の下限（${b.socMin}%）と上限（${b.socMax}%）の間にしてください`;
   b.rampOn = bool(raw.rampOn);
   b.rampPctPerMin = Number(raw.rampValue) * (raw.rampUnit === 'sec' ? 60 : 1);
-  if (b.rampOn && !(b.rampPctPerMin >= 1 && b.rampPctPerMin <= 6000)) {
-    bad.add('rampValue');
-    errors.push('出力変化速度の上限は、1%/分〜100%/秒（=6000%/分）の範囲で入力してください。');
-  }
-  b.manualPct = Number(raw.manualPct);
-  if (!(b.manualPct > 0 && b.manualPct <= 100)) {
-    bad.add('manualPct');
-    errors.push('手動計画の出力は、定格の 0% より大きく 100% 以下で入力してください。');
-  }
-  return { b, bad, errors };
+  if (b.rampOn && !(b.rampPctPerMin >= 1 && b.rampPctPerMin <= 6000)) msgs.rampValue = '1%/分〜100%/秒（=6000%/分）の範囲で入力してください';
+  // 手動計画の出力が正しくなくても、計算全体は止めない。手動の計画は、直前の正しい値で計算を続ける
+  const pct = String(raw.manualPct).trim() === '' ? NaN : Number(raw.manualPct);
+  const manualOk = pct > 0 && pct <= 100;
+  b.manualPct = manualOk ? pct : state.lastManualPct;
+  if (!manualOk) msgs.manualPct = `0 より大きく 100 以下の数で入力してください（いまは前の正しい値 ${state.lastManualPct}% で計算しています）`;
+  const bad = new Set(Object.keys(msgs).filter(k => k !== 'manualPct'));
+  const where = [];
+  if ([...bad].some(k => k in BATTERY_RULES)) where.push('蓄電池の条件');
+  if ([...bad].some(k => !(k in BATTERY_RULES))) where.push('計画の条件');
+  return { b, msgs, bad, manualOk, errors: where.length ? [`${where.join('と')}に、直す必要のある欄があります。`] : [] };
 }
 const FREQ_RULES = {
   droop: [0, 100, false], lfsmDb: [0, 5, true], fsmDb: [0, 5, true], deadTime: [0, 10, true],
@@ -968,15 +992,16 @@ const FREQ_RULES = {
   stepHz: [-5, 5, true], slowAmp: [0, 5, true], slowPeriod: [0, 1e4, false], noiseHz: [0, 1, true],
 };
 function parseFreqInputs(raw) {
-  const { v: c, bad } = parseNumbers(raw, FREQ_RULES);
-  const errors = bad.size ? ['周波数応動の条件で、赤枠の欄を確認してください（空欄か、範囲外の値です）。'] : [];
+  const { v: c, msgs } = parseNumbers(raw, FREQ_RULES);
+  const bad = new Set(Object.keys(msgs));
+  const errors = bad.size ? ['周波数応動の条件に、直す必要のある欄があります。'] : [];
   c.fBase = Number(raw.fBase);
   c.lfsmOn = bool(raw.lfsmOn);
   c.fsmOn = bool(raw.fsmOn);
   c.pattern = raw.pattern;
   c.duration = Number(raw.duration);
   c.overlayPattern = raw.overlayPattern;
-  return { c, bad, errors };
+  return { c, msgs, bad, errors };
 }
 
 // ===== 書式 =====
@@ -1126,11 +1151,14 @@ let planCache = { key: '', results: null };
 let lastPlanResults = null;   // 「動的計画法の計画を写す」で使う
 
 function updatePlan() {
-  const { b, bad, errors } = parsePlanInputs(state.inputs);
-  markInvalid(bad);
-  if (state.prices.some(p => !Number.isFinite(p))) errors.push('価格に数字でない値があります。「48コマの価格を見る・直す」で確認してください。');
+  const { b, bad, errors, manualOk } = parsePlanInputs(state.inputs);
+  if (manualOk) state.lastManualPct = b.manualPct;
+  const n = showFieldErrors();
+  // 計画の切り替えと手動計画の操作画面は、エラーがあっても隠さない（エラーを直すための欄がそこにあるため）
+  $('manualBox').hidden = state.showPlan !== 'manual';
+  if (state.prices.some(p => !Number.isFinite(p))) errors.push('価格に数字でない値があります。「48コマの価格を見る・直す」で、赤枠の欄を直してください。');
   $('errorBox').hidden = !errors.length;
-  $('errorBox').textContent = errors.join(' ');
+  $('errorBox').textContent = errors.join(' ') + (bad.size ? ` 赤く色を変えた欄（${n} か所）を直してください。` : '');
   $('output').hidden = !!errors.length;
   renderAssumptions(bad.size ? null : b);
   if (errors.length) return;
@@ -1149,14 +1177,13 @@ function updatePlan() {
   const manualPlan = planFromManual(state.manual, b);
   results.manual = { plan: manualPlan, r: evaluate(manualPlan, state.prices, b), ramp: checkRamp(manualPlan, b), ms: performance.now() - t0 };
   lastPlanResults = results;
-  $('manualBox').hidden = state.showPlan !== 'manual';
   renderCompare(results, b);
   // 周波数応動を重ねる（表示中の計画に）
   let overlay = null;
   if (bool(state.inputs.overlayOn)) {
     const pf = parseFreqInputs(state.inputs);
     overlay = pf.bad.size
-      ? { error: '周波数応動の条件に誤りがあります。「周波数応動（FSM・LFSM）」タブで、赤枠の欄を確認してください。' }
+      ? { error: '周波数応動の条件に誤りがあります。赤い印の付いた「周波数応動（FSM・LFSM）」タブで、赤く色を変えた欄を直してください。' }
       : { res: simulateOverlay(results[state.showPlan].plan, state.prices, b, pf.c), c: pf.c };
   }
   renderOverlay(overlay, results[state.showPlan], b);
@@ -1390,8 +1417,9 @@ function renderFreqAssumptions(c) {
 function updateFreq() {
   const pb = parseBattery(state.inputs);
   const pf = parseFreqInputs(state.inputs);
-  markInvalid(new Set([...pb.bad, ...pf.bad]));
+  const n = showFieldErrors();
   const errors = [...pb.errors, ...pf.errors];
+  if (errors.length) errors.push(`赤く色を変えた欄（${n} か所）を直してください。`);
   const c = pf.c;
   const usingCsv = c.pattern === 'csv';
   if (usingCsv && !state.freqData) errors.push('周波数の CSV がまだ読み込まれていません。「周波数の CSV を読み込む」から読み込んでください。');
@@ -1942,6 +1970,29 @@ function runTests() {
     const x = check(manualOf({ 36: 'discharge' }), mb);
     return { ok: x.r.issues.some(i => i.t === SLOTS - 1 && i.why.includes('終わりの下限')), detail: whyText(x) };
   });
+  // ---------- 入力のチェック ----------
+  group('入力のチェック');
+  for (const v of ['', '0', '150', 'abc']) {
+    test(`手動計画の出力が「${v || '空欄'}」でも、計算全体は止めず、直前の正しい値で計算する（欄にだけ理由を出す）`, () => {
+      const p = parsePlanInputs({ ...DEFAULT_INPUTS, manualPct: v });
+      return { ok: p.errors.length === 0 && p.bad.size === 0 && !p.manualOk && p.b.manualPct === state.lastManualPct && !!p.msgs.manualPct,
+        detail: `止めるエラー ${p.errors.length} 件、使う値 ${p.b.manualPct}%、欄の理由「${p.msgs.manualPct}」` };
+    });
+  }
+  test('容量が空欄 → 計算を止め、容量の欄に理由を出す', () => {
+    const p = parsePlanInputs({ ...DEFAULT_INPUTS, capacity: '' });
+    return { ok: p.errors.length > 0 && p.bad.has('capacity') && /空欄/.test(p.msgs.capacity), detail: `${p.errors.join(' ')} ／ 容量の欄：${p.msgs.capacity}` };
+  });
+  test('充電率の下限が上限より大きい → 下限と上限の両方の欄に理由を出す', () => {
+    const p = parsePlanInputs({ ...DEFAULT_INPUTS, socMin: '95', socMax: '90' });
+    return { ok: !!p.msgs.socMin && !!p.msgs.socMax && p.bad.size === 2, detail: `下限：${p.msgs.socMin} ／ 上限：${p.msgs.socMax}` };
+  });
+  test('周波数応動の調定率が 0 → 周波数応動の欄だけに理由を出す', () => {
+    const p = parseFreqInputs({ ...DEFAULT_INPUTS, droop: '0' });
+    return { ok: p.errors.length > 0 && Object.keys(p.msgs).join() === 'droop', detail: `調定率の欄：${p.msgs.droop}` };
+  });
+
+  group('手動の計画（つづき）');
   test('最適との比較：動的計画法の収益が0円（価格が1日中同じ）なら、割合は出さない', () => {
     const dp = run(planDP, flat(10), mb);
     return { ok: dp.r.revenue === 0 && optimalPct(5, dp.r.revenue) === null && close(optimalPct(60, 120), 50), detail: `動的計画法 ${num(dp.r.revenue, 2)} 円 → 割合 ${optimalPct(5, dp.r.revenue)}、60円÷120円 → ${num(optimalPct(60, 120), 1)}%` };
@@ -1961,7 +2012,29 @@ function renderTests() {
 
 // ===== 起動 =====
 const allInputs = () => [...document.querySelectorAll('[data-key]')];
-function markInvalid(bad) { allInputs().forEach(el => el.classList.toggle('invalid', bad.has(el.dataset.key))); }
+
+// すべての入力欄を確かめて、直す必要のある欄を色で示す（欄の名前を赤字、入力欄を赤枠と薄い赤の背景にし、欄の下に理由を出す）。
+// 別のタブにある欄にエラーがあるときは、タブの名前の横に赤い印を付ける。計算を止めるエラーの欄の数を返す
+function showFieldErrors() {
+  const plan = parsePlanInputs(state.inputs), freq = parseFreqInputs(state.inputs);
+  const msgs = { ...freq.msgs, ...plan.msgs };
+  allInputs().forEach(el => el.classList.toggle('invalid', !!msgs[el.dataset.key]));
+  document.querySelectorAll('.field').forEach(field => {
+    const list = [...field.querySelectorAll('[data-key]')].map(el => msgs[el.dataset.key]).filter(Boolean);
+    field.classList.toggle('has-error', list.length > 0);
+    let note = field.querySelector(':scope > .field-msg');
+    if (list.length) {
+      if (!note) { note = document.createElement('span'); note.className = 'field-msg'; field.appendChild(note); }
+      note.textContent = list.join(' ／ ');
+    } else if (note) note.remove();
+  });
+  // 手動計画の出力の欄は、手動計画モードのときだけ見えるので、そのときだけタブに印を付ける
+  const planTabBad = PLAN_KEYS.some(k => msgs[k] && (k !== 'manualPct' || state.showPlan === 'manual'));
+  const freqTabBad = Object.keys(freq.msgs).length > 0;
+  document.querySelector('.tabs button[data-tab=plan]').classList.toggle('has-error', planTabBad);
+  document.querySelector('.tabs button[data-tab=freq]').classList.toggle('has-error', freqTabBad);
+  return Object.keys(msgs).filter(k => k !== 'manualPct').length;
+}
 
 function setTab(tab) {
   state.tab = tab;
