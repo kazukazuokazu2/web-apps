@@ -125,6 +125,16 @@
   .compare td.ng { color: var(--danger); font-weight: 600; }
   .compare td.ok { color: var(--ok); font-weight: 600; }
   .show-plan { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0 0; font-size: 13px; color: var(--text-2); }
+  .manual-box { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .manual-box .field input { width: 5em; }
+  .violations { margin: 0; padding-left: 1.2em; font-size: 13px; color: var(--danger); }
+  .violations li { margin: 2px 0; }
+  .violations b { font-variant-numeric: tabular-nums; }
+  .tile .v.pct { color: var(--text); }
+  tr.bad td { background: color-mix(in srgb, var(--danger) 10%, transparent); }
+  tr.bad td.why { color: var(--danger); white-space: normal; min-width: 14em; }
+  #slotTable select, #slotTable input { padding: 2px 4px; font-size: 12px; }
+  #slotTable input { width: 5.5em; text-align: right; }
 
   /* グラフ */
   .chart-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; margin-bottom: 6px; }
@@ -266,7 +276,16 @@
         <h2>簡易法と動的計画法の比較</h2>
         <div class="table-scroll"><table class="compare" id="compareTable"></table></div>
         <div class="show-plan">グラフと表に表示する計画：
-          <select id="showPlan"><option value="dp">動的計画法</option><option value="greedy">簡易法</option></select>
+          <select id="showPlan"><option value="dp">動的計画法</option><option value="greedy">簡易法</option><option value="manual">手動の計画（手動計画モード）</option></select>
+        </div>
+        <div class="manual-box" id="manualBox" hidden>
+          <p class="note" style="margin-top:0"><b>手動計画モード</b>：下の「価格カーブと充放電」のグラフで、コマをクリック（タップ）すると <b>待機 → 充電 → 放電 → 待機</b> の順に切り替わります。「コマごとの表」でも、動きと出力（kW）を直せます。</p>
+          <div class="row-buttons">
+            <label class="field" style="display:inline-flex"><span class="unit">充電・放電の出力：定格の</span>
+              <input type="number" data-key="manualPct" min="0" max="100" step="any" style="width:5em" aria-label="手動計画の出力（定格の％）"><span class="unit">%</span></label>
+            <button id="btnManualClear">すべて待機に戻す</button>
+            <button id="btnManualCopy">動的計画法の計画を写す</button>
+          </div>
         </div>
       </section>
       <p class="caution">※ <b>簡易法</b>（貪欲法：1kWh あたりの利益が大きい「充電するコマと放電するコマの組み合わせ」から順に割り当てる方法）は、<strong>最適な計画になるとは限りません。</strong>先に放電してあとで充電し直す動きは考えず、出力を瞬時に切り替える前提なので、出力変化速度の上限も考えていません。<br>
@@ -285,6 +304,10 @@
       <section class="panel">
         <div class="chart-head"><h2>価格カーブと充放電</h2><div class="legend" id="lgPrice"></div></div>
         <div class="chart" id="chPrice"></div>
+        <div id="violationBox" hidden>
+          <h3 id="violationTitle"></h3>
+          <ul class="violations" id="violationList"></ul>
+        </div>
       </section>
 
       <section class="panel">
@@ -417,7 +440,7 @@ const DEFAULT_INPUTS = {
   // 蓄電池
   capacity: '10', power: '5', efficiency: '90', socInit: '50', socMin: '10', socMax: '90',
   // ① 計画
-  socEndMin: '50', rampOn: 'true', rampValue: '10', rampUnit: 'min', overlayOn: 'false', overlayPattern: 'noise',
+  socEndMin: '50', rampOn: 'true', rampValue: '10', rampUnit: 'min', overlayOn: 'false', overlayPattern: 'noise', manualPct: '100',
   // ② 周波数応動（第22回 グリッドコード検討会 資料5 の案・解析条件）
   fBase: '50', droop: '5', lfsmOn: 'true', lfsmDb: '0.2', fsmOn: 'true', fsmDb: '0.01',
   deadTime: '0.7', tauDetect: '0.2', tauOut: '0.1', respRate: '100', baseOut: '0',
@@ -440,7 +463,8 @@ const state = {
   prices: dummyPrices(),            // 48コマの価格
   priceSource: 'ダミーの価格',       // 価格の出どころ（画面の表示用）
   tab: 'plan',
-  showPlan: 'dp',
+  showPlan: 'dp',                   // グラフと表に表示する計画：'dp' | 'greedy' | 'manual'
+  manual: null,                     // 手動の計画（48コマ）。初めはすべて待機
   csv: null,                        // 読み込み中の価格 CSV：{name, enc, rows, width}
   freqCsv: null,                    // 読み込み中の周波数 CSV
   freqData: null,                   // 読み込んだ周波数データ：{name, dt, values: Float32Array}（保存はしない）
@@ -454,15 +478,18 @@ function load() {
       if (Array.isArray(saved.prices) && saved.prices.length === SLOTS && saved.prices.every(Number.isFinite)) state.prices = saved.prices;
       if (typeof saved.priceSource === 'string') state.priceSource = saved.priceSource;
       if (saved.tab === 'freq') state.tab = 'freq';
-      if (saved.showPlan === 'greedy') state.showPlan = 'greedy';
+      if (saved.showPlan === 'greedy' || saved.showPlan === 'manual') state.showPlan = saved.showPlan;
+      if (Array.isArray(saved.manual) && saved.manual.length === SLOTS &&
+          saved.manual.every(s => MANUAL_ORDER.includes(s?.m) && (s.kw === null || (Number.isFinite(s.kw) && s.kw >= 0)))) state.manual = saved.manual;
     }
   } catch (e) { /* 保存領域が使えない環境では初期値で動かす */ }
+  if (!state.manual) state.manual = emptyManual();
   if (state.inputs.pattern === 'csv') state.inputs.pattern = 'step';   // CSV のデータは保存しないので、開き直したら作ったパターンに戻す
 }
 function save() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      inputs: state.inputs, prices: state.prices, priceSource: state.priceSource, tab: state.tab, showPlan: state.showPlan,
+      inputs: state.inputs, prices: state.prices, priceSource: state.priceSource, tab: state.tab, showPlan: state.showPlan, manual: state.manual,
     }));
   } catch (e) { /* 保存できなくても動かす */ }
 }
@@ -661,39 +688,79 @@ function planDP(prices, b, opts = {}) {
 }
 
 // 計画を1コマずつたどって、収益・充電量・放電量・充電率を計算し、条件を守っているか確かめる
+// 違反は issues（[{t: コマ, why: 理由}]）と problems（「時刻：理由」の文字列）の両方で返す。充電率は上下限で切らずに計算を続ける
 function evaluate(plan, prices, b) {
   const d = derive(b);
   const soc = [];
-  const problems = [];
+  const issues = [];
+  const add = (t, why) => issues.push({ t, why });
+  const pctOf = e => `${num(e / b.capacity * 100, 1)}%`;
   let e = d.e0, revenue = 0, buy = 0, sell = 0, out = 0;
   for (let t = 0; t < SLOTS; t++) {
     const c = plan.charge[t], s = plan.discharge[t];
-    if (c < -EPS || s < -EPS) problems.push(`${slotRange(t)}：充電量か放電量がマイナス`);
-    if (c > d.limit + 1e-6) problems.push(`${slotRange(t)}：充電が出力の上限を超えている`);
-    if (s > d.limit + 1e-6) problems.push(`${slotRange(t)}：放電が出力の上限を超えている`);
+    if (c < -EPS || s < -EPS) add(t, '充電量か放電量がマイナス');
+    const p = plan.power ? plan.power[t] : 0;
+    if (plan.power && Math.abs(p) > b.power + 1e-6) add(t, `出力 ${num(Math.abs(p), 2)} kW が定格 ${num(b.power, 2)} kW を超えている`);
+    else {
+      if (c > d.limit + 1e-6) add(t, '充電が出力の上限を超えている');
+      if (s > d.limit + 1e-6) add(t, '放電が出力の上限を超えている');
+    }
     // ランプのある計画では、出力が 0 をまたいで変わるコマに充電と放電の両方が入ることがある
-    if (!plan.ramped && c > EPS && s > EPS) problems.push(`${slotRange(t)}：同じコマで充電と放電をしている`);
+    if (!plan.ramped && c > EPS && s > EPS) add(t, '同じコマで充電と放電をしている');
     // ランプのある計画は、コマの途中で 0 をまたぐ時点の充電率も確かめる（そこで充電率がいちばん高く／低くなる）
     if (plan.ramped && plan.power) {
       const m = slotEnergy(t ? plan.power[t - 1] : 0, plan.power[t], d.ramp);
       if (m.cross) {
         const ec = e + batteryDelta(m.cross, d);
-        if (ec > d.eMax + 1e-6) problems.push(`${slotRange(t)}：コマの途中で充電率が上限を超えている`);
-        if (ec < d.eMin - 1e-6) problems.push(`${slotRange(t)}：コマの途中で充電率が下限を下回っている`);
+        if (ec > d.eMax + 1e-6) add(t, `コマの途中（充電から放電に切り替わる時点）の充電率 ${pctOf(ec)} が上限 ${num(b.socMax, 0)}% を超える`);
+        if (ec < d.eMin - 1e-6) add(t, `コマの途中（放電から充電に切り替わる時点）の充電率 ${pctOf(ec)} が下限 ${num(b.socMin, 0)}% を下回る`);
       }
     }
     e += c * d.etaC - s / d.etaD;
-    if (e > d.eMax + 1e-6) problems.push(`${slotRange(t)}：充電率が上限を超えている`);
-    if (e < d.eMin - 1e-6) problems.push(`${slotRange(t)}：充電率が下限を下回っている`);
+    // 超える向きに動かしたコマ（上限なら充電、下限なら放電したコマ）だけを違反にする。
+    // 前のコマで超えたまま待機しているコマは、原因ではないので数えない
+    if (e > d.eMax + 1e-6 && c > EPS) add(t, `コマの終わりの充電率 ${pctOf(e)} が上限 ${num(b.socMax, 0)}% を超える`);
+    if (e < d.eMin - 1e-6 && s > EPS) add(t, `コマの終わりの充電率 ${pctOf(e)} が下限 ${num(b.socMin, 0)}% を下回る`);
     soc.push(e);
     revenue += prices[t] * (s - c);
     buy += c;
     sell += s;
     out += s / d.etaD;
   }
-  if (e < d.eEnd - 1e-6) problems.push('1日の終わりの充電率が、終わりの下限を下回っている');
-  return { revenue, buy, sell, cycles: out / b.capacity, soc, endSoc: e, problems };
+  if (e < d.eEnd - 1e-6) add(SLOTS - 1, `24:00 の充電率 ${pctOf(e)} が、終わりの下限 ${num(b.socEndMin, 1)}% を下回る`);
+  const problems = issues.map(x => `${slotRange(x.t)}：${x.why}`);
+  return { revenue, buy, sell, cycles: out / b.capacity, soc, endSoc: e, issues, problems };
 }
+
+// ===== 手動の計画 =====
+// 各コマは {m: 'idle'（待機）| 'charge'（充電）| 'discharge'（放電）, kw: 出力の大きさ（null なら全体の％を使う）}
+const MANUAL_ORDER = ['idle', 'charge', 'discharge'];
+const MODE_NAMES = { idle: '待機', charge: '充電', discharge: '放電' };
+const emptyManual = () => Array.from({ length: SLOTS }, () => ({ m: 'idle', kw: null }));
+const nextMode = m => MANUAL_ORDER[(MANUAL_ORDER.indexOf(m) + 1) % MANUAL_ORDER.length];
+function manualPower(slot, b) {
+  if (slot.m === 'idle') return 0;
+  const mag = slot.kw ?? b.power * b.manualPct / 100;
+  return slot.m === 'discharge' ? mag : -mag;
+}
+// 手動の計画も、動的計画法と同じく「コマの境目から上限の速さで動く」ランプのある計画として計算する
+function planFromManual(manual, b) {
+  const d = derive(b);
+  const power = manual.map(s => manualPower(s, b));
+  const charge = [], discharge = [];
+  let p0 = 0;
+  for (let t = 0; t < SLOTS; t++) {
+    const m = slotEnergy(p0, power[t], d.ramp);
+    charge.push(m.chg);
+    discharge.push(m.dis);
+    p0 = power[t];
+  }
+  return { charge, discharge, power, ramped: true };
+}
+// 計画の出力から手動の計画を作る（「動的計画法の計画を写す」）
+const manualFromPlan = plan => plan.power.map(p => (Math.abs(p) < 1e-9 ? { m: 'idle', kw: null } : { m: p > 0 ? 'discharge' : 'charge', kw: Math.abs(p) }));
+// 最適の何％か。最適の収益が 0 円以下なら比べられないので null
+const optimalPct = (rev, best) => (best > 1e-6 ? rev / best * 100 : null);
 
 // 出力変化速度の上限を、全コマで守っているか確かめる。違反したコマの一覧を返す
 //   ・ランプのある計画：出力の変化がコマの中で収まっているか、電力量が出力の動きと合っているか
@@ -888,6 +955,11 @@ function parsePlanInputs(raw) {
     bad.add('rampValue');
     errors.push('出力変化速度の上限は、1%/分〜100%/秒（=6000%/分）の範囲で入力してください。');
   }
+  b.manualPct = Number(raw.manualPct);
+  if (!(b.manualPct > 0 && b.manualPct <= 100)) {
+    bad.add('manualPct');
+    errors.push('手動計画の出力は、定格の 0% より大きく 100% 以下で入力してください。');
+  }
   return { b, bad, errors };
 }
 const FREQ_RULES = {
@@ -954,7 +1026,11 @@ function drawChart(host, opt) {
   const yc = v => Math.max(M.t, Math.min(H - M.b, y(v)));
   let svg = `<svg viewBox="0 0 ${W} ${H}" height="${H}" role="img" aria-label="${opt.ariaLabel}">`;
   for (const band of opt.bands || []) {
-    for (const [a, z] of band.ranges) svg += `<rect x="${x(a)}" y="${M.t}" width="${Math.max(0.5, x(z) - x(a))}" height="${H - M.t - M.b}" style="fill:${band.color};fill-opacity:.22"/>`;
+    // band.top：上端に細い印を付ける（違反のコマなど）。band.opacity：塗りの濃さ
+    for (const [a, z] of band.ranges) {
+      svg += `<rect x="${x(a)}" y="${M.t}" width="${Math.max(0.5, x(z) - x(a))}" height="${H - M.t - M.b}" style="fill:${band.color};fill-opacity:${band.opacity ?? 0.22}"/>`;
+      if (band.top) svg += `<rect x="${x(a)}" y="${M.t - 6}" width="${Math.max(0.5, x(z) - x(a))}" height="6" style="fill:${band.color}"/>`;
+    }
   }
   for (let t = opt.yMin; t <= opt.yMax + opt.yStep / 1000; t += opt.yStep) {
     const zero = Math.abs(t) < opt.yStep / 1000;
@@ -1005,12 +1081,20 @@ function drawChart(host, opt) {
     group.forEach((c, id) => c.setHover(xv, id === opt.id));
   });
   hit.addEventListener('pointerleave', () => group.forEach(c => c.setHover(null)));
+  if (opt.onClick) {   // クリック（タップ）で操作できるグラフ
+    hit.style.cursor = 'pointer';
+    hit.addEventListener('click', e => {
+      const box = root.getBoundingClientRect();
+      const px = (e.clientX - box.left) * (W / box.width);
+      opt.onClick(Math.max(0, Math.min(opt.xMax - 1e-9, (px - M.l) / (W - M.l - M.r) * opt.xMax)));
+    });
+  }
 }
 
 // ===== ① 描画 =====
 const $ = id => document.getElementById(id);
 const CHARGE = 'var(--charge)', DISCHARGE = 'var(--discharge)', INK = 'var(--text)', MUTED = 'var(--muted)';
-const PLAN_NAMES = { dp: '動的計画法', greedy: '簡易法' };
+const PLAN_NAMES = { dp: '動的計画法', greedy: '簡易法', manual: '手動の計画' };
 const HOUR_TICKS = [0, 3, 6, 9, 12, 15, 18, 21, 24].map(h => [h, `${h}時`]);
 
 function renderPriceGrid() {
@@ -1025,7 +1109,7 @@ function renderAssumptions(b) {
     '定格出力は系統側（電気を売り買いする側）で数えます。1コマで売り買いできるのは、最大で「定格出力 × 0.5時間」です。',
     '往復効率は、充電と放電に半分ずつ分けます：<b>充電効率 ＝ 放電効率 ＝ √往復効率</b>。系統から c kWh 買うと電池に c × 充電効率 kWh 貯まり、電池から e kWh 取り出すと系統に e × 放電効率 kWh 売れます。',
     '充電率は、各コマの終わりに下限と上限の間に収めます。ランプの途中で充電と放電が切り替わるコマは、切り替わる時点（そこで充電率がいちばん高く／低くなる）も確かめます。1日の終わり（24:00）の充電率は、「終わりの充電率の下限」以上にします。',
-    '<b>出力変化速度の上限（動的計画法のみ）</b>：出力の変化は<b>コマの境目から始まり</b>、上限の速さで直線的に変わって、目標の出力に着いたらコマの終わりまで保ちます。変化はそのコマの中で終わる必要があります。0:00 の出力は 0 kW から始めます。変化の途中で充電から放電に（またはその逆に）切り替わるときは、0 をまたぐ前後で、充電効率と放電効率を分けて計算します。',
+    '<b>出力変化速度の上限（動的計画法と手動の計画。簡易法は考えない）</b>：出力の変化は<b>コマの境目から始まり</b>、上限の速さで直線的に変わって、目標の出力に着いたらコマの終わりまで保ちます。変化はそのコマの中で終わる必要があります。0:00 の出力は 0 kW から始めます。変化の途中で充電から放電に（またはその逆に）切り替わるときは、0 をまたぐ前後で、充電効率と放電効率を分けて計算します。',
     '収益 ＝ Σ 価格 ×（売った量 − 買った量）。サイクル数 ＝ 電池から取り出した量 ÷ 容量。',
   ];
   if (b) {
@@ -1038,6 +1122,9 @@ function renderAssumptions(b) {
   $('assume').innerHTML = items.map(t => `<li>${t}</li>`).join('');
 }
 
+let planCache = { key: '', results: null };
+let lastPlanResults = null;   // 「動的計画法の計画を写す」で使う
+
 function updatePlan() {
   const { b, bad, errors } = parsePlanInputs(state.inputs);
   markInvalid(bad);
@@ -1047,12 +1134,22 @@ function updatePlan() {
   $('output').hidden = !!errors.length;
   renderAssumptions(bad.size ? null : b);
   if (errors.length) return;
-  const results = {};
-  for (const [key, fn] of [['greedy', planGreedy], ['dp', planDP]]) {
-    const t0 = performance.now();
-    const plan = fn(state.prices, b);
-    results[key] = { plan, r: evaluate(plan, state.prices, b), ramp: checkRamp(plan, b), ms: performance.now() - t0 };
+  // 簡易法と動的計画法は、条件と価格が変わらないかぎり使い回す（手動の計画を直すたびに計算し直さない）
+  const key = JSON.stringify([b.capacity, b.power, b.efficiency, b.socInit, b.socMin, b.socMax, b.socEndMin, b.rampOn, b.rampPctPerMin, state.prices]);
+  if (planCache.key !== key) {
+    planCache = { key, results: {} };
+    for (const [name, fn] of [['greedy', planGreedy], ['dp', planDP]]) {
+      const t0 = performance.now();
+      const plan = fn(state.prices, b);
+      planCache.results[name] = { plan, r: evaluate(plan, state.prices, b), ramp: checkRamp(plan, b), ms: performance.now() - t0 };
+    }
   }
+  const results = { ...planCache.results };
+  const t0 = performance.now();
+  const manualPlan = planFromManual(state.manual, b);
+  results.manual = { plan: manualPlan, r: evaluate(manualPlan, state.prices, b), ramp: checkRamp(manualPlan, b), ms: performance.now() - t0 };
+  lastPlanResults = results;
+  $('manualBox').hidden = state.showPlan !== 'manual';
   renderCompare(results, b);
   // 周波数応動を重ねる（表示中の計画に）
   let overlay = null;
@@ -1108,23 +1205,21 @@ function renderOverlay(ov, sel, b) {
 }
 
 function renderCompare(res, b) {
-  const g = res.greedy, d = res.dp;
-  const rampCell = x => !b.rampOn ? '<td>上限なし</td>' : x.ramp.length
-    ? `<td class="ng">${x.ramp.length} か所で超える</td>` : '<td class="ok">全48コマで守る</td>';
-  const better = (a, z) => (a > z + 1e-6 ? 'best' : '');
-  const row = (name, gv, dv, cls = ['', '']) => `<tr><td>${name}</td><td class="${cls[0]}">${gv}</td><td class="${cls[1]}">${dv}</td></tr>`;
+  const keys = ['greedy', 'dp', 'manual'];
+  const best = Math.max(...keys.map(k => res[k].r.revenue));
   const pct = e => num(e / b.capacity * 100, 1) + '%';
-  $('compareTable').innerHTML = `<thead><tr><th></th><th>簡易法（貪欲法）</th><th>動的計画法</th></tr></thead><tbody>` +
-    row('収益', signedNum(g.r.revenue, 1) + ' 円', signedNum(d.r.revenue, 1) + ' 円', [better(g.r.revenue, d.r.revenue), better(d.r.revenue, g.r.revenue)]) +
-    row('充電量（買った量）', num(g.r.buy, 2) + ' kWh', num(d.r.buy, 2) + ' kWh') +
-    row('放電量（売った量）', num(g.r.sell, 2) + ' kWh', num(d.r.sell, 2) + ' kWh') +
-    row('サイクル数', num(g.r.cycles, 2) + ' 回', num(d.r.cycles, 2) + ' 回') +
-    row('終わりの充電率', pct(g.r.endSoc), pct(d.r.endSoc)) +
-    `<tr><td>出力変化速度の上限</td>${rampCell(g)}${rampCell(d)}</tr>` +
-    row('条件（出力・充電率）', g.r.problems.length ? `${g.r.problems.length} 件の違反` : '守る', d.r.problems.length ? `${d.r.problems.length} 件の違反` : '守る',
-      [g.r.problems.length ? 'ng' : 'ok', d.r.problems.length ? 'ng' : 'ok']) +
-    row('計算時間', `${num(g.ms, 0)} ミリ秒`, `${num(d.ms, 0)} ミリ秒`) + '</tbody>' +
-    (b.rampOn && g.ramp.length ? `<caption class="note" style="caption-side:bottom;text-align:left">簡易法は出力を瞬時に切り替える前提なので、上限の速さでは実際にはこの計画どおりに動けません（収益は上限を考えない値です）。</caption>` : '');
+  const row = (name, fn, clsFn = () => '') => `<tr><td>${name}</td>${keys.map(k => `<td class="${clsFn(res[k], k)}">${fn(res[k], k)}</td>`).join('')}</tr>`;
+  $('compareTable').innerHTML = `<thead><tr><th></th><th>簡易法（貪欲法）</th><th>動的計画法</th><th>手動の計画</th></tr></thead><tbody>` +
+    row('収益', x => signedNum(x.r.revenue, 1) + ' 円', x => (x.r.revenue >= best - 1e-6 && best > 1e-6 ? 'best' : '')) +
+    row('動的計画法に対する割合', x => { const v = optimalPct(x.r.revenue, res.dp.r.revenue); return v === null ? '—' : num(v, 1) + '%'; }) +
+    row('充電量（買った量）', x => num(x.r.buy, 2) + ' kWh') +
+    row('放電量（売った量）', x => num(x.r.sell, 2) + ' kWh') +
+    row('サイクル数', x => num(x.r.cycles, 2) + ' 回') +
+    row('終わりの充電率', x => pct(x.r.endSoc)) +
+    row('出力変化速度の上限', x => !b.rampOn ? '上限なし' : x.ramp.length ? `${x.ramp.length} か所で超える` : '全48コマで守る', x => (!b.rampOn ? '' : x.ramp.length ? 'ng' : 'ok')) +
+    row('条件（出力・充電率）', x => (x.r.issues.length ? `${x.r.issues.length} 件の違反` : '守る'), x => (x.r.issues.length ? 'ng' : 'ok')) +
+    row('計算時間', x => `${num(x.ms, 0)} ミリ秒`) + '</tbody>' +
+    (b.rampOn && res.greedy.ramp.length ? `<caption class="note" style="caption-side:bottom;text-align:left">簡易法は出力を瞬時に切り替える前提なので、上限の速さでは実際にはこの計画どおりに動けません（収益は上限を考えない値です）。</caption>` : '');
 }
 
 // 出力の動き（グラフ用の点）
@@ -1149,17 +1244,31 @@ function renderPlan(sel, res, b, ov) {
   const { plan, r } = sel;
   const ovRes = ov && ov.res ? ov.res : null;
   const RESP = 'var(--resp)';
-  const other = res[state.showPlan === 'dp' ? 'greedy' : 'dp'];
+  const manual = state.showPlan === 'manual';
+  const otherKey = state.showPlan === 'dp' ? 'greedy' : 'dp';
+  const other = res[otherKey];
   const pct = e => e / b.capacity * 100;
   const tile = (k, v, unit, s, ng) => `<div class="tile${ng ? ' ng' : ''}"><div class="k">${k}</div><div class="v">${v}<small>${unit}</small></div><div class="s">${s}</div></div>`;
   const nC = plan.charge.filter(v => v > EPS).length, nD = plan.discharge.filter(v => v > EPS).length;
+  // 違反のあるコマと理由（条件のチェック ＋ ランプのチェック）
+  const why = Array.from({ length: SLOTS }, () => []);
+  for (const x of [...r.issues, ...sel.ramp]) why[x.t].push(x.why);
+  const nBad = why.filter(w => w.length).length;
+  let pctTile = '';
+  if (manual) {
+    const opt = optimalPct(r.revenue, res.dp.r.revenue);
+    pctTile = opt === null
+      ? tile('最適との比較', '—', '', `動的計画法の収益も ${signedNum(res.dp.r.revenue, 1)} 円なので比べられません`)
+      : tile('最適の', num(opt, 1), '%', `動的計画法 ${signedNum(res.dp.r.revenue, 1)} 円に対して${nBad ? '（違反があるため参考値）' : ''}`, nBad > 0);
+  }
   $('tiles').innerHTML = [
-    tile(`収益（${PLAN_NAMES[state.showPlan]}）`, signedNum(r.revenue, 1), '円', '売った金額 − 買った金額'),
+    pctTile,
+    tile(`収益（${PLAN_NAMES[state.showPlan]}）`, signedNum(r.revenue, 1), '円', manual && nBad ? '違反があるため、実際には得られない参考値' : '売った金額 − 買った金額', manual && nBad > 0),
     tile('充電量', num(r.buy, 2), 'kWh', `系統から買った量（${nC}コマ）`),
     tile('放電量', num(r.sell, 2), 'kWh', `系統に売った量（${nD}コマ）`),
     tile('サイクル数', num(r.cycles, 2), '回', '取り出した量 ÷ 容量'),
     tile('終わりの充電率', num(pct(r.endSoc), 1), '%', `初め ${num(b.socInit, 1)}% / 下限 ${num(b.socEndMin, 1)}%`),
-    r.problems.length ? tile('条件の確認', `${r.problems.length}件`, '', escapeHtml(r.problems[0]), true) : '',
+    nBad ? tile('違反のあるコマ', `${nBad}`, 'コマ', escapeHtml(`${slotRange(why.findIndex(w => w.length))}：${why.find(w => w.length)[0]}`), true) : '',
   ].join('');
 
   const p = state.prices;
@@ -1169,6 +1278,8 @@ function renderPlan(sel, res, b, ov) {
     return {
       x: (s + 0.5) / 2, title: slotRange(s), dots: dotsFn(s),
       rows: [
+        ...(manual ? [{ name: '手動の計画', value: `${MODE_NAMES[state.manual[s].m]}（クリックで切り替え）` }] : []),
+        ...why[s].map(w => ({ name: '違反', value: w, color: 'var(--danger)', kind: 'area' })),
         { name: '価格', value: `${num(p[s], 2)} 円/kWh`, color: INK, kind: 'line' },
         { name: '充電（買う）', value: `${num(plan.charge[s], 3)} kWh`, color: CHARGE, kind: 'area' },
         { name: '放電（売る）', value: `${num(plan.discharge[s], 3)} kWh`, color: DISCHARGE, kind: 'area' },
@@ -1178,31 +1289,42 @@ function renderPlan(sel, res, b, ov) {
       ],
     };
   };
-  // 帯：そのコマで差し引き充電なら青、放電ならオレンジ（続くコマは1つにまとめる）
-  const ranges = sign => {
+  // 帯：充電は青、放電はオレンジ（続くコマは1つにまとめる）。手動の計画はクリックで選んだ動き、
+  // ほかの計画はそのコマの差し引き（充電が多いか、放電が多いか）で決める
+  const toRanges = test => {
     const out = [];
     for (let s = 0; s < SLOTS; s++) {
-      const net = plan.discharge[s] - plan.charge[s];
-      if (!(sign > 0 ? net > 1e-6 : net < -1e-6)) continue;
+      if (!test(s)) continue;
       if (out.length && out[out.length - 1][1] === s / 2) out[out.length - 1][1] = (s + 1) / 2;
       else out.push([s / 2, (s + 1) / 2]);
     }
     return out;
   };
-  const bands = [{ ranges: ranges(-1), color: CHARGE }, { ranges: ranges(1), color: DISCHARGE }];
+  const isCharge = s => (manual ? state.manual[s].m === 'charge' : plan.discharge[s] - plan.charge[s] < -1e-6);
+  const isDischarge = s => (manual ? state.manual[s].m === 'discharge' : plan.discharge[s] - plan.charge[s] > 1e-6);
+  const bands = [{ ranges: toRanges(isCharge), color: CHARGE }, { ranges: toRanges(isDischarge), color: DISCHARGE }];
+  const badBand = { ranges: toRanges(s => why[s].length > 0), color: 'var(--danger)', opacity: 0.28, top: true };
 
   const stepPts = [];
   p.forEach((v, s) => { stepPts.push([s / 2, v], [(s + 1) / 2, v]); });
-  $('lgPrice').innerHTML = legendHtml([['価格', INK, 'line'], ['充電するコマ', CHARGE, 'area'], ['放電するコマ', DISCHARGE, 'area']]);
+  $('lgPrice').innerHTML = legendHtml([['価格', INK, 'line'], ['充電するコマ', CHARGE, 'area'], ['放電するコマ', DISCHARGE, 'area'],
+    ...(nBad ? [['違反のあるコマ', 'var(--danger)', 'area']] : [])]);
   drawChart($('chPrice'), {
     group: 'plan', id: 'price', height: 240, xMax: 24, xTicks: HOUR_TICKS,
     ...niceDomain(Math.min(0, ...p), Math.max(...p)), yFmt: v => num(v, v % 1 ? 1 : 0),
-    ariaLabel: '価格カーブと充電・放電するコマ', bands,
+    ariaLabel: manual ? '価格カーブと手動の計画（コマをクリックすると、待機・充電・放電が切り替わる）' : '価格カーブと充電・放電するコマ',
+    bands: [...bands, badBand],
     lines: [{ points: stepPts, color: INK, width: 2 }],
     hoverAt: hoverAt(s => [{ x: (s + 0.5) / 2, y: p[s], color: INK }]),
+    onClick: manual ? xv => cycleManual(slotOf(xv)) : null,
   });
 
-  const selName = PLAN_NAMES[state.showPlan], otherName = PLAN_NAMES[state.showPlan === 'dp' ? 'greedy' : 'dp'];
+  // 違反の一覧
+  $('violationBox').hidden = !nBad;
+  $('violationTitle').textContent = `違反の一覧（${nBad} コマ）`;
+  $('violationList').innerHTML = why.map((w, s) => w.length ? `<li><b>${slotRange(s)}</b>：${w.map(escapeHtml).join(' ／ ')}</li>` : '').join('');
+
+  const selName = PLAN_NAMES[state.showPlan], otherName = PLAN_NAMES[otherKey];
   $('lgPower').innerHTML = legendHtml([[selName, INK, 'line'], [otherName, MUTED, 'dash'], ...(ovRes ? [['計画＋周波数応動', RESP, 'line']] : [])]);
   drawChart($('chPower'), {
     group: 'plan', id: 'power', height: 200, xMax: 24, xTicks: HOUR_TICKS,
@@ -1225,14 +1347,29 @@ function renderPlan(sel, res, b, ov) {
     hoverAt: hoverAt(s => [{ x: (s + 1) / 2, y: pct(r.soc[s]), color: INK }]),
   });
 
-  $('slotTable').innerHTML = `<thead><tr><th>時刻</th><th>価格（円/kWh）</th><th>出力の目標（kW）</th><th>充電（kWh）</th><th>放電（kWh）</th><th>収支（円）</th><th>充電率（コマの終わり）</th></tr></thead><tbody>` +
+  // コマごとの表。手動の計画のときは、動き（待機・充電・放電）と出力（kW）を直せる
+  const defaultKw = b.power * b.manualPct / 100;
+  $('slotTable').innerHTML = `<thead><tr><th>時刻</th><th>価格（円/kWh）</th>${manual ? '<th>動き</th><th>出力の大きさ（kW）</th>' : '<th>出力の目標（kW）</th>'}
+      <th>充電（kWh）</th><th>放電（kWh）</th><th>収支（円）</th><th>充電率（コマの終わり）</th>${manual ? '<th>違反</th>' : ''}</tr></thead><tbody>` +
     p.map((v, s) => {
       const c = plan.charge[s], dch = plan.discharge[s];
-      return `<tr><td>${slotRange(s)}</td><td>${num(v, 2)}</td><td>${Math.abs(plan.power[s]) > 1e-9 ? plusNum(plan.power[s], 2) : '0'}</td>
+      const ms = state.manual[s];
+      const ctrl = manual
+        ? `<td><select data-mslot="${s}" data-mfield="m" aria-label="${slotRange(s)}の動き">${MANUAL_ORDER.map(m => `<option value="${m}"${m === ms.m ? ' selected' : ''}>${MODE_NAMES[m]}</option>`).join('')}</select></td>
+           <td><input type="number" min="0" step="any" data-mslot="${s}" data-mfield="kw" value="${ms.kw ?? ''}" placeholder="${num(defaultKw, 2)}" aria-label="${slotRange(s)}の出力の大きさ（空欄なら全体の％）"></td>`
+        : `<td>${Math.abs(plan.power[s]) > 1e-9 ? plusNum(plan.power[s], 2) : '0'}</td>`;
+      return `<tr class="${why[s].length ? 'bad' : ''}"><td>${slotRange(s)}</td><td>${num(v, 2)}</td>${ctrl}
         <td class="${c > EPS ? 'c' : ''}">${c > EPS ? num(c, 3) : '—'}</td>
         <td class="${dch > EPS ? 'd' : ''}">${dch > EPS ? num(dch, 3) : '—'}</td><td>${c > EPS || dch > EPS ? signedNum(v * (dch - c), 2) : '—'}</td>
-        <td>${num(pct(r.soc[s]), 1)}%（${num(r.soc[s], 2)} kWh）</td></tr>`;
+        <td>${num(pct(r.soc[s]), 1)}%（${num(r.soc[s], 2)} kWh）</td>${manual ? `<td class="why">${why[s].map(escapeHtml).join(' ／ ') || '—'}</td>` : ''}</tr>`;
     }).join('') + '</tbody>';
+}
+
+// 手動の計画：コマの動きを 待機 → 充電 → 放電 → 待機 の順に切り替える
+function cycleManual(s) {
+  state.manual[s] = { ...state.manual[s], m: nextMode(state.manual[s].m) };
+  save();
+  updatePlan();
 }
 
 // ===== ② 描画 =====
@@ -1746,6 +1883,69 @@ function runTests() {
     const res = simulateResponse(f, 0.1, fc, base, [], { baseKw: planPowerAt(plan, base), prices, h: 0.1 });
     return { ok: res.limitedPowerSec > 1700, detail: `出力の上限で応動できなかった時間 ${num(res.limitedPowerSec, 1)} 秒` };
   });
+
+  // ---------- 手動の計画 ----------
+  group('手動の計画（手動計画モード）');
+  const mb = { ...base, manualPct: 100 };
+  const manualOf = (pairs, kw = {}) => {   // pairs：{コマ: 'charge' | 'discharge'}
+    const m = emptyManual();
+    for (const [s, mode] of Object.entries(pairs)) m[+s] = { m: mode, kw: kw[s] ?? null };
+    return m;
+  };
+  const check = (manual, bb) => { const plan = planFromManual(manual, bb); const r = evaluate(plan, prices, bb); return { plan, r, ramp: checkRamp(plan, bb), slots: [...new Set([...r.issues, ...checkRamp(plan, bb)].map(x => x.t))].sort((a, z) => a - z) }; };
+  const whyText = x => [...x.r.issues, ...x.ramp].map(i => `${slotRange(i.t)}：${i.why}`).join(' ／ ') || '違反なし';
+  test('クリックの順番：待機 → 充電 → 放電 → 待機', () => {
+    const seq = ['idle'];
+    for (let k = 0; k < 3; k++) seq.push(nextMode(seq[seq.length - 1]));
+    return { ok: seq.join() === 'idle,charge,discharge,idle', detail: seq.map(m => MODE_NAMES[m]).join(' → ') };
+  });
+  test('すべて待機 → 収益0円、違反なし', () => {
+    const x = check(emptyManual(), withRamp(mb, 10));
+    return { ok: x.r.revenue === 0 && x.slots.length === 0, detail: `収益 ${num(x.r.revenue, 2)} 円、${whyText(x)}` };
+  });
+  test('動的計画法の計画を写す → 違反なしで、最適の100%', () => {
+    const bb = withRamp(mb, 10);
+    const dp = run(planDP, prices, bb);
+    const x = check(manualFromPlan(dp.plan), bb);
+    const v = optimalPct(x.r.revenue, dp.r.revenue);
+    return { ok: x.slots.length === 0 && close(v, 100, 1e-6), detail: `手動 ${num(x.r.revenue, 3)} 円 / 動的計画法 ${num(dp.r.revenue, 3)} 円 → 最適の ${num(v, 4)}%、${whyText(x)}` };
+  });
+  test('ランプ上限：上限1%/分で、0:00 にいきなり定格で充電 → 0:00〜0:30 が違反', () => {
+    const x = check(manualOf({ 0: 'charge' }), withRamp(mb, 1));
+    return { ok: x.ramp.length > 0 && x.ramp[0].t === 0, detail: whyText(x) };
+  });
+  test('出力上限：コマごとの表で 6 kW（定格 5 kW）にした放電 → そのコマが違反', () => {
+    const x = check(manualOf({ 40: 'discharge' }, { 40: 6 }), { ...mb, socInit: 90, socEndMin: 10 });
+    return { ok: x.r.issues.some(i => i.t === 40 && i.why.includes('定格')), detail: whyText(x) };
+  });
+  test('充電率の上限：初め50%から3コマ続けて定格で充電 → 0:30〜1:00 の終わりで90%を超える', () => {
+    const x = check(manualOf({ 0: 'charge', 1: 'charge', 2: 'charge' }), mb);
+    const first = x.r.issues.find(i => i.why.includes('上限'));
+    return { ok: first && first.t === 1, detail: whyText(x) };
+  });
+  test('充電率の下限：初め50%から3コマ続けて定格で放電 → 0:30〜1:00 の終わりで10%を下回る', () => {
+    const x = check(manualOf({ 0: 'discharge', 1: 'discharge', 2: 'discharge' }), { ...mb, socEndMin: 10 });
+    const first = x.r.issues.find(i => i.why.includes('下限'));
+    return { ok: first && first.t === 1, detail: whyText(x) };
+  });
+  test('コマの途中：放電の次のコマで充電に切り替えると、切り替わる時点で下限を下回る（コマの終わりは下限の中）', () => {
+    const bb = withRamp({ ...mb, socEndMin: 10 }, 10);
+    const eta = Math.sqrt(0.9);
+    const out0 = (5 * 10 / 60 / 2 + 5 * 20 / 60) / eta;          // 0:00〜0:30 の放電で電池から出る量
+    bb.socInit = (1 + 0.2 + out0) / bb.capacity * 100;            // 0:30 に下限 + 0.2 kWh になるように始める
+    const x = check(manualOf({ 0: 'discharge', 1: 'charge' }), bb);
+    const mid = x.r.issues.find(i => i.why.includes('コマの途中'));
+    const endOk = !x.r.issues.some(i => i.t === 1 && i.why.includes('コマの終わり'));
+    return { ok: mid && mid.t === 1 && endOk, detail: whyText(x) };
+  });
+  test('1日の終わり：放電だけして戻さない → 23:30〜24:00 に「終わりの下限を下回る」', () => {
+    const x = check(manualOf({ 36: 'discharge' }), mb);
+    return { ok: x.r.issues.some(i => i.t === SLOTS - 1 && i.why.includes('終わりの下限')), detail: whyText(x) };
+  });
+  test('最適との比較：動的計画法の収益が0円（価格が1日中同じ）なら、割合は出さない', () => {
+    const dp = run(planDP, flat(10), mb);
+    return { ok: dp.r.revenue === 0 && optimalPct(5, dp.r.revenue) === null && close(optimalPct(60, 120), 50), detail: `動的計画法 ${num(dp.r.revenue, 2)} 円 → 割合 ${optimalPct(5, dp.r.revenue)}、60円÷120円 → ${num(optimalPct(60, 120), 1)}%` };
+  });
   return results;
 }
 
@@ -1809,6 +2009,26 @@ function init() {
   });
   $('showPlan').value = state.showPlan;
   $('showPlan').addEventListener('change', e => { state.showPlan = e.target.value; save(); updatePlan(); });
+  // 手動計画モード
+  $('btnManualClear').addEventListener('click', () => { state.manual = emptyManual(); save(); updatePlan(); });
+  $('btnManualCopy').addEventListener('click', () => {
+    if (!lastPlanResults) return;
+    state.manual = manualFromPlan(lastPlanResults.dp.plan);
+    save();
+    updatePlan();
+  });
+  $('slotTable').addEventListener('change', e => {
+    const el = e.target, s = el.dataset.mslot;
+    if (s === undefined) return;
+    if (el.dataset.mfield === 'm') state.manual[+s] = { ...state.manual[+s], m: el.value };
+    else {
+      const v = el.value.trim() === '' ? null : Number(el.value);
+      if (v !== null && !(v >= 0)) { el.classList.add('invalid'); return; }
+      state.manual[+s] = { ...state.manual[+s], kw: v };
+    }
+    save();
+    updatePlan();
+  });
   document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
 
   $('btnCsv').addEventListener('click', () => $('csvFile').click());
