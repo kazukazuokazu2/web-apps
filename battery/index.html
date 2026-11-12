@@ -133,6 +133,20 @@
   .field.has-error > .name, .field.has-error > .unit:first-child { color: var(--danger); font-weight: 700; }
   .field.has-error input.invalid, .field.has-error select.invalid { background: color-mix(in srgb, var(--danger) 12%, var(--input-bg)); border-width: 2px; }
   .field-msg { flex-basis: 100%; color: var(--danger); font-size: 12px; line-height: 1.4; }
+  /* 評価 */
+  .score-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+  .score-card { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .score-card h3 { margin: 0 0 4px; }
+  .score-big { font-size: 28px; font-weight: 700; display: flex; align-items: center; gap: 10px; font-variant-numeric: tabular-nums; }
+  .score-big small { font-size: 13px; font-weight: 400; color: var(--text-2); margin-left: 2px; }
+  .score-big.na { color: var(--muted); font-size: 18px; }
+  .grade { display: inline-block; min-width: 1.8em; text-align: center; border-radius: 6px; padding: 0 8px; font-size: 18px; color: #fff; background: var(--text-2); }
+  .grade-S, .grade-A { background: var(--ok); }
+  .grade-B { background: var(--accent); }
+  .ref-tag { font-size: 12px; font-weight: 600; color: var(--danger); border: 1px solid var(--danger); border-radius: 4px; padding: 0 6px; }
+  .score-parts { color: var(--text-2); font-size: 12px; margin-bottom: 6px; font-variant-numeric: tabular-nums; }
+  .score-comments { margin: 0; padding-left: 1.2em; font-size: 13px; }
+  .score-comments li { margin: 3px 0; }
   /* 内訳 */
   .bars-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px 24px; }
   .bars-grid h3 { margin: 4px 0; }
@@ -316,6 +330,12 @@
 
       <section class="tiles" id="tiles"></section>
 
+      <section class="panel" id="manualScorePanel" hidden>
+        <h2>手動の計画の評価</h2>
+        <div class="score-grid" id="manualScore"></div>
+        <p class="note">点数の付け方は「内訳」タブの「評価」に書いています。</p>
+      </section>
+
       <section class="panel" id="overlayPanel" hidden>
         <h2 id="overlayTitle">周波数応動を重ねた結果</h2>
         <div class="table-scroll"><table class="compare" id="overlayTable"></table></div>
@@ -454,6 +474,12 @@
     <div class="error-box" id="breakErrorBox" hidden></div>
 
     <div id="breakOutput">
+      <section class="panel">
+        <h2>評価（点数とコメント）</h2>
+        <div class="score-grid" id="scoreGrid"></div>
+        <p class="note" id="scoreNote"></p>
+      </section>
+
       <section class="panel">
         <h2>計画ごとの収益の内訳</h2>
         <div class="table-scroll"><table class="compare" id="breakTable"></table></div>
@@ -1276,6 +1302,9 @@ function updatePlan() {
   }
   renderOverlay(overlay, results[state.showPlan], b);
   renderPlan(results[state.showPlan], results, b, overlay);
+  // 手動計画モードのときは、手動の計画の点数とコメントも出す
+  $('manualScorePanel').hidden = state.showPlan !== 'manual';
+  if (state.showPlan === 'manual') $('manualScore').innerHTML = scoreCard('manual', scorePlan('manual', results, b));
 }
 
 function renderOverlay(ov, sel, b) {
@@ -1621,9 +1650,84 @@ function updateBreakdown() {
     `（充電効率・放電効率 <b>${num(d.etaC * 100, 2)}%</b>）、出力変化速度の上限 <b>${b.rampOn ? `${num(b.rampPctPerMin, b.rampPctPerMin % 1 ? 1 : 0)}%/分` : '使わない'}</b>、` +
     `充電率 <b>${num(b.socMin, 0)}〜${num(b.socMax, 0)}%</b>（初め ${num(b.socInit, 0)}%・終わりの下限 ${num(b.socEndMin, 0)}%）、価格：<b>${escapeHtml(state.priceSource)}</b>`;
   const res = computePlanResults(b);
+  renderScores(res, b);
   renderBreakTable(res);
   renderBars(res);
   renderWaterfall(b, res);
+}
+
+// ===== 評価（点数とコメント） =====
+// 点数（100点満点）＝ 収益 70点（動的計画法の何%か）＋ 電池の使い方 20点（1サイクルあたりの収益が動的計画法の何%か）＋ 条件を守る 10点
+const GRADES = [[90, 'S'], [80, 'A'], [65, 'B'], [50, 'C'], [0, 'D']];
+const clamp01 = v => Math.max(0, Math.min(100, v));
+function scorePlan(key, res, b) {
+  const x = res[key], r = x.r, bd = r.breakdown, dp = res.dp.r, d = derive(b);
+  const comments = [];
+  const badSlots = [...new Set([...r.issues, ...x.ramp].map(i => i.t))].sort((a, z) => a - z);
+  if (!(dp.revenue > 1e-6)) {
+    return { score: null, grade: null, parts: null, violations: badSlots.length,
+      comments: [`動的計画法の収益が ${signedNum(dp.revenue, 1)} 円なので、比べる相手がなく評価できません（価格差が効率のロスより小さいと、何もしないのが最適です）。`] };
+  }
+  // 1. 収益
+  const revPct = r.revenue / dp.revenue * 100;
+  const revPts = clamp01(revPct) * 0.7;
+  if (key === 'dp') comments.push('動的計画法の計画なので、これを最適（基準）として、ほかの計画と比べています。');
+  else comments.push(revPct >= 98 ? `収益は最適の ${num(revPct, 1)}% で、ほぼ最適です。`
+    : revPct >= 90 ? `収益は最適の ${num(revPct, 1)}% で、よい計画です。`
+    : revPct >= 70 ? `収益は最適の ${num(revPct, 1)}%。もう少し改善できます。`
+    : `収益は最適の ${num(revPct, 1)}%。改善の余地があります。`);
+  // 2. 電池の使い方（1サイクルあたりの収益）
+  const rpc = r.cycles > 1e-9 ? r.revenue / r.cycles : null, dpRpc = dp.cycles > 1e-9 ? dp.revenue / dp.cycles : null;
+  const usePct = rpc === null || dpRpc === null ? 0 : clamp01(rpc / dpRpc * 100);
+  const usePts = usePct * 0.2;
+  if (rpc === null) comments.push('充放電していないので、電池の使い方の点は 0 点です。');
+  else comments.push(`1サイクルあたりの収益は ${signedNum(rpc, 1)} 円/回（動的計画法は ${signedNum(dpRpc, 1)} 円/回）、サイクル数は ${num(r.cycles, 2)} 回です。`);
+  // 3. 条件
+  const rulePts = badSlots.length ? 0 : 10;
+  if (badSlots.length) {
+    const first = [...r.issues, ...x.ramp].sort((a, z) => a.t - z.t)[0];
+    const hint = /定格/.test(first.why) ? '出力を定格以下にしてください。'
+      : /終わりの下限/.test(first.why) ? '1日の終わりまでに充電し直してください。'
+      : /コマの中で終わらない/.test(first.why) ? '隣のコマとの出力の差を小さくしてください（少しずつ変える）。'
+      : /瞬時に切り替え/.test(first.why) ? '簡易法は出力を瞬時に切り替える前提なので、出力変化速度の上限があると、この計画どおりには動けません。'
+      : /上限/.test(first.why) ? '充電するコマを減らすか、出力を下げてください。'
+      : /下限/.test(first.why) ? '放電するコマを減らすか、出力を下げてください。' : '';
+    comments.push(`違反が ${badSlots.length} コマあります。いちばん早いのは ${slotRange(first.t)}（${first.why}）。${hint}`);
+  }
+  // そのほかの気づき
+  if (r.buy > 1e-9 && r.sell > 1e-9) {
+    const buyP = bd.cost / r.buy, sellP = bd.income / r.sell, ratio = sellP / buyP, need = 1 / d.etaRt;
+    comments.push(`平均の買値 ${num(buyP, 2)} 円・売値 ${num(sellP, 2)} 円で、売値は買値の ${num(ratio, 3)} 倍です（利益が出る目安は ${num(need, 3)} 倍以上）。` +
+      (ratio < need ? '平均では、効率のロスを上回る価格差になっていません。' : ''));
+  }
+  if (r.cycles > 1e-9) {
+    const socs = [d.e0, ...r.soc], lo = Math.min(...socs), hi = Math.max(...socs);
+    const usedPct = (hi - lo) / (d.eMax - d.eMin) * 100;
+    if (usedPct < 70) comments.push(`使える範囲（${num(b.socMin, 0)}〜${num(b.socMax, 0)}%）のうち、${num(lo / b.capacity * 100, 0)}〜${num(hi / b.capacity * 100, 0)}%（${num(usedPct, 0)}%）しか使っていません。`);
+  }
+  if (bd.ideal > 1e-6) comments.push(`効率ロスの額は ${signedNum(bd.lossYenC + bd.lossYenD, 2)} 円で、理想の収益の ${num((bd.lossYenC + bd.lossYenD) / bd.ideal * 100, 1)}% です。`);
+  if (key === 'dp' && wfResult && wfResult.key === planKey(b) && wfResult.rampOn) {
+    const err = Math.abs(wfResult.A) * 0.01;
+    comments.push(`ランプ制約で ${signedNum(wfResult.ramp, 2)} 円減っています` +
+      (Math.abs(wfResult.ramp) <= err * 1.5 ? `。ただし、近似の誤差（約 ${num(err, 2)} 円）と同じくらいなので、はっきりした差ではありません。` : '。'));
+  }
+  const score = revPts + usePts + rulePts;
+  const grade = badSlots.length ? null : GRADES.find(([min]) => score >= min)[1];
+  return { score, grade, parts: { revPts, usePts, rulePts, revPct, usePct }, violations: badSlots.length, comments };
+}
+
+function scoreCard(key, s) {
+  const head = s.score === null ? '<div class="score-big na">評価できません</div>'
+    : `<div class="score-big${s.violations ? ' na' : ''}">${num(s.score, 1)}<small>点</small>` +
+      (s.grade ? `<span class="grade grade-${s.grade}">${s.grade}</span>` : '<span class="ref-tag">違反あり・参考</span>') + '</div>' +
+      `<div class="score-parts">収益 ${num(s.parts.revPts, 1)}/70 ・ 使い方 ${num(s.parts.usePts, 1)}/20 ・ 条件 ${num(s.parts.rulePts, 0)}/10</div>`;
+  return `<div class="score-card"><h3>${PLAN_NAMES[key]}</h3>${head}<ul class="score-comments">${s.comments.map(c => `<li>${escapeHtml(c)}</li>`).join('')}</ul></div>`;
+}
+
+function renderScores(res, b) {
+  $('scoreGrid').innerHTML = PLAN_KEYS3.map(k => scoreCard(k, scorePlan(k, res, b))).join('');
+  $('scoreNote').innerHTML = '点数（100点満点）＝ <b>収益 70点</b>（動的計画法の収益の何%か × 0.7。100%を超えたら70点）＋ <b>電池の使い方 20点</b>（1サイクルあたりの収益が動的計画法の何%か × 0.2。100%を超えたら20点）＋ <b>条件を守る 10点</b>（違反がなければ10点）。' +
+    '段階：<b>S</b> 90点以上、<b>A</b> 80点以上、<b>B</b> 65点以上、<b>C</b> 50点以上、<b>D</b> それ未満。違反のある計画には段階を付けません（実際には動けないため）。動的計画法は近似なので、ほかの計画がわずかに上回ることがあります。';
 }
 
 function renderBreakTable(res) {
@@ -2301,6 +2405,42 @@ function runTests() {
     const rs = [run(planGreedy, flat(10), bb).r, run(planDP, flat(10), bb).r, evaluate(planFromManual(emptyManual(), bb), flat(10), bb)];
     const allZero = rs.every(r => Object.values(r.breakdown).every(v => v === 0));
     return { ok: allZero, detail: rs.map((r, i) => `${['簡易法', '動的計画法', '手動の計画'][i]}：${Object.entries(r.breakdown).filter(([, v]) => v !== 0).map(([k, v]) => `${k}=${v}`).join(', ') || 'すべて 0'}`).join(' ／ ') };
+  });
+
+  // ---------- 評価（点数とコメント） ----------
+  group('評価（点数とコメント）');
+  const resultsFor = (pr, bb, manual) => {
+    const out = {};
+    for (const [k, plan] of [['greedy', planGreedy(pr, bb)], ['dp', planDP(pr, bb)], ['manual', planFromManual(manual(pr, bb), bb)]]) {
+      out[k] = { plan, r: evaluate(plan, pr, bb), ramp: checkRamp(plan, bb) };
+    }
+    return out;
+  };
+  const sb = withRamp(mb, 10);
+  test('動的計画法の計画を写した手動の計画は、動的計画法と同じ点数・同じ段階になる', () => {
+    const res = resultsFor(prices, sb, (pr, bb) => manualFromPlan(planDP(pr, bb)));
+    const d = scorePlan('dp', res, sb), m = scorePlan('manual', res, sb);
+    return { ok: close(d.score, m.score, 1e-9) && d.grade === m.grade && d.grade === 'S', detail: `動的計画法 ${num(d.score, 2)} 点（${d.grade}）／ 手動 ${num(m.score, 2)} 点（${m.grade}）` };
+  });
+  test('点数の式：収益70点 ＋ 使い方20点 ＋ 条件10点（簡易法で確かめる）', () => {
+    const res = resultsFor(prices, sb, () => emptyManual());
+    const s = scorePlan('greedy', res, sb), g = res.greedy.r, dp = res.dp.r;
+    const rev = Math.min(100, Math.max(0, g.revenue / dp.revenue * 100)) * 0.7;
+    const use = Math.min(100, Math.max(0, (g.revenue / g.cycles) / (dp.revenue / dp.cycles) * 100)) * 0.2;
+    const rule = res.greedy.r.issues.length + res.greedy.ramp.length ? 0 : 10;
+    return { ok: close(s.parts.revPts, rev) && close(s.parts.usePts, use) && s.parts.rulePts === rule && close(s.score, rev + use + rule),
+      detail: `収益 ${num(s.parts.revPts, 2)} ＋ 使い方 ${num(s.parts.usePts, 2)} ＋ 条件 ${s.parts.rulePts} ＝ ${num(s.score, 2)} 点（${s.grade ?? '段階なし'}）` };
+  });
+  test('違反のある計画には段階を付けず、条件の点は 0 点、違反のコメントを出す', () => {
+    const res = resultsFor(prices, sb, () => manualOf({ 0: 'charge', 1: 'charge', 2: 'charge' }));
+    const s = scorePlan('manual', res, sb);
+    return { ok: s.grade === null && s.parts.rulePts === 0 && s.violations > 0 && s.comments.some(c => c.startsWith('違反が')),
+      detail: `${num(s.score, 1)} 点、段階 ${s.grade}、違反 ${s.violations} コマ ／ ${s.comments.find(c => c.startsWith('違反が'))}` };
+  });
+  test('価格が1日中同じ → 動的計画法の収益が 0 円なので「評価できません」', () => {
+    const res = resultsFor(flat(10), sb, () => emptyManual());
+    const all = PLAN_KEYS3.map(k => scorePlan(k, res, sb));
+    return { ok: all.every(s => s.score === null && s.grade === null && /評価できません/.test(s.comments[0])), detail: all[0].comments[0] };
   });
   return results;
 }
