@@ -9,7 +9,7 @@
   color-scheme:light;
   --bg:#f4f4f2; --surface:#fcfcfb; --surface-2:#f0efec; --border:#dddcd6;
   --text:#0b0b0b; --text-2:#52514e; --muted:#85847f; --grid:#e8e7e2;
-  --s1:#2a78d6; --s2:#eb6834; --ghost:#a3a29c;
+  --s1:#2a78d6; --s2:#eb6834; --ghost:#a3a29c; --s3:#6250d6; --hcline:#1baf7a;
   --band:rgba(42,120,214,.07); --band-edge:#9ec5f4;
   --bad:#d03b3b; --bad-bg:rgba(227,73,72,.12);
   --warn:#9a5c00; --warn-bg:rgba(237,161,0,.16);
@@ -21,7 +21,7 @@
     color-scheme:dark;
     --bg:#111110; --surface:#1a1a19; --surface-2:#242422; --border:#363531;
     --text:#f0efec; --text-2:#c3c2b7; --muted:#8f8e86; --grid:#2c2b28;
-    --s1:#3987e5; --s2:#d95926; --ghost:#6f6e68;
+    --s1:#3987e5; --s2:#d95926; --ghost:#6f6e68; --s3:#9085e9; --hcline:#199e70;
     --band:rgba(57,135,229,.10); --band-edge:#1c5cab;
     --bad:#e66767; --bad-bg:rgba(230,103,103,.16);
     --warn:#e0a63a; --warn-bg:rgba(201,133,0,.18);
@@ -33,7 +33,7 @@
   color-scheme:dark;
   --bg:#111110; --surface:#1a1a19; --surface-2:#242422; --border:#363531;
   --text:#f0efec; --text-2:#c3c2b7; --muted:#8f8e86; --grid:#2c2b28;
-  --s1:#3987e5; --s2:#d95926; --ghost:#6f6e68;
+  --s1:#3987e5; --s2:#d95926; --ghost:#6f6e68; --s3:#9085e9; --hcline:#199e70;
   --band:rgba(57,135,229,.10); --band-edge:#1c5cab;
   --bad:#e66767; --bad-bg:rgba(230,103,103,.16);
   --warn:#e0a63a; --warn-bg:rgba(201,133,0,.18);
@@ -259,6 +259,25 @@ SVR（節点5 の下流）: 下流での最大降下 215 V、最大上昇 111 V
     <div id="ldcChart" class="chart"></div>
     <div class="note" id="ldcNote"></div>
   </section>
+
+  <section class="card" id="hcCard">
+    <h2>5. ホスティング容量（受け入れられる太陽光の量）</h2>
+    <div class="note">
+      <b>ホスティング容量</b>＝設備増強をせず、現在の設備構成・制御のまま、制約（①電圧上限 ②区間の熱容量 ③逆潮流の上限）を超えずに受け入れられる太陽光（DER）の量。
+      <b>太陽光を制御しない前提の値</b>です。<span class="dummy">注記</span> DERMS で混雑するときだけ出力を制御すれば、同じ設備でより多く接続できます。<br>
+      前提：負荷（家庭など）の P・Q に軽負荷係数を掛ける／データセンターは ON なら全量／蓄電池の充放電は 0／既存の太陽光は「既存の出力％」で含める／追加の太陽光は出力 100%。
+      電圧の下限は判定に含めません。熱容量は区間の表の「許容電流」（初期 300A<span class="dummy">ダミー</span>）を使います。<br>
+      LRT・SVR：「タップ固定」＝太陽光を追加する前の条件で一度整定した位置に固定（太陽光の増加に追従しない）。「自動」＝追加量ごとに整定しなおす（手動モードの機器は画面のタップのまま）。
+    </div>
+    <div class="fields" style="margin-top:8px" id="hcFields"></div>
+    <div class="row" style="margin-top:8px">
+      <span class="note">LRT・SVR</span>
+      <div class="seg" id="hcTapSeg"><button type="button" data-t="fixed">タップ固定</button><button type="button" data-t="auto">自動</button></div>
+      <button type="button" class="primary" id="hcRun">計算する</button>
+      <span class="note" id="hcStatus"></span>
+    </div>
+    <div id="hcBody"></div>
+  </section>
 </div>
 
 <div>
@@ -328,7 +347,8 @@ const FeederCalc = (() => {
     devices.push({ id: id++, type: 'dc', node: 8, p: 2000, q: 400, tripped: false });
     return {
       Vbase: 6600,
-      sections: lens.map(len => ({ len, r: 0.12, x: 0.30 })),
+      sections: lens.map(len => ({ len, r: 0.12, x: 0.30, amp: 300 })),
+      hc: { pf: 1.0, pf2: 0.95, loadFactor: 0.3, dcOn: false, tapMode: 'fixed', existingPv: 0, revMW: null },
       limits: { lo: 6300, hi: 6900 },
       upstream: { scMVA: 500, xr: 10 },
       pvScale: 40,
@@ -349,7 +369,7 @@ const FeederCalc = (() => {
     switch (d.type) {
       case 'load': return { p: d.p, q: d.q };
       case 'pv': {
-        const out = d.p * (m.pvScale / 100);
+        const out = d.p * ((d.scale ?? m.pvScale) / 100);   // scale を持つ太陽光（ホスティング容量の追加分）は共通％に従わない
         const pf = Math.min(1, Math.max(0.01, d.pf));
         return { p: -out, q: out * Math.tan(Math.acos(pf)) };
       }
@@ -507,6 +527,83 @@ const FeederCalc = (() => {
   }
 
   /** 「LDCの影響デモ」：補償値を末端までの線路インピーダンスにする（補償しすぎ）。重負荷（太陽光0%・DC接続）にする。 */
+  /* ---------------- ホスティング容量（潮流計算・整定は既存の powerFlow / settle を呼ぶだけ） ---------------- */
+  const HC_KIND = { voltage: '電圧上限', thermal: '熱容量', reverse: '逆潮流', base: '初期状態で違反', capped: '探索上限' };
+  /** 制約の判定：①電圧上限 ②区間の許容電流 ③逆潮流の上限 */
+  function checkConstraints(m, pf, revMW) {
+    const kinds = [];
+    const vmax = Math.max(...pf.Vll);
+    let iRatio = 0, iSec = 0;
+    for (let k = 1; k <= m.sections.length; k++) {
+      const r = abs(pf.Isec[k]) / (m.sections[k - 1].amp ?? 300);
+      if (r > iRatio) { iRatio = r; iSec = k; }
+    }
+    const pLrt = pf.Slrt.re / 1000;
+    if (vmax > m.limits.hi + 1e-9) kinds.push('voltage');
+    if (iRatio > 1 + 1e-12) kinds.push('thermal');
+    if (revMW !== null && revMW !== undefined && revMW !== '' && pLrt < -revMW * 1000 - 1e-9) kinds.push('reverse');
+    return { ok: kinds.length === 0, kinds, vmax, iRatio, iSec, pLrt };
+  }
+  /** 条件（軽負荷係数・DC・蓄電池0・既存太陽光％）を反映したモデルの複製と基準タップ */
+  function hcPrepare(m, c) {
+    const b = clone(m);
+    b.devices.forEach(d => {
+      if (d.type === 'load') { d.p *= c.loadFactor; d.q *= c.loadFactor; }
+      if (d.type === 'dc') d.tripped = !c.dcOn;
+      if (d.type === 'bess') { d.p = 0; d.q = 0; }
+    });
+    b.pvScale = c.existingPv;
+    if (c.tapMode === 'auto') { b.lrt.mode = 'auto'; b.svrs.forEach(s => s.mode = 'auto'); }
+    // 基準タップ：追加前の評価条件（軽負荷など）で一度整定した位置。
+    // タップ固定＝この位置のまま太陽光を増やす／自動＝追加量ごとに、ここから整定しなおす。
+    const base = settle(b, currentTaps(m));
+    return { b, baseTaps: base.taps, baseStatus: base.status };
+  }
+  /** 追加量 kW を alloc（[節点, 割合]）で置いたときの潮流と制約判定 */
+  function hcEval(prep, c, alloc, kW) {
+    const m3 = clone(prep.b);
+    let id = 900000;
+    if (kW > 0) alloc.forEach(([node, w]) => m3.devices.push({ id: id++, type: 'pv', node, p: kW * w, pf: c.pf, scale: 100, hc: true }));
+    let pf, status = 'fixed';
+    if (c.tapMode === 'auto') { const r = settle(m3, prep.baseTaps); pf = r.pf; status = r.status; }
+    else pf = powerFlow(m3, prep.baseTaps);
+    return Object.assign(checkConstraints(m3, pf, c.revMW), { pf, status, kW });
+  }
+  /** 最初に制約を超える直前の量：刻み step で粗く探してから、その区間を二分探索 */
+  function hcSearch(evalAt, step = 100, max = 20000) {
+    const r0 = evalAt(0);
+    if (!r0.ok) return { cap: 0, kind: 'base', fail: r0, atCap: r0 };
+    let lo = 0, hi = null, fail = null;
+    for (let x = step; x <= max + 1e-9; x += step) {
+      const r = evalAt(x);
+      if (!r.ok) { hi = x; fail = r; break; }
+      lo = x;
+    }
+    if (hi === null) return { cap: max, kind: 'capped', capped: true, atCap: evalAt(max) };
+    while (hi - lo > Math.max(1e-4 * lo, 0.01)) {
+      const mid = (lo + hi) / 2, r = evalAt(mid);
+      if (r.ok) lo = mid; else { hi = mid; fail = r; }
+    }
+    return { cap: lo, kind: fail.kinds[0], kinds: fail.kinds, fail, atCap: evalAt(lo) };
+  }
+  /** ホスティング容量：個別（各節点）と一律（全節点に同じ kW ずつ） */
+  function hostingCapacity(m, c, opt = {}) {
+    const prep = hcPrepare(m, c), N = m.sections.length;
+    const nodes = [];
+    const list = opt.nodes || Array.from({ length: N }, (_, i) => i + 1);
+    for (const k of list) {
+      const r = hcSearch(x => hcEval(prep, c, [[k, 1]], x));
+      nodes.push(Object.assign({ node: k }, r));
+    }
+    let uniform = null;
+    if (opt.uniform !== false) {
+      const alloc = Array.from({ length: N }, (_, i) => [i + 1, 1 / N]);
+      uniform = hcSearch(x => hcEval(prep, c, alloc, x), 100, 40000);
+      uniform.alloc = alloc;
+    }
+    return { nodes, uniform, prep, cond: clone(c) };
+  }
+
   function applyLdcDemo(m) {
     const R = m.sections.reduce((a, s) => a + s.len * s.r, 0), X = m.sections.reduce((a, s) => a + s.len * s.x, 0);
     Object.assign(m.lrt, { mode: 'auto', ldc: true, rc: +R.toFixed(3), xc: +X.toFixed(3), target: 6600 });
@@ -653,6 +750,71 @@ const FeederCalc = (() => {
       T('9. 「LDCの影響デモ」（補償しすぎ）で上限超過が出る', s.max > m.limits.hi,
         `Rc ${m.lrt.rc} Ω・Xc ${m.lrt.xc} Ω・目標 ${m.lrt.target} V、太陽光0%・DC接続\nLRT タップ ${r.taps.lrt >= 0 ? '+' : ''}${r.taps.lrt}（${r.status === 'settled' ? '整定' : r.status}${r.limited.length ? '・タップ限界' : ''}）、母線 ${f1(r.pf.Vll[0])} V、最高 ${f1(s.max)} V（節点${s.iMax}）、逸脱 ${s.viol} 節点`);
     }
+    // HC1. 区間1つ（R=0.8Ω, X=0）・末端の太陽光・力率1 → P = V_r (V_r − V_s) / R
+    {
+      const m = defaultModel();
+      m.sections = [{ len: 1, r: 0.8, x: 0, amp: 300 }]; m.svrs = []; m.devices = [];
+      m.lrt.mode = 'manual'; m.lrt.tap = 0; m.limits.hi = 6900;
+      const c = { pf: 1, loadFactor: 0.3, dcOn: false, tapMode: 'fixed', existingPv: 0, revMW: null };
+      const r = hostingCapacity(m, c, { uniform: false }).nodes[0];
+      const exact = 6900 * 300 / 0.8 / 1000, approx = 300 * 6600 / 0.8 / 1000;
+      const err = Math.abs(r.cap - exact) / exact * 100, errA = (r.cap - approx) / approx * 100;
+      T('HC1. 区間1つ・末端の太陽光の限界容量が手計算と一致（2%以内）', err < 2 && r.kind === 'voltage',
+        `R=0.8Ω, X=0, 母線6,600V, 上限6,900V, 力率1, タップ固定\n計算 ${f1(r.cap)} kW（決まった制約: ${HC_KIND[r.kind]}、限界点の末端 ${f1(r.atCap.vmax)} V）\n手計算 P = V_r(V_r−V_s)/R = 6,900×300÷0.8 = ${f1(exact)} kW → 誤差 ${f3(err)} %\n（参考）V に送電端 6,600V を使う近似 300×6,600÷0.8 = ${f1(approx)} kW とは ${f2(errA)} % の差`);
+    }
+    // HC2. 限界容量で違反なし、1%増で違反
+    {
+      const out = []; let ok = true;
+      for (const tapMode of ['fixed', 'auto']) {
+        const m = defaultModel();
+        const c = Object.assign({}, m.hc, { tapMode });
+        const res = hostingCapacity(m, c);
+        const prep = res.prep;
+        let n = 0, bad = [];
+        const chk = (alloc, r, label) => {
+          if (r.capped || r.cap <= 0) return;
+          n++;
+          const a = hcEval(prep, c, alloc, r.cap), b = hcEval(prep, c, alloc, r.cap * 1.01);
+          if (!a.ok || b.ok) bad.push(`${label}: 限界 ${f1(r.cap)}kW ${a.ok ? '違反なし' : '違反あり'} / +1% ${b.ok ? '違反なし' : '違反あり'}`);
+        };
+        res.nodes.forEach(r => chk([[r.node, 1]], r, '節点' + r.node));
+        chk(res.uniform.alloc, res.uniform, '一律');
+        if (bad.length) ok = false;
+        out.push(`タップ${tapMode === 'fixed' ? '固定' : '自動'}: ${n} ケース中 ${n - bad.length} ケースで「限界で違反なし・1%増で違反」` + (bad.length ? '\n  ' + bad.join('\n  ') : ''));
+      }
+      T('HC2. 限界容量で制約違反がなく、1%増やすと違反になる（全節点＋一律）', ok, out.join('\n'));
+    }
+    // HC3. 軽負荷係数を上げると限界容量が増える（末端）
+    {
+      const out = []; let ok = true;
+      for (const tapMode of ['fixed', 'auto']) {
+        const m = defaultModel(), N = m.sections.length;
+        const cap = lf => hostingCapacity(m, Object.assign({}, m.hc, { tapMode, loadFactor: lf }), { nodes: [N], uniform: false }).nodes[0];
+        const a = cap(0.3), b = cap(0.6);
+        if (tapMode === 'fixed' && !(b.cap > a.cap)) ok = false;
+        out.push(`タップ${tapMode === 'fixed' ? '固定' : '自動'}${tapMode === 'auto' ? '（参考）' : ''}: 節点${N} 係数0.3 → ${f1(a.cap)} kW（${HC_KIND[a.kind]}）、0.6 → ${f1(b.cap)} kW（${HC_KIND[b.kind]}）、${b.cap > a.cap ? '増加' : '増加せず'} ${f1(b.cap - a.cap)} kW`);
+      }
+      T('HC3. 軽負荷係数を上げる（負荷が増える）と、限界容量が増える', ok, out.join('\n'));
+    }
+    // HC4. 力率を遅れにすると、電圧で決まる節点の限界容量が増える
+    {
+      const run = amp => {
+        const m = defaultModel(); if (amp) m.sections.forEach(s => s.amp = amp);
+        return [hostingCapacity(m, Object.assign({}, m.hc, { pf: 1.0 })), hostingCapacity(m, Object.assign({}, m.hc, { pf: 0.95 }))];
+      };
+      const row = (r, s) => `節点${r.node}: ${f1(r.cap)}（${HC_KIND[r.kind]}）→ ${f1(s.cap)} kW（${HC_KIND[s.kind]}） ${((s.cap / r.cap - 1) * 100).toFixed(1)}%`;
+      // 判定：許容電流を 1,000A に緩め、電圧上限で決まる状態で比べる
+      const [a1, a2] = run(1000);
+      const vol = a1.nodes.filter(r => r.kind === 'voltage');
+      const inc = vol.filter(r => a2.nodes.find(x => x.node === r.node).cap > r.cap);
+      // 参考：初期の許容電流 300A
+      const [b1, b2] = run(null);
+      T('HC4. 力率0.95遅れ（無効電力を吸収）で、電圧上限で決まる節点の限界容量が増える', vol.length > 0 && inc.length === vol.length && a2.uniform.cap > a1.uniform.cap,
+        `【判定】許容電流 1,000A（電圧上限で決まる条件）・タップ固定：電圧上限で決まる節点 ${vol.length} 件中 ${inc.length} 件で増加\n` +
+        a1.nodes.map((r, i) => row(r, a2.nodes[i])).join('\n') + `\n一律: ${f1(a1.uniform.cap)} → ${f1(a2.uniform.cap)} kW（${((a2.uniform.cap / a1.uniform.cap - 1) * 100).toFixed(1)}%）\n` +
+        `【参考】初期の許容電流 300A：力率を下げると電流が約5%増えるため、先に熱容量で決まり、容量は減る節点が多い\n` +
+        b1.nodes.map((r, i) => row(r, b2.nodes[i])).join('\n') + `\n一律: ${f1(b1.uniform.cap)} → ${f1(b2.uniform.cap)} kW`);
+    }
     // 補助: 潮流の収束とエネルギー収支
     {
       const m = defaultModel(); const r = settle(m); const pf = r.pf;
@@ -664,7 +826,7 @@ const FeederCalc = (() => {
     return res;
   }
 
-  return { applyLdcDemo, scenarioCheck, defaultModel, powerFlow, settle, controlVoltage, regFlow, regOrder, summarize, ldcSweep, nodeX, nodeLoads, deviceLoad, currentTaps, runTests, clone, SQ3 };
+  return { hostingCapacity, hcEval, checkConstraints, HC_KIND, applyLdcDemo, scenarioCheck, defaultModel, powerFlow, settle, controlVoltage, regFlow, regOrder, summarize, ldcSweep, nodeX, nodeLoads, deviceLoad, currentTaps, runTests, clone, SQ3 };
 })();
 
 /* =====================================================================
@@ -894,6 +1056,8 @@ const FeederCalc = (() => {
     const base = state.base && state.base.nSec === m.sections.length ? state.base.pf : null;
     if (base) series.push({ name: '比較用（動かす前）', color: 'var(--ghost)', dash: '5 4', width: 2, opacity: .9, pts: profilePts(base, conv) });
     series.push({ name: state.freeze ? '現在（タップ固定）' : '現在（整定後）', color: 'var(--s1)', width: 2.5, pts: profilePts(pf, conv) });
+    const hco = state.hcOverlay && state.hcOverlay.pf.Vll.length === xs.length ? state.hcOverlay : null;
+    if (hco) series.push({ name: hco.label, color: 'var(--hcline)', dash: '2 3', width: 2.5, pts: profilePts(hco.pf, conv) });
     $('#profLegend').innerHTML = legendHTML(series.slice().reverse());
     const devAt = k => m.devices.filter(d => d.node === k).map(d => typeLabel[d.type]).join('・');
     lineChart($('#profChart'), {
@@ -907,6 +1071,7 @@ const FeederCalc = (() => {
         let h = `<b>節点 ${k}</b>（${fmt(xs[k], 2)} km）<br>${vText(v)}${(v < m.limits.lo || v > m.limits.hi) ? ' <b style="color:var(--bad)">逸脱</b>' : ''}`;
         if (Math.abs(pf.aNode[k] - 1) > 1e-12 || m.svrs.some(s => s.node === k)) h += `<br>SVR 出力側 ${vText(v * pf.aNode[k])}`;
         if (base) h += `<br><span style="color:var(--text-2)">比較用 ${fmt(base.Vll[k])} V（${sgnV(v - base.Vll[k])} V）</span>`;
+        if (hco) h += `<br><span style="color:var(--text-2)">ホスティング容量の限界点 ${fmt(hco.pf.Vll[k])} V</span>`;
         const dv = devAt(k); if (dv) h += `<br><span style="color:var(--text-2)">${dv}</span>`;
         return h;
       }
@@ -1085,6 +1250,176 @@ const FeederCalc = (() => {
   };
   $('#ldcOffTarget').addEventListener('input', e => { const v = parseFloat(e.target.value); if (isFinite(v)) { M().lrt.targetOff = v; renderLdc(); } });
 
+  /* ---------- 5. ホスティング容量 ---------- */
+  const HC_COLOR = { voltage: 'var(--s1)', thermal: 'var(--s2)', reverse: 'var(--s3)', capped: 'var(--ghost)', base: 'var(--bad)' };
+  function renderHcFields() {
+    const m = M(), c = m.hc, box = $('#hcFields'); box.innerHTML = '';
+    const nf = (label, key, o) => {
+      const l = document.createElement('label');
+      l.innerHTML = `${label}<input type="number" step="${o.step}" min="${o.min}" ${o.max !== undefined ? `max="${o.max}"` : ''} value="${c[key] ?? ''}" ${o.ph ? `placeholder="${o.ph}"` : ''}>`;
+      l.querySelector('input').addEventListener('input', e => {
+        const s = e.target.value.trim();
+        if (o.nullable && s === '') { c[key] = null; return; }
+        const v = parseFloat(s); if (!isFinite(v) || v < o.min || (o.max !== undefined && v > o.max)) return;
+        c[key] = v;
+      });
+      return l;
+    };
+    box.append(
+      nf('太陽光の力率（追加分）', 'pf', { step: 0.01, min: 0.5, max: 1 }),
+      nf('比較する力率（遅れ）', 'pf2', { step: 0.01, min: 0.5, max: 1 }),
+      nf('軽負荷係数（負荷×）', 'loadFactor', { step: 0.05, min: 0, max: 2 }),
+      nf('既存の太陽光の出力 (%)', 'existingPv', { step: 5, min: 0, max: 100 }),
+      nf('逆潮流の上限 (MW・空欄=無制限)', 'revMW', { step: 0.5, min: 0, nullable: true, ph: '無制限' })
+    );
+    const dl = document.createElement('label'); dl.className = 'chk';
+    dl.innerHTML = `<input type="checkbox" ${c.dcOn ? 'checked' : ''}>データセンター ON`;
+    dl.querySelector('input').onchange = e => { c.dcOn = e.target.checked; };
+    box.appendChild(dl);
+    [...$('#hcTapSeg').children].forEach(b => b.classList.toggle('on', b.dataset.t === c.tapMode));
+  }
+  $('#hcTapSeg').onclick = e => { const b = e.target.closest('button'); if (!b) return; M().hc.tapMode = b.dataset.t; renderHcFields(); };
+
+  function runHc() {
+    const m = M(), c = m.hc;
+    $('#hcStatus').textContent = '計算中…';
+    $('#hcRun').disabled = true;
+    setTimeout(() => {
+      const t0 = performance.now();
+      const r1 = F.hostingCapacity(m, Object.assign({}, c));
+      const r2 = Math.abs(c.pf2 - c.pf) > 1e-9 ? F.hostingCapacity(m, Object.assign({}, c, { pf: c.pf2 })) : null;
+      state.hc = { r1, r2, nSec: m.sections.length, sel: null };
+      selectHc('min');
+      $('#hcStatus').textContent = `計算時間 ${fmt((performance.now() - t0) / 1000, 1)} 秒`;
+      $('#hcRun').disabled = false;
+      renderHc();
+    }, 30);
+  }
+  $('#hcRun').onclick = runHc;
+
+  function selectHc(sel) {
+    const hc = state.hc; if (!hc) return;
+    if (sel === 'min') { const nodes = hc.r1.nodes.filter(n => n.kind !== 'capped'); sel = nodes.length ? nodes.reduce((a, b) => b.cap < a.cap ? b : a).node : 'uniform'; }
+    hc.sel = sel;
+    const r = sel === 'uniform' ? hc.r1.uniform : hc.r1.nodes.find(n => n.node === sel);
+    state.hcOverlay = r && r.atCap ? { pf: r.atCap.pf, label: `ホスティング容量の限界点（${sel === 'uniform' ? '一律 合計' : '節点' + sel + ' に'} ${fmt(r.cap / 1000, 2)} MW）` } : null;
+    renderProfile();
+  }
+
+  function barChart(host, o) {
+    const W = Math.max(280, Math.round(host.clientWidth || 600)), H = W < 520 ? 240 : 270;
+    const ml = 46, mr = 10, mt = 14, mb = 34, pw = W - ml - mr, ph = H - mt - mb;
+    const vmax = Math.max(...o.items.map(i => i.v), 0.001) * 1.12;
+    const ticks = niceTicks(0, vmax, 5);
+    const ymax = Math.max(vmax, ticks[ticks.length - 1]);
+    const Y = v => mt + ph - v / ymax * ph;
+    const n = o.items.length, bw = pw / n, barW = Math.max(6, Math.min(36, bw * 0.62));
+    const g = [];
+    ticks.forEach(t => { g.push(`<line x1="${ml}" x2="${ml + pw}" y1="${Y(t)}" y2="${Y(t)}" stroke="var(--grid)"/><text x="${ml - 6}" y="${Y(t) + 4}" text-anchor="end">${o.yFmt(t)}</text>`); });
+    g.push(`<text x="4" y="10">${esc(o.yLabel)}</text>`);
+    o.items.forEach((it, i) => {
+      const cx = ml + bw * (i + 0.5), y = Y(it.v), h = Math.max(0, mt + ph - y);
+      const r = Math.min(4, h / 2, barW / 2);
+      const x0 = cx - barW / 2;
+      const d = h > 0 ? `M${x0} ${mt + ph}V${y + r}Q${x0} ${y} ${x0 + r} ${y}H${x0 + barW - r}Q${x0 + barW} ${y} ${x0 + barW} ${y + r}V${mt + ph}Z` : '';
+      g.push(`<path d="${d}" fill="${it.color}" ${it.sel ? 'stroke="var(--text)" stroke-width="2"' : ''}/>`);
+      if (it.label) g.push(`<text x="${cx}" y="${y - 5}" text-anchor="middle" style="fill:var(--text);font-weight:600">${esc(it.label)}</text>`);
+      g.push(`<text x="${cx}" y="${mt + ph + 14}" text-anchor="middle">${esc(it.x)}</text>`);
+    });
+    g.push(`<line x1="${ml}" x2="${ml + pw}" y1="${mt + ph}" y2="${mt + ph}" stroke="var(--muted)"/>`);
+    g.push(`<text x="${ml + pw}" y="${H - 4}" text-anchor="end">${esc(o.xLabel)}</text>`);
+    host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(o.aria)}">${g.join('')}<rect class="hit" x="${ml}" y="${mt}" width="${pw}" height="${ph}" fill="transparent" style="cursor:pointer"/></svg><div class="tip"></div>`;
+    const svg = host.querySelector('svg'), tip = host.querySelector('.tip');
+    const idx = ev => { const r = svg.getBoundingClientRect(); const px = (ev.clientX - r.left) * W / r.width; return Math.max(0, Math.min(n - 1, Math.floor((px - ml) / bw))); };
+    svg.addEventListener('pointermove', ev => {
+      const i = idx(ev), r = svg.getBoundingClientRect();
+      tip.innerHTML = o.tip(i); tip.style.display = 'block';
+      const left = (ml + bw * (i + 0.5)) * r.width / W, tw = tip.offsetWidth, hw = host.clientWidth;
+      tip.style.left = Math.max(0, Math.min(hw - tw, left + (left > hw / 2 ? -tw - 12 : 12))) + 'px';
+      tip.style.top = Math.max(0, ev.clientY - r.top - 20) + 'px';
+    });
+    svg.addEventListener('pointerleave', () => { tip.style.display = 'none'; });
+    svg.addEventListener('click', ev => o.onClick && o.onClick(idx(ev)));
+  }
+
+  function hcExplain(r1) {
+    const m = M(), xs = F.nodeX(m), nodes = r1.nodes;
+    if (!nodes.length) return '';
+    if (nodes.every(n => n.kind === 'base')) {
+      const f = nodes[0].fail;
+      return `<b class="fail">太陽光を追加する前から制約を超えています</b>（${f.kinds.map(k => F.HC_KIND[k]).join('・')}：最高 ${fmt(f.vmax)} V、最大電流比 ${fmt(f.iRatio * 100, 1)}%、LRT 通過 ${fmt(f.pLrt / 1000, 2)} MW）。` +
+        `LRT・SVR の手動タップ、軽負荷係数、既存の太陽光の出力、逆潮流の上限を見直してください。`;
+    }
+    const Rth = k => m.sections.slice(0, k).reduce((a, s) => a + s.len * s.r, 0);
+    const first = nodes[0], last = nodes[nodes.length - 1];
+    const lim = n => n.capped ? `${fmt(n.cap / 1000, 1)} MW 以上` : `${fmt(n.cap / 1000, 2)} MW`;
+    let dec = 0; for (let i = 1; i < nodes.length; i++) if (nodes[i].cap <= nodes[i - 1].cap * 1.001) dec++;
+    const frac = dec / Math.max(1, nodes.length - 1);
+    const by = kind => nodes.filter(n => n.kind === kind).map(n => n.node);
+    const fmtList = a => a.length ? '節点' + a.join('・') : 'なし';
+    const vNodes = nodes.filter(n => n.kind === 'voltage');
+    const big = first.cap >= last.cap;
+    let s = `<b>変電所に近い節点ほど大きいか：</b>節点1 は ${lim(first)}、末端の節点${last.node} は ${lim(last)}。` +
+      (big ? `変電所に近い節点のほうが <b>${fmt(first.cap / Math.max(last.cap, 1), 1)} 倍</b>大きく、` : '末端のほうが大きく、') +
+      `隣の節点より小さくなる（または同じ）箇所は ${dec}/${nodes.length - 1} か所で、` +
+      (frac >= 0.8 ? '<b>末端に向かってほぼ一様に小さくなります</b>。' : frac >= 0.5 ? '途中で増える箇所もありますが、おおむね末端ほど小さくなります。' : '距離と容量の関係ははっきりしません（SVR やタップの影響）。') + '<br>';
+    s += `<b>決まった制約：</b>電圧上限 ${fmtList(by('voltage'))}／熱容量 ${fmtList(by('thermal'))}／逆潮流 ${fmtList(by('reverse'))}` + (by('capped').length ? `／探索上限（20MW まで違反なし）${fmtList(by('capped'))}` : '') + (by('base').length ? `／初期状態で違反 ${fmtList(by('base'))}` : '') + '。<br>';
+    s += `<b>理由：</b>節点 k に P を入れたときの電圧上昇は ΔV ≒ R<sub>th</sub>(k) × P ÷ V（R<sub>th</sub> は母線から節点 k までの抵抗の合計。X の分は力率1なら小さい）。` +
+      `R<sub>th</sub> は節点1 で ${fmt(Rth(1), 3)} Ω、節点${last.node} で ${fmt(Rth(last.node), 3)} Ω と ${fmt(Rth(last.node) / Rth(1), 1)} 倍なので、末端ほど少ない量で上限に届きます。` +
+      `変電所に近い節点は電圧が上がりにくく、先に<b>熱容量</b>や<b>逆潮流</b>の制約に当たります。` +
+      (vNodes.length ? ` 電圧で決まる節点の例：節点${vNodes[0].node} の限界点の最高電圧 ${fmt(vNodes[0].atCap.vmax)} V。` : '') +
+      (m.svrs.length && r1.cond.tapMode === 'fixed' ? ' SVR より下流は、SVR の出力電圧（タップ固定）が高いほど余裕が小さくなります。' : '');
+    return s;
+  }
+
+  function renderHc() {
+    const hc = state.hc, m = M();
+    if (!hc || hc.nSec !== m.sections.length) { $('#hcBody').innerHTML = ''; return; }
+    const { r1, r2 } = hc, c = r1.cond;
+    const legend = ['voltage', 'thermal', 'reverse', 'capped'].map(k => `<span><svg viewBox="0 0 12 12" style="width:12px;height:12px" aria-hidden="true"><rect width="12" height="12" rx="3" fill="${HC_COLOR[k]}"/></svg>${F.HC_KIND[k]}で決まる</span>`).join('');
+    const u = r1.uniform;
+    const condTxt = `力率 ${c.pf}、軽負荷係数 ${c.loadFactor}、DC ${c.dcOn ? 'ON' : 'OFF'}、タップ${c.tapMode === 'fixed' ? '固定' : '自動'}、既存の太陽光 ${c.existingPv}%、逆潮流上限 ${c.revMW === null ? '無制限' : c.revMW + ' MW'}`;
+    let cmp = '';
+    if (r2) {
+      const rows = r1.nodes.map((a, i) => { const b = r2.nodes[i]; const pct = a.cap > 0 ? (b.cap / a.cap - 1) * 100 : 0; return `<tr><td>節点${a.node}</td><td>${fmt(a.cap)}</td><td>${F.HC_KIND[a.kind]}</td><td>${fmt(b.cap)}</td><td>${F.HC_KIND[b.kind]}</td><td class="${pct < 0 ? 'bad' : ''}">${pct >= 0 ? '+' : '−'}${fmt(Math.abs(pct), 1)}%</td></tr>`; }).join('');
+      const pu = u.cap > 0 ? (r2.uniform.cap / u.cap - 1) * 100 : 0;
+      cmp = `<h3>力率による違い（${c.pf} → ${M().hc.pf2} 遅れ：無効電力を吸収）</h3>
+        <div class="tbl" style="max-height:340px;overflow:auto"><table><thead><tr><th>節点</th><th>力率${c.pf} kW</th><th>制約</th><th>力率${r2.cond.pf} kW</th><th>制約</th><th>増減</th></tr></thead><tbody>${rows}
+        <tr class="max"><td>一律（合計）</td><td>${fmt(u.cap)}</td><td>${F.HC_KIND[u.kind]}</td><td>${fmt(r2.uniform.cap)}</td><td>${F.HC_KIND[r2.uniform.kind]}</td><td>${pu >= 0 ? '+' : '−'}${fmt(Math.abs(pu), 1)}%</td></tr></tbody></table></div>
+        <div class="note">遅れ力率で無効電力を吸収すると、電圧上昇 ΔV ≒ (R·P − X·Q<sub>吸収</sub>)/V が小さくなり、<b>電圧上限で決まる節点は容量が増えます</b>。一方、電流は P/(√3·V·力率) と増えるので、<b>熱容量で決まる節点は容量が減ります</b>。</div>`;
+    }
+    $('#hcBody').innerHTML = `
+      <div class="note" style="margin:8px 0 4px">条件：${condTxt}</div>
+      <div class="tiles" style="margin:6px 0">
+        <div class="tile"><div class="k">一律モード（全節点に同じ量）</div><div class="v">${fmt(u.cap / 1000, 2)} MW</div><div class="s">${F.HC_KIND[u.kind]}で決まる・1節点あたり ${fmt(u.cap / m.sections.length)} kW</div></div>
+        <div class="tile"><div class="k">個別モードの最小</div><div class="v">${fmt(Math.min(...r1.nodes.map(n => n.cap)) / 1000, 2)} MW</div><div class="s">節点${r1.nodes.reduce((a, b) => b.cap < a.cap ? b : a).node}</div></div>
+        <div class="tile"><div class="k">個別モードの最大</div><div class="v">${fmt(Math.max(...r1.nodes.map(n => n.cap)) / 1000, 2)} MW</div><div class="s">節点${r1.nodes.reduce((a, b) => b.cap > a.cap ? b : a).node}</div></div>
+      </div>
+      <h3>節点ごとの限界容量（個別モード：その節点だけに追加）</h3>
+      <div class="legend">${legend}</div>
+      <div class="chart" id="hcChart"></div>
+      <div class="row" style="margin:4px 0"><span class="note">棒をクリックすると、その限界点の電圧を「1. 電圧プロファイル」に重ねます（今：${hc.sel === 'uniform' ? '一律' : '節点' + hc.sel}）。</span><button type="button" class="sm" id="hcUni">一律の限界点を重ねる</button><button type="button" class="sm" id="hcOff">重ねるのをやめる</button></div>
+      <p class="note" style="margin:6px 0">${hcExplain(r1)}</p>
+      ${cmp}`;
+    barChart($('#hcChart'), {
+      aria: '節点ごとのホスティング容量', yLabel: '限界容量 (MW)', xLabel: '節点（変電所 → 末端）', yFmt: v => fmt(v, 1),
+      items: r1.nodes.map((n, i, a) => {
+        const mn = a.reduce((x, y) => y.cap < x.cap ? y : x), mx = a.reduce((x, y) => y.cap > x.cap ? y : x);
+        return { x: String(n.node), v: n.cap / 1000, color: HC_COLOR[n.kind], sel: hc.sel === n.node, label: (n === mn || n === mx) ? fmt(n.cap / 1000, 2) : '' };
+      }),
+      tip: i => {
+        const n = r1.nodes[i], f = n.fail;
+        let h = `<b>節点 ${n.node}</b>（${fmt(F.nodeX(m)[n.node], 2)} km）<br>限界 ${n.capped ? '20 MW 以上（探索上限）' : fmt(n.cap) + ' kW'}<br>決まった制約：${F.HC_KIND[n.kind]}`;
+        if (n.atCap) h += `<br>限界点：最高 ${fmt(n.atCap.vmax)} V、最大電流比 ${fmt(n.atCap.iRatio * 100, 1)}%（区間${n.atCap.iSec}）、LRT 通過 ${fmt(n.atCap.pLrt / 1000, 2)} MW`;
+        if (r2) h += `<br>力率${r2.cond.pf}：${fmt(r2.nodes[i].cap)} kW（${F.HC_KIND[r2.nodes[i].kind]}）`;
+        return h;
+      },
+      onClick: i => { selectHc(r1.nodes[i].node); renderHc(); }
+    });
+    $('#hcUni').onclick = () => { selectHc('uniform'); renderHc(); };
+    $('#hcOff').onclick = () => { state.hcOverlay = null; hc.sel = null; renderProfile(); renderHc(); };
+  }
+
   /* ---------- 設定 UI ---------- */
   function numField(label, obj, key, opt = {}) {
     const l = document.createElement('label');
@@ -1217,8 +1552,8 @@ const FeederCalc = (() => {
     sf.insertAdjacentHTML('beforeend', '<div class="note" style="grid-column:1/-1">上下限 6,300〜6,900V は高圧側の目安としてのダミー値です<span class="dummy">根拠は要確認</span></div>');
     const uf = $('#upFields'); uf.innerHTML = '';
     uf.append(numField('短絡容量 (MVA)', m.upstream, 'scMVA', { step: 10, min: 0 }), numField('X/R', m.upstream, 'xr', { step: 0.5, min: 0 }));
-    const rows = m.sections.map((s, i) => `<tr><td>${i + 1}（${i}→${i + 1}）</td><td><input type="number" step="0.05" min="0.001" value="${s.len}" data-sec="${i}:len"></td><td><input type="number" step="0.01" min="0" value="${s.r}" data-sec="${i}:r"></td><td><input type="number" step="0.01" min="0" value="${s.x}" data-sec="${i}:x"></td></tr>`).join('');
-    $('#secTable').innerHTML = `<table><thead><tr><th>区間</th><th>長さ km</th><th>R Ω/km</th><th>X Ω/km</th></tr></thead><tbody>${rows}</tbody></table>`;
+    const rows = m.sections.map((s, i) => `<tr><td>${i + 1}（${i}→${i + 1}）</td><td><input type="number" step="0.05" min="0.001" value="${s.len}" data-sec="${i}:len"></td><td><input type="number" step="0.01" min="0" value="${s.r}" data-sec="${i}:r"></td><td><input type="number" step="0.01" min="0" value="${s.x}" data-sec="${i}:x"></td><td><input type="number" step="10" min="1" value="${s.amp ?? 300}" data-sec="${i}:amp"></td></tr>`).join('');
+    $('#secTable').innerHTML = `<table><thead><tr><th>区間</th><th>長さ km</th><th>R Ω/km</th><th>X Ω/km</th><th>許容電流 A</th></tr></thead><tbody>${rows}</tbody></table><div class="note">許容電流はホスティング容量（熱容量の制約）で使います。初期値 300A はダミーです。</div>`;
     $('#secTable').querySelectorAll('input').forEach(inp => inp.addEventListener('input', () => {
       const [i, k] = inp.dataset.sec.split(':'); const v = parseFloat(inp.value);
       if (!isFinite(v) || v < 0 || (k === 'len' && v <= 0)) return;
@@ -1232,7 +1567,7 @@ const FeederCalc = (() => {
     state.base = null; state.event = null;
     renderAll();
   }
-  $('#addSec').onclick = () => { const m = M(), last = m.sections[m.sections.length - 1] || { len: 0.7, r: 0.12, x: 0.3 }; m.sections.push({ ...last }); structureChanged(); };
+  $('#addSec').onclick = () => { const m = M(), last = m.sections[m.sections.length - 1] || { len: 0.7, r: 0.12, x: 0.3, amp: 300 }; m.sections.push({ ...last }); structureChanged(); };
   $('#delSec').onclick = () => { const m = M(); if (m.sections.length <= 1) return; m.sections.pop(); structureChanged(); };
   $('#resetAll').onclick = () => { state.model = F.defaultModel(); state.freeze = false; state.demoSaved = null; $('#ldcDemoBox').innerHTML = ''; $('#ldcDemoBack').hidden = true; $('#freeze').checked = false; structureChanged(); };
 
@@ -1246,13 +1581,14 @@ const FeederCalc = (() => {
   $('#runTests').onclick = showTests;
 
   /* ---------- 起動 ---------- */
-  function renderAll() { $('#ldcOffTarget').value = M().lrt.targetOff; renderSystem(); renderRegs(); renderDevices(); renderSliders(); recompute(); renderEvent(); }
+  function renderAll() { $('#ldcOffTarget').value = M().lrt.targetOff; if (state.hc && state.hc.nSec !== M().sections.length) { state.hc = null; state.hcOverlay = null; } renderHcFields(); renderHc(); renderSystem(); renderRegs(); renderDevices(); renderSliders(); recompute(); renderEvent(); }
   renderAll();
   state.base = null;
   let rz = 0;
-  window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { renderProfile(); renderEvent(); renderLdc(); }, 150); });
+  window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { renderProfile(); renderEvent(); renderLdc(); renderHc(); }, 150); });
   if (/[?&]demo=dc/.test(location.search)) { $('#evDc').click(); }
   if (/[?&]demo=ldc/.test(location.search)) { $('#ldcDemo').click(); }
+  if (/[?&]demo=hc/.test(location.search)) { runHc(); }
   if (/[?&]test=1/.test(location.search)) {
     const res = showTests();
     const m = M(), r = state.cur, s = F.summarize(m, r.pf);
