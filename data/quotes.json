@@ -1,16 +1,16 @@
 {
- "updatedAt": "2026-11-13T04:41:01+00:00",
+ "updatedAt": "2026-11-13T05:42:41+00:00",
  "source": "Yahoo!ファイナンス（yfinance で取得）",
  "quotes": {
   "^N225": {
-   "price": 61298.7383,
+   "price": 61226.0312,
    "prevClose": 60819.3594,
    "monthAgo": 67777.5234,
    "yearStart": 50339.4805,
    "date": "2026-11-13"
   },
   "^NDX": {
-   "price": 28289.1875,
+   "price": 28289.1895,
    "prevClose": 28374.25,
    "monthAgo": 30664.6992,
    "yearStart": 25249.8496,
@@ -24,28 +24,28 @@
    "date": "2026-11-12"
   },
   "USDJPY": {
-   "price": 159.902,
+   "price": 159.941,
    "prevClose": 159.734,
    "monthAgo": 158.52,
    "yearStart": 156.413,
    "date": "2026-11-13"
   },
   "7203": {
-   "price": 3423.0,
+   "price": 3420.0,
    "prevClose": 3408.0,
    "monthAgo": 2984.0,
    "yearStart": 3356.0,
    "date": "2026-11-13"
   },
   "6758": {
-   "price": 4352.0,
+   "price": 4355.0,
    "prevClose": 4281.0,
    "monthAgo": 3814.0,
    "yearStart": 4024.0,
    "date": "2026-11-13"
   },
   "9984": {
-   "price": 3548.0,
+   "price": 3544.0,
    "prevClose": 3738.0,
    "monthAgo": 5310.0,
    "yearStart": 4400.0,
