@@ -1,0 +1,1266 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>配電線 電圧見える化</title>
+<style>
+:root{
+  color-scheme:light;
+  --bg:#f4f4f2; --surface:#fcfcfb; --surface-2:#f0efec; --border:#dddcd6;
+  --text:#0b0b0b; --text-2:#52514e; --muted:#85847f; --grid:#e8e7e2;
+  --s1:#2a78d6; --s2:#eb6834; --ghost:#a3a29c;
+  --band:rgba(42,120,214,.07); --band-edge:#9ec5f4;
+  --bad:#d03b3b; --bad-bg:rgba(227,73,72,.12);
+  --warn:#9a5c00; --warn-bg:rgba(237,161,0,.16);
+  --good:#0f7b3f; --good-bg:rgba(0,131,0,.10);
+  --i-load:#85847f; --i-pv:#c98500; --i-bess:#199e70; --i-dc:#6250d6; --i-reg:#52514e;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#111110; --surface:#1a1a19; --surface-2:#242422; --border:#363531;
+    --text:#f0efec; --text-2:#c3c2b7; --muted:#8f8e86; --grid:#2c2b28;
+    --s1:#3987e5; --s2:#d95926; --ghost:#6f6e68;
+    --band:rgba(57,135,229,.10); --band-edge:#1c5cab;
+    --bad:#e66767; --bad-bg:rgba(230,103,103,.16);
+    --warn:#e0a63a; --warn-bg:rgba(201,133,0,.18);
+    --good:#4cc27a; --good-bg:rgba(0,131,0,.18);
+    --i-load:#8f8e86; --i-pv:#c98500; --i-bess:#199e70; --i-dc:#9085e9; --i-reg:#c3c2b7;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#111110; --surface:#1a1a19; --surface-2:#242422; --border:#363531;
+  --text:#f0efec; --text-2:#c3c2b7; --muted:#8f8e86; --grid:#2c2b28;
+  --s1:#3987e5; --s2:#d95926; --ghost:#6f6e68;
+  --band:rgba(57,135,229,.10); --band-edge:#1c5cab;
+  --bad:#e66767; --bad-bg:rgba(230,103,103,.16);
+  --warn:#e0a63a; --warn-bg:rgba(201,133,0,.18);
+  --good:#4cc27a; --good-bg:rgba(0,131,0,.18);
+  --i-load:#8f8e86; --i-pv:#c98500; --i-bess:#199e70; --i-dc:#9085e9; --i-reg:#c3c2b7;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);font:14px/1.55 system-ui,-apple-system,"Segoe UI","Hiragino Sans","Yu Gothic UI",Meiryo,sans-serif;-webkit-text-size-adjust:100%}
+.wrap{max-width:1280px;margin:0 auto;padding:12px 16px 48px}
+header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:4px 0 10px}
+header h1{font-size:20px;margin:0;font-weight:700}
+header .sub{color:var(--text-2);font-size:12px}
+header .sp{flex:1}
+button,select,input{font:inherit;color:inherit}
+button{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 12px;cursor:pointer;min-height:34px}
+button:hover{border-color:var(--text-2)}
+button.primary{background:var(--s1);border-color:var(--s1);color:#fff}
+button.sm{padding:2px 8px;min-height:28px;font-size:12px}
+button.danger{color:var(--bad)}
+select,input[type=number],input[type=text]{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:4px 6px;min-height:30px}
+input[type=number]{width:84px}
+input[type=range]{width:100%;accent-color:var(--s1)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px;min-width:0}
+.card h2{font-size:15px;margin:0 0 8px;font-weight:700}
+.card h3{font-size:13px;margin:12px 0 6px;color:var(--text-2)}
+.note{color:var(--text-2);font-size:12px}
+.dummy{display:inline-block;font-size:11px;color:var(--warn);background:var(--warn-bg);border-radius:4px;padding:0 6px;margin-left:6px;font-weight:600;vertical-align:middle}
+details.card>summary{cursor:pointer;font-weight:700;font-size:15px}
+details.card[open]>summary{margin-bottom:8px}
+.layout{display:grid;grid-template-columns:minmax(0,1fr);gap:0 12px}
+@media (min-width:1000px){.layout{grid-template-columns:minmax(0,1.55fr) minmax(340px,1fr)}}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(138px,1fr));gap:8px;margin-bottom:12px}
+.tile{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px 10px;min-width:0}
+.tile .k{font-size:11px;color:var(--text-2)}
+.tile .v{font-size:19px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.3;word-break:break-all}
+.tile .s{font-size:11px;color:var(--muted)}
+.tile.bad{border-color:var(--bad);background:var(--bad-bg)}
+.tile.warn{border-color:var(--warn);background:var(--warn-bg)}
+.alert{border-radius:10px;padding:8px 12px;margin-bottom:10px;font-size:13px;border:1px solid}
+.alert.warn{border-color:var(--warn);background:var(--warn-bg)}
+.alert.bad{border-color:var(--bad);background:var(--bad-bg)}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.chart{position:relative;width:100%;touch-action:pan-y}
+.chart svg{display:block;width:100%;height:auto;overflow:visible}
+.chart text{fill:var(--text-2);font-size:11px}
+.tip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 8px;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.15);white-space:nowrap;z-index:5;display:none;font-variant-numeric:tabular-nums}
+.tip b{font-weight:700}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--text-2);margin:2px 0 4px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend svg{width:26px;height:10px}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.seg button{border:0;border-radius:0;min-height:28px;padding:2px 10px;font-size:12px}
+.seg button.on{background:var(--s1);color:#fff}
+.sl{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;margin:6px 0}
+.sl label{font-size:12px;color:var(--text-2)}
+.sl output{font-variant-numeric:tabular-nums;font-size:13px;font-weight:600;text-align:right}
+.sl input{grid-column:1/-1}
+table{border-collapse:collapse;width:100%;font-size:12px;font-variant-numeric:tabular-nums}
+th,td{padding:4px 6px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap}
+th{color:var(--text-2);font-weight:600;position:sticky;top:0;background:var(--surface)}
+td:first-child,th:first-child{text-align:left}
+tr.max td{background:var(--warn-bg);font-weight:700}
+td.bad{color:var(--bad);font-weight:700}
+.tbl{overflow-x:auto;max-width:100%}
+.reg{border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:10px;background:var(--surface-2)}
+.reg .hd{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.reg .hd b{font-size:14px}
+.fields{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px 10px}
+.fields label{display:flex;flex-direction:column;font-size:11px;color:var(--text-2);gap:2px}
+.fields label input[type=number],.fields label select{width:100%}
+.fields label.chk{flex-direction:row;align-items:center;gap:6px;font-size:12px;color:var(--text)}
+.status{font-size:12px;color:var(--text-2);margin-top:6px;font-variant-numeric:tabular-nums}
+.dev{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:flex-end;padding:8px 0;border-bottom:1px solid var(--border)}
+.dev label{display:flex;flex-direction:column;font-size:11px;color:var(--text-2);gap:2px}
+.dev label.chk{flex-direction:row;align-items:center;gap:6px;font-size:12px;color:var(--text)}
+.dev input[type=number]{width:78px}
+.badge{display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:22px;border-radius:11px;font-size:11px;font-weight:700;color:#fff;padding:0 6px}
+.b-load{background:var(--i-load)}.b-pv{background:var(--i-pv)}.b-bess{background:var(--i-bess)}.b-dc{background:var(--i-dc)}
+.btns{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.pass{color:var(--good);font-weight:700}
+.fail{color:var(--bad);font-weight:700}
+.tests li{margin:6px 0}
+.tests .d{color:var(--text-2);font-size:12px;white-space:pre-wrap}
+ul.assume{margin:4px 0;padding-left:20px}
+ul.assume li{margin:2px 0}
+code{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:var(--surface-2);padding:0 4px;border-radius:4px}
+.formula{background:var(--surface-2);border-radius:8px;padding:8px 10px;margin:6px 0;font-family:ui-monospace,Consolas,monospace;font-size:12px;overflow-x:auto;white-space:pre}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div>
+    <h1>配電線 電圧見える化</h1>
+    <div class="sub">6.6kV 放射状配電線 / LRT・SVR タップ整定 / 前進後退法潮流計算</div>
+  </div>
+  <div class="sp"></div>
+  <button id="themeBtn" type="button" aria-label="表示テーマの切替">テーマ: 自動</button>
+</header>
+
+<details class="card" id="assume">
+  <summary>計算の前提と式（必ずお読みください）</summary>
+  <ul class="assume">
+    <li><b>3相平衡・単線表現。</b>負荷は<b>定電力</b>、太陽光・蓄電池・データセンターも<b>定電力出力（消費）</b>として扱います。</li>
+    <li><b>画面に出す電圧はすべて線間電圧</b>（公称 6,600V）。内部計算は<b>相電圧</b> V<sub>相</sub> = V<sub>線間</sub>/√3 の複素数で行い、相あたり電力は 3相電力÷3 を使います。R・X は 1相あたりの Ω です。</li>
+    <li>符号：負荷は消費が正。太陽光は発電（注入）。<b>蓄電池 P は放電（注入）が正・充電が負</b>、Q は注入（進み）が正。太陽光の力率が 1 未満のときは、無効電力を<b>吸収</b>（電圧上昇を抑える側）とします。</li>
+    <li>LRT 一次側は一定電圧。上位系統・LRT・SVR のインピーダンスは第1段階では無視（短絡容量・X/R は第2段階の事故計算用の入力欄のみ）。LRT・SVR は理想変圧器：比 a = 1 + n × (1段の変化率)、出力電圧 = a × 入力電圧、入力側電流 = a × 出力側電流。</li>
+    <li>SVR は「節点 k の下流側（区間 k+1 の入口）」に置きます。節点 k の負荷は SVR の上流側につながります。</li>
+    <li>潮流計算（前進後退法）：後退で I<sub>k</sub> = conj(S<sub>k</sub>/V<sub>k</sub>) を末端から足し上げ、前進で V<sub>k+1</sub> = a<sub>k</sub>·V<sub>k</sub> − Z<sub>k+1</sub>·I<sub>k+1</sub>。全節点の |ΔV| &lt; 1e-9 pu で収束、最大 100 回。</li>
+  </ul>
+  <div class="formula">LDC 制御点電圧（相・複素）:  V̇c = V̇out − (Rc + jXc) · İ
+表示・判定は線間:            Vc = √3 · |V̇c|        （LDC 切のときは Vc = √3·|V̇out|）
+近似式（参考）:              ΔVc ≒ √3 · I · (Rc·cosφ + Xc·sinφ)</div>
+  <ul class="assume">
+    <li>タップ整定（時間変化は扱わない静的計算）：潮流計算 → 上流（LRT → 節点順の SVR）から順に自動モードの機器を調べ、最初に見つかった「|Vc − 目標| &gt; 不感帯」の機器を 1段だけ動かす → 繰り返す。どの機器も動かなくなったら整定。<b>同じタップの組み合わせが再び現れたら「ハンチングの可能性」</b>として止めます。</li>
+    <li>LDC は機器を通る電流から線路の電圧降下を推定します。太陽光の逆潮流で電流が減る（逆向きになる）と降下を<b>過小に</b>見積もり、送り出し電圧を下げます。</li>
+    <li>電圧上下限（初期 6,300〜6,900V）は高圧側の目安としてのダミー値です<span class="dummy">根拠は要確認</span></li>
+    <li>LRT・SVR・線路・機器の初期値はすべてダミーです<span class="dummy">実機の値は要確認</span></li>
+  </ul>
+  <h3 style="font-size:13px;margin:10px 0 4px">ダミー値の決め方（LRT の LDC と目標電圧、SVR の目標電圧）</h3>
+  <ul class="assume">
+    <li>対象とする「初期状態」：太陽光 0〜100%（5% 刻み）× データセンター 接続／離脱のすべてのケース。</li>
+    <li>LRT の LDC は <b>SVR の入口（節点5）</b>の電圧を守る（SVR より下流は SVR が受け持つ）。</li>
+    <li>補償インピーダンスは、重負荷（太陽光0%・DC接続）のときに、LDC の推定降下 (Rc·P₀ + Xc·Q₀)/V と、母線〜節点5 の実際の降下 Σ(R<sub>k</sub>·P<sub>k</sub> + X<sub>k</sub>·Q<sub>k</sub>)/V が一致するように決める（P<sub>k</sub>, Q<sub>k</sub> は区間 k の通過電力）。</li>
+  </ul>
+  <div class="formula">Rc = Σ(k=1..5) R_k·P_k / P₀ = 0.408 Ω → 0.40 Ω      （参考：線路そのものは R = 0.456 Ω）
+Xc = Σ(k=1..5) X_k·Q_k / Q₀ = 0.923 Ω → 0.90 Ω      （参考：線路そのものは X = 1.140 Ω）
+重負荷 P₀ = 4,065 kW, Q₀ = 1,567 kvar（V = 6,600 V のとき）
+  → ΔV_LDC = (0.40×4,065k + 0.90×1,567k)/6,600 ≒ 460 V（実際の降下 480 V）
+  タップが上がり送出が約 6,765 V になると、P₀・Q₀ と V が変わり ΔV_LDC ≒ 425 V、実際 460 V（推定 − 実際 = −35 V）
+
+整定後 Vc ∈ [T−DB, T+DB]、送出 Vs = Vc + ΔV_LDC、節点5 V₅ ≒ Vc + (推定 − 実際)
+  上限:  T + DB + ΔV_LDC,max ≤ 6,900  →  T ≤ 6,900 − 50 − 425 = 6,425
+  下限:  T − DB − 35 ≥ 6,300          →  T ≥ 6,300 + 50 + 35 = 6,385
+  ハンチングしない: 2·DB > 1段 = 6,600 × 1.25% = 82.5 V  →  DB = ±50 V
+  送出電圧はタップで 6,600×(1 + n×1.25%) のとびとびの値しか取れないため、
+  6,385〜6,425 V の中で全ケースを計算し、上下の余裕が釣り合う値を選んだ
+  → LRT: T = 6,420 V, DB = ±50 V（全42ケースで 下限まで 54 V、上限まで 53 V の余裕）
+
+SVR（節点5 の下流）: 下流での最大降下 215 V、最大上昇 111 V
+  T − DB − 215 ≥ 6,300  かつ  T + DB + 111 ≤ 6,900  →  SVR: T = 6,650 V, DB = ±50 V</div>
+  <ul class="assume">
+    <li>T の取りうる幅が 40 V しかないのは、母線〜節点5 の降下（重負荷で約 460〜480 V）が許容幅 600 V の大半を使うためです。</li>
+    <li>LDC 切で送出電圧を固定する場合、節点5 までの降下は 14〜480 V と変わるため、全ケースで上下限に収まる送出電圧の幅は 600 − 466 − 2·DB ≒ 14 V しか残らず、実際上は成り立ちません。比較グラフの LDC 切（目標 6,800 V）で重負荷のときに逸脱が出るのはこのためで、LDC が必要な理由です。</li>
+  </ul>
+</details>
+
+<details class="card" id="howto" open>
+  <summary>計算のしくみ（初心者向け・5ステップ）</summary>
+  <ol class="assume" style="padding-left:22px">
+    <li><b>潮流計算</b>：各節点の負荷・発電から電流を求め、線路の抵抗・リアクタンスで電圧がどれだけ下がるかを計算します。電圧が変わると電流も変わるので、答えが動かなくなるまで繰り返します（前進後退法）。</li>
+    <li><b>制御点の電圧 Vc</b>：LRT・SVR が「見張る」電圧です。LDC 切なら機器の出口の電圧そのもの。LDC 入なら、出口の電圧から「この先の線路で下がるはずの分」を引いた、少し先の地点の推定電圧です。</li>
+    <li><b>タップの判定</b>：Vc が「目標 − 不感帯」より低ければ 1段上げ、「目標 + 不感帯」より高ければ 1段下げ、その間（帯の中）なら動きません。</li>
+    <li><b>1台・1段ずつ</b>：上流（LRT → 節点順の SVR）から見て、最初に帯の外にある 1台だけを 1段動かし、ステップ1 に戻ります。全台が帯の中に入れば「整定」。同じタップの組み合わせが 2度目に出たら、行ったり来たりしているので「ハンチングの可能性」として止めます。</li>
+    <li><b>表示</b>：整定したタップで計算した電圧を、プロファイル・表・タイルに出します。</li>
+  </ol>
+  <h3>不感帯（DB）とは</h3>
+  <p class="note" style="margin:0">「目標 ± DB の帯の中なら動かない」という遊びの幅です。1段動くと電圧は約「基準電圧 × 1段の変化率」だけ跳ぶので、<b>帯の幅（2 × DB）が 1段の跳びより狭いと、どのタップでも帯に入れず、上げ下げを繰り返します</b>（ハンチング）。<span id="howDb"></span></p>
+  <h3>操作の順番で結果が変わる理由</h3>
+  <p class="note" style="margin:0">帯の中ならどのタップでも止まるので、<b>止まってよいタップが 2つ以上ある</b>ことがあります。どれに止まるかは、出発点（直前のタップ）と、どの機器が先に動いたかで決まります。たとえば上流の LRT が先に動くと、下流全体の電圧が変わり、SVR が動く必要がなくなることがあります。実機でも同じことが起き、操作の履歴で整定位置が変わります（ヒステリシス）。このアプリは「上流を先に動かす」順に固定しています。<span id="howOrder"></span></p>
+  <h3>LDC の式</h3>
+  <div class="formula">Vc = Vs − ΔV_LDC          Vs：LRT の送り出し電圧
+ΔV_LDC ≒ (Rc × P + Xc × Q) ÷ V   P, Q：LRT を通る電力（3相）、V：線間電圧
+（正確には複素数で Vc = |V̇s − (Rc + jXc)·İ| を計算しています）</div>
+  <p class="note" style="margin:0" id="howLdc"></p>
+</details>
+
+<div id="alerts"></div>
+<div class="tiles" id="tiles"></div>
+
+<div class="layout">
+<div>
+  <section class="card" id="profileCard">
+    <div class="row" style="justify-content:space-between">
+      <h2 style="margin:0">1. 電圧プロファイル</h2>
+      <div class="seg" id="unitSeg"><button type="button" data-u="v" class="on">V</button><button type="button" data-u="pct">%</button></div>
+    </div>
+    <div class="legend" id="profLegend"></div>
+    <div id="profChart" class="chart"></div>
+    <div class="note">縦の破線が LRT・SVR の位置（ラベルはタップ位置）。その位置で線が縦に段差になります。下の丸は機器（負=負荷, PV=太陽光, 蓄=蓄電池, DC=データセンター）。帯は電圧上下限、赤い点は逸脱した節点。</div>
+
+    <h3>2. リアルタイム操作（動かす前の線を薄く残します）</h3>
+    <div id="sliders"></div>
+    <div class="row" style="margin-top:4px">
+      <label class="row" style="gap:6px;font-size:12px"><input type="checkbox" id="freeze"> タップを動かさない（変化直後を見る）</label>
+      <label class="row" style="gap:6px;font-size:12px"><input type="checkbox" id="autoBase" checked> 操作を始めたときの線を比較用にする</label>
+      <button type="button" class="sm" id="setBase">今の線を比較用にする</button>
+      <button type="button" class="sm" id="clearBase">比較線を消す</button>
+    </div>
+    <details style="margin-top:8px"><summary class="note" style="cursor:pointer">節点ごとの値（表）</summary><div class="tbl" id="nodeTable"></div></details>
+  </section>
+
+  <section class="card" id="eventCard">
+    <h2>3. 変化の3段表示（変化前 → 変化直後 → 整定後）</h2>
+    <div class="row note">
+      <label>蓄電池の変化量 <input type="number" id="evBess" value="500" step="50" min="0"> kW</label>
+      <label>太陽光の変化量 <input type="number" id="evPv" value="40" step="5" min="0" max="100"> ％</label>
+    </div>
+    <div class="btns" id="evBtns">
+      <button type="button" data-ev="bessCh">蓄電池 充電</button>
+      <button type="button" data-ev="bessDis">蓄電池 放電</button>
+      <button type="button" data-ev="pvUp">太陽光 増</button>
+      <button type="button" data-ev="pvDown">太陽光 減</button>
+      <button type="button" data-ev="dc" id="evDc">DC 離脱</button>
+    </div>
+    <div id="evBody"><div class="note">ボタンを押すと、変化前・変化直後（タップが動く前）・整定後（タップが動いたあと）の 3本の線と、節点ごとの電圧変化量を表示します。押した変化は、そのまま現在の状態になります。</div></div>
+  </section>
+
+  <section class="card" id="ldcCard">
+    <div class="row" style="justify-content:space-between">
+      <h2 style="margin:0">4. LDC の影響（太陽光 0〜100％）</h2>
+      <select id="ldcMetric" aria-label="表示する電圧">
+        <option value="end">末端電圧</option>
+        <option value="min">最低電圧</option>
+        <option value="max">最高電圧</option>
+      </select>
+    </div>
+    <div class="btns"><button type="button" id="ldcDemo">LDCの影響デモ</button><button type="button" id="ldcDemoBack" hidden>元の設定に戻す</button></div>
+    <div id="ldcDemoBox"></div>
+    <div class="row note" style="margin:6px 0"><label>LDC 切のときの LRT 送出目標 <input type="number" id="ldcOffTarget" step="10"> V</label><span class="dummy">ダミー</span></div>
+    <div class="legend" id="ldcLegend"></div>
+    <div id="ldcChart" class="chart"></div>
+    <div class="note" id="ldcNote"></div>
+  </section>
+</div>
+
+<div>
+  <details class="card" open>
+    <summary>LRT（配電用変電所）<span class="dummy">実機の値は要確認</span></summary>
+    <div id="lrtBox"></div>
+  </details>
+  <details class="card" open>
+    <summary>SVR（自動電圧調整器）<span class="dummy">実機の値は要確認</span></summary>
+    <div id="svrBox"></div>
+    <button type="button" id="addSvr">＋ SVR を追加</button>
+  </details>
+  <details class="card">
+    <summary>負荷・DER（節点に置く機器）<span class="dummy">ダミー</span></summary>
+    <div id="devBox"></div>
+    <div class="row" style="margin-top:8px">
+      <select id="newDevType"><option value="load">負荷</option><option value="pv">太陽光</option><option value="bess">蓄電池</option><option value="dc">データセンター</option></select>
+      <label class="note">節点 <select id="newDevNode"></select></label>
+      <button type="button" id="addDev">＋ 追加</button>
+    </div>
+  </details>
+  <details class="card">
+    <summary>系統・線路・上下限</summary>
+    <div class="fields" id="sysFields"></div>
+    <h3>上位系統（第2段階の事故計算で使用予定・現在は計算に未使用）</h3>
+    <div class="fields" id="upFields"></div>
+    <h3>区間（線路）<span class="dummy">ダミー</span></h3>
+    <div class="tbl" id="secTable"></div>
+    <div class="btns"><button type="button" class="sm" id="addSec">＋ 末尾に区間を追加</button><button type="button" class="sm danger" id="delSec">末尾の区間を削除</button><button type="button" class="sm" id="resetAll">すべて初期値に戻す</button></div>
+  </details>
+  <section class="card">
+    <h2>確認用テスト</h2>
+    <div class="note">計算関数（FeederCalc）だけを呼ぶテストです。画面の状態には影響しません。</div>
+    <button type="button" class="primary" id="runTests" style="margin-top:8px">テストを実行</button>
+    <div id="testOut"></div>
+  </section>
+</div>
+</div>
+<pre id="testJson" hidden></pre>
+</div>
+
+<script>
+/* =====================================================================
+   計算部（UIに依存しない）: FeederCalc
+   ===================================================================== */
+const FeederCalc = (() => {
+  const SQ3 = Math.sqrt(3);
+  const C = (re, im = 0) => ({ re, im });
+  const add = (a, b) => C(a.re + b.re, a.im + b.im);
+  const sub = (a, b) => C(a.re - b.re, a.im - b.im);
+  const mul = (a, b) => C(a.re * b.re - a.im * b.im, a.re * b.im + a.im * b.re);
+  const div = (a, b) => { const d = b.re * b.re + b.im * b.im; return C((a.re * b.re + a.im * b.im) / d, (a.im * b.re - a.re * b.im) / d); };
+  const conj = a => C(a.re, -a.im);
+  const abs = a => Math.hypot(a.re, a.im);
+  const scl = (a, k) => C(a.re * k, a.im * k);
+
+  const clone = o => JSON.parse(JSON.stringify(o));
+
+  function defaultModel() {
+    const lens = [0.8, 0.7, 0.8, 0.6, 0.9, 0.7, 0.8, 0.6, 0.7, 0.8, 0.6, 0.7];
+    const loads = [0, 180, 160, 200, 150, 220, 180, 160, 140, 170, 150, 130, 0];
+    const devices = [];
+    let id = 1;
+    loads.forEach((p, n) => { if (p > 0) devices.push({ id: id++, type: 'load', node: n, p, q: Math.round(p * 0.329) }); });
+    [9, 10, 11, 12].forEach(n => devices.push({ id: id++, type: 'pv', node: n, p: 750, pf: 1.0 }));
+    devices.push({ id: id++, type: 'bess', node: 6, p: 0, q: 0, rated: 500 });
+    devices.push({ id: id++, type: 'dc', node: 8, p: 2000, q: 400, tripped: false });
+    return {
+      Vbase: 6600,
+      sections: lens.map(len => ({ len, r: 0.12, x: 0.30 })),
+      limits: { lo: 6300, hi: 6900 },
+      upstream: { scMVA: 500, xr: 10 },
+      pvScale: 40,
+      lrt: { name: 'LRT', mode: 'auto', tap: 0, nUp: 8, nDown: 8, step: 1.25, target: 6420, db: 50, ldc: true, rc: 0.40, xc: 0.90, targetOff: 6800 },
+      svrs: [
+        { id: 1, name: 'SVR1', node: 5, mode: 'auto', tap: 0, nUp: 8, nDown: 8, step: 1.0, target: 6650, db: 50, ldc: false, rc: 0.4, xc: 0.6 }
+      ],
+      devices,
+      nextId: id,
+      nextSvr: 2
+    };
+  }
+
+  function nodeX(m) { const xs = [0]; m.sections.forEach(s => xs.push(xs[xs.length - 1] + s.len)); return xs; }
+
+  /** 機器の正味消費（3相, kW / kvar）。注入は負。 */
+  function deviceLoad(d, m) {
+    switch (d.type) {
+      case 'load': return { p: d.p, q: d.q };
+      case 'pv': {
+        const out = d.p * (m.pvScale / 100);
+        const pf = Math.min(1, Math.max(0.01, d.pf));
+        return { p: -out, q: out * Math.tan(Math.acos(pf)) };
+      }
+      case 'bess': return { p: -d.p, q: -d.q };
+      case 'dc': return d.tripped ? { p: 0, q: 0 } : { p: d.p, q: d.q };
+    }
+    return { p: 0, q: 0 };
+  }
+  function nodeLoads(m) {
+    const n = m.sections.length + 1;
+    const P = new Array(n).fill(0), Q = new Array(n).fill(0);
+    m.devices.forEach(d => { if (d.node >= 0 && d.node < n) { const l = deviceLoad(d, m); P[d.node] += l.p; Q[d.node] += l.q; } });
+    return { P, Q };
+  }
+  const ratio = (reg, tap) => 1 + tap * reg.step / 100;
+  function currentTaps(m) { return { lrt: m.lrt.tap, svr: m.svrs.map(s => s.tap) }; }
+
+  /** 前進後退法の潮流計算。taps = {lrt, svr:[...]}（model.svrs と同じ並び） */
+  function powerFlow(m, taps, opt = {}) {
+    taps = taps || currentTaps(m);
+    const N = m.sections.length, nn = N + 1;
+    const tol = opt.tol ?? 1e-9, maxIter = opt.maxIter ?? 100;
+    const aNode = new Array(nn).fill(1);
+    m.svrs.forEach((s, i) => { if (s.node >= 0 && s.node < N) aNode[s.node] *= ratio(s, taps.svr[i]); });
+    const aL = ratio(m.lrt, taps.lrt);
+    const Vph = m.Vbase / SQ3;
+    const V0 = C(Vph * aL, 0);
+    const { P, Q } = nodeLoads(m);
+    const S = P.map((p, k) => C(p * 1000 / 3, Q[k] * 1000 / 3));      // 相あたり VA
+    const Z = [null].concat(m.sections.map(s => C(s.len * s.r, s.len * s.x)));
+    let V = [V0];
+    for (let k = 1; k < nn; k++) V.push(scl(V[k - 1], aNode[k - 1]));
+    let Isec = new Array(nn + 1).fill(C(0)), Ilrt = C(0), converged = false, iter = 0;
+    for (iter = 1; iter <= maxIter; iter++) {
+      // 後退
+      const J = V.map((v, k) => conj(div(S[k], v)));
+      Isec = new Array(nn + 1).fill(C(0));
+      for (let k = N; k >= 1; k--) Isec[k] = add(J[k], scl(Isec[k + 1], aNode[k]));
+      Ilrt = add(J[0], scl(Isec[1] || C(0), aNode[0]));
+      // 前進
+      const Vn = [V0];
+      for (let k = 1; k < nn; k++) Vn.push(sub(scl(Vn[k - 1], aNode[k - 1]), mul(Z[k], Isec[k])));
+      let md = 0;
+      for (let k = 0; k < nn; k++) md = Math.max(md, abs(sub(Vn[k], V[k])) / Vph);
+      V = Vn;
+      if (md < tol) { converged = true; break; }
+    }
+    let loss = 0;
+    for (let k = 1; k <= N; k++) { const i = abs(Isec[k]); loss += 3 * i * i * Z[k].re; }
+    const Slrt = scl(mul(V0, conj(Ilrt)), 3);
+    return {
+      V, Vll: V.map(v => abs(v) * SQ3), aNode, Isec, Ilrt, Slrt,
+      lossKW: loss / 1000, converged, iter: Math.min(iter, maxIter), x: nodeX(m), taps: { lrt: taps.lrt, svr: taps.svr.slice() }
+    };
+  }
+
+  /** 機器の出力側電圧・通過電流（相・複素） */
+  function regIO(m, pf, reg) {
+    if (reg === m.lrt) return { Vout: pf.V[0], I: pf.Ilrt };
+    const k = reg.node;
+    return { Vout: scl(pf.V[k], pf.aNode[k]), I: pf.Isec[k + 1] || C(0) };
+  }
+  /** LDC 制御点電圧（線間 V）: Vc = √3 |Vout − (Rc + jXc) I| */
+  function controlVoltage(m, pf, reg, ldcOverride) {
+    const { Vout, I } = regIO(m, pf, reg);
+    const ldc = ldcOverride === undefined ? reg.ldc : ldcOverride;
+    const v = ldc ? sub(Vout, mul(C(reg.rc, reg.xc), I)) : Vout;
+    return abs(v) * SQ3;
+  }
+  function regFlow(m, pf, reg) {
+    const { Vout, I } = regIO(m, pf, reg);
+    const S = scl(mul(Vout, conj(I)), 3);
+    return { I: abs(I), P: S.re / 1000, Q: S.im / 1000, Vout: abs(Vout) * SQ3 };
+  }
+
+  function regOrder(m) {
+    const list = [{ reg: m.lrt, kind: 'lrt', i: -1 }];
+    m.svrs.map((s, i) => ({ reg: s, kind: 'svr', i })).sort((a, b) => a.reg.node - b.reg.node || a.reg.id - b.reg.id).forEach(o => list.push(o));
+    return list;
+  }
+
+  /** タップ整定（静的）。上流から順に 1段ずつ動かし、同じ状態が再現したらハンチング。 */
+  function settle(m, start, opt = {}) {
+    const maxMoves = opt.maxMoves ?? 400;
+    start = start || currentTaps(m);
+    const clampT = (reg, t) => Math.max(-reg.nDown, Math.min(reg.nUp, Math.round(t)));
+    const taps = { lrt: clampT(m.lrt, start.lrt), svr: m.svrs.map((s, i) => clampT(s, start.svr[i] ?? 0)) };
+    const order = regOrder(m);
+    const get = o => o.kind === 'lrt' ? taps.lrt : taps.svr[o.i];
+    const set = (o, v) => { if (o.kind === 'lrt') taps.lrt = v; else taps.svr[o.i] = v; };
+    const key = () => taps.lrt + '|' + taps.svr.join(',');
+    const seen = new Map();
+    const moves = [];
+    let pf, status = 'settled', cycle = [];
+    while (true) {
+      pf = powerFlow(m, taps);
+      seen.set(key(), moves.length);
+      let moved = false;
+      for (const o of order) {
+        const r = o.reg;
+        if (r.mode !== 'auto') continue;
+        const vc = controlVoltage(m, pf, r), t = get(o);
+        if (vc < r.target - r.db && t < r.nUp) { set(o, t + 1); moves.push({ name: r.name, from: t, to: t + 1, vc }); moved = true; break; }
+        if (vc > r.target + r.db && t > -r.nDown) { set(o, t - 1); moves.push({ name: r.name, from: t, to: t - 1, vc }); moved = true; break; }
+      }
+      if (!moved) break;
+      const k = key();
+      if (seen.has(k)) {
+        status = 'hunting';
+        cycle = [...new Set(moves.slice(seen.get(k)).map(x => x.name))];
+        pf = powerFlow(m, taps);
+        break;
+      }
+      if (moves.length >= maxMoves) { status = 'maxiter'; pf = powerFlow(m, taps); break; }
+    }
+    const regs = order.map(o => {
+      const r = o.reg, vc = controlVoltage(m, pf, r), t = get(o);
+      const inBand = Math.abs(vc - r.target) <= r.db + 1e-9;
+      const limit = !inBand && ((vc < r.target && t >= r.nUp) || (vc > r.target && t <= -r.nDown));
+      return { name: r.name, kind: o.kind, i: o.i, mode: r.mode, tap: t, vc, target: r.target, db: r.db, inBand, limit };
+    });
+    return { pf, taps, status, moves, cycle, regs, limited: regs.filter(r => r.mode === 'auto' && r.limit).map(r => r.name) };
+  }
+
+  function summarize(m, pf) {
+    const N = m.sections.length;
+    let iMin = 0, iMax = 0, viol = 0;
+    pf.Vll.forEach((v, k) => {
+      if (v < pf.Vll[iMin]) iMin = k;
+      if (v > pf.Vll[iMax]) iMax = k;
+      if (v < m.limits.lo || v > m.limits.hi) viol++;
+    });
+    return { end: pf.Vll[N], min: pf.Vll[iMin], iMin, max: pf.Vll[iMax], iMax, viol, loss: pf.lossKW };
+  }
+
+  /** LRT の LDC 入/切 で太陽光 0〜100% を掃引（各点、タップ中立から整定）。
+      LDC 切のときは LRT 目標を targetOff（送出電圧の固定目標）に置き換える。SVR は各自の設定のまま。 */
+  function ldcSweep(m, stepPct = 5) {
+    const out = { on: [], off: [] };
+    for (const ldc of [true, false]) {
+      const m2 = clone(m);
+      m2.lrt.mode = 'auto'; m2.lrt.ldc = ldc;
+      if (!ldc) m2.lrt.target = m.lrt.targetOff ?? m.lrt.target;
+      for (let s = 0; s <= 100 + 1e-9; s += stepPct) {
+        m2.pvScale = s;
+        const start = { lrt: 0, svr: m2.svrs.map(v => v.mode === 'auto' ? 0 : v.tap) };
+        const r = settle(m2, start);
+        const sm = summarize(m2, r.pf);
+        const vout = r.pf.Vll[0];
+        const est = vout - controlVoltage(m2, r.pf, m2.lrt, true);   // LDC が推定する降下（LRT の Rc・Xc）
+        (ldc ? out.on : out.off).push({ pv: s, end: sm.end, min: sm.min, max: sm.max, iMin: sm.iMin, iMax: sm.iMax, lrtTap: r.taps.lrt, svrTaps: r.taps.svr.slice(), status: r.status, lrtP: r.pf.Slrt.re / 1000, bus: vout, estDrop: est, actDrop: vout - sm.min });
+      }
+    }
+    return out;
+  }
+
+  /** 「LDCの影響デモ」：補償値を末端までの線路インピーダンスにする（補償しすぎ）。重負荷（太陽光0%・DC接続）にする。 */
+  function applyLdcDemo(m) {
+    const R = m.sections.reduce((a, s) => a + s.len * s.r, 0), X = m.sections.reduce((a, s) => a + s.len * s.x, 0);
+    Object.assign(m.lrt, { mode: 'auto', ldc: true, rc: +R.toFixed(3), xc: +X.toFixed(3), target: 6600 });
+    m.pvScale = 0;
+    m.devices.forEach(d => { if (d.type === 'dc') d.tripped = false; });
+    return m;
+  }
+  /** 初期設定のまま、太陽光 0〜100%（5%刻み）× DC 接続／離脱 の全ケースを整定して逸脱を数える */
+  function scenarioCheck(m) {
+    const rows = [];
+    for (const trip of [false, true]) for (let pv = 0; pv <= 100; pv += 5) {
+      const m2 = clone(m); m2.pvScale = pv;
+      m2.devices.forEach(d => { if (d.type === 'dc') d.tripped = trip; });
+      const r = settle(m2, { lrt: 0, svr: m2.svrs.map(() => 0) });
+      const s = summarize(m2, r.pf);
+      rows.push({ trip, pv, viol: s.viol, min: s.min, max: s.max, iMin: s.iMin, iMax: s.iMax, status: r.status });
+    }
+    return rows;
+  }
+
+  /* ---------------- 確認用テスト ---------------- */
+  function runTests() {
+    const res = [];
+    const T = (name, pass, detail) => res.push({ name, pass: !!pass, detail });
+    const f1 = v => v.toFixed(1), f2 = v => v.toFixed(2), f3 = v => v.toFixed(3);
+
+    // 1. 機器・負荷なし、LRT 中立 → 全節点 = 母線電圧
+    {
+      const m = defaultModel(); m.devices = [];
+      m.lrt.mode = 'manual'; m.lrt.tap = 0; m.svrs.forEach(s => { s.mode = 'manual'; s.tap = 0; });
+      const pf = powerFlow(m);
+      const dev = Math.max(...pf.Vll.map(v => Math.abs(v - pf.Vll[0])));
+      T('1. 無負荷・LRT中立で全節点＝母線電圧', dev < 0.01 && Math.abs(pf.Vll[0] - m.Vbase) < 1e-6 && pf.converged,
+        `母線 ${f3(pf.Vll[0])} V、全${pf.Vll.length}節点の最大偏差 ${dev.toExponential(2)} V、損失 ${f3(pf.lossKW)} kW`);
+    }
+    // 2. 1区間・1負荷で ΔV ≒ (RP+XQ)/V
+    {
+      const m = defaultModel();
+      m.sections = [{ len: 2, r: 0.23, x: 0.35 }]; m.svrs = [];
+      m.lrt.mode = 'manual'; m.lrt.tap = 0;
+      m.devices = [{ id: 1, type: 'load', node: 1, p: 500, q: 200 }];
+      const pf = powerFlow(m);
+      const dv = pf.Vll[0] - pf.Vll[1];
+      const R = 0.46, X = 0.70;
+      const hand = (R * 500e3 + X * 200e3) / pf.Vll[1];          // V = 受電端電圧（P,Q は受電端の値）
+      const handS = (R * 500e3 + X * 200e3) / pf.Vll[0];         // 参考: V = 送電端電圧
+      const err = Math.abs(dv - hand) / hand * 100, errS = Math.abs(dv - handS) / handS * 100;
+      T('2. 1区間・1負荷で手計算 ΔV と一致（1%以内）', err < 1,
+        `2km, R=0.46Ω, X=0.70Ω, P=500kW, Q=200kvar\n潮流計算 ΔV = ${f2(dv)} V / 手計算 (RP+XQ)/V（V=受電端 ${f1(pf.Vll[1])}V）= ${f2(hand)} V / 誤差 ${f3(err)} %\n（参考）V に送電端 6600V を使うと ${f2(handS)} V・誤差 ${f3(errS)} %`);
+    }
+    // 3. SVR を n段上げると下流が一律 ≒ n×段率 上がる
+    {
+      const n = 3;
+      const m = defaultModel();
+      m.lrt.mode = 'manual'; m.lrt.tap = 0; m.svrs[0].mode = 'manual'; m.svrs[0].tap = 0;
+      const a = powerFlow(m);
+      m.svrs[0].tap = n;
+      const b = powerFlow(m);
+      const k = m.svrs[0].node, N = m.sections.length;
+      const rises = [], ups = [];
+      for (let j = 0; j <= N; j++) {
+        const r = (b.Vll[j] / a.Vll[j] - 1) * 100;
+        (j > k ? rises : ups).push(r);
+      }
+      const exp = n * m.svrs[0].step;
+      const okDown = rises.every(r => Math.abs(r - exp) <= 0.2);
+      const upMax = Math.max(...ups.map(Math.abs));
+      T(`3. SVR を ${n}段上げ → 下流が一律に約 ${exp}% 上昇`, okDown && upMax < 0.2,
+        `下流（節点${k + 1}〜${N}）の上昇率 ${f3(Math.min(...rises))}〜${f3(Math.max(...rises))} %（期待 ${exp}%±0.2）\n上流（節点0〜${k}）の変化 最大 ${f3(upMax)} %`);
+    }
+    // 4. LRT を手動で n段 → 母線電圧が n×段率 変わる
+    {
+      const out = [];
+      let ok = true;
+      for (const withLoad of [false, true]) {
+        for (const n of [3, -2]) {
+          const m = defaultModel();
+          if (!withLoad) m.devices = [];
+          m.lrt.mode = 'manual'; m.lrt.tap = 0; m.svrs.forEach(s => { s.mode = 'manual'; s.tap = 0; });
+          const a = powerFlow(m); m.lrt.tap = n; const b = powerFlow(m);
+          const ch = (b.Vll[0] / a.Vll[0] - 1) * 100, exp = n * m.lrt.step;
+          if (Math.abs(ch - exp) > 1e-9) ok = false;
+          out.push(`${withLoad ? '負荷あり' : '無負荷'} n=${n}: 母線 ${f1(a.Vll[0])}→${f1(b.Vll[0])} V（${f3(ch)} %, 期待 ${f3(exp)} %）`);
+        }
+      }
+      T('4. LRT を手動で n段 → 母線電圧が n×1段の変化率だけ変化', ok, out.join('\n'));
+    }
+    // 5. 自動モードで制御点電圧が目標±不感帯
+    {
+      const out = []; let ok = true;
+      const cases = [['初期状態', m => m], ['太陽光0%', m => { m.pvScale = 0; }], ['太陽光100%', m => { m.pvScale = 100; }], ['DC離脱', m => { m.devices.forEach(d => { if (d.type === 'dc') d.tripped = true; }); }], ['SVR2台・LDC入', m => { m.svrs.push({ id: 2, name: 'SVR2', node: 9, mode: 'auto', tap: 0, nUp: 8, nDown: 8, step: 1.0, target: 6600, db: 50, ldc: true, rc: 0.3, xc: 0.5 }); m.svrs[0].ldc = true; }]];
+      for (const [nm, fn] of cases) {
+        const m = defaultModel(); fn(m);
+        const r = settle(m);
+        const good = r.status === 'settled' && r.regs.every(g => g.inBand);
+        if (!good) ok = false;
+        out.push(`${nm}: ${r.status === 'settled' ? '整定' : r.status}（${r.moves.length}手） ` + r.regs.map(g => `${g.name} tap${g.tap >= 0 ? '+' : ''}${g.tap} Vc=${f1(g.vc)}V（${g.target}±${g.db}）${g.inBand ? '○' : '×'}`).join(' / '));
+      }
+      T('5. 自動モードで制御点電圧が目標±不感帯の内', ok, out.join('\n'));
+    }
+    // 6. 多段 SVR：収束する場合／しない場合
+    {
+      const m = defaultModel();
+      m.svrs.push({ id: 2, name: 'SVR2', node: 9, mode: 'auto', tap: 0, nUp: 8, nDown: 8, step: 1.0, target: 6600, db: 50, ldc: false, rc: 0.3, xc: 0.5 });
+      const r1 = settle(m);
+      const m2 = clone(m); m2.svrs.forEach(s => s.db = 2);   // 1段(約66V)の半分よりずっと狭い
+      const r2 = settle(m2);
+      T('6. 多段SVR：収束する場合／ハンチングする場合の両方', r1.status === 'settled' && r2.status === 'hunting',
+        `不感帯 ±50V: ${r1.status === 'settled' ? '整定' : r1.status}（${r1.moves.length}手, タップ LRT${r1.taps.lrt} / SVR1 ${r1.taps.svr[0]} / SVR2 ${r1.taps.svr[1]}）\n不感帯 ±2V: ${r2.status === 'hunting' ? 'ハンチングの可能性' : r2.status}（${r2.moves.length}手で同じ状態が再現、関係機器: ${r2.cycle.join('・')}）`);
+    }
+    // 7. 方向性（タップ固定で比較）
+    {
+      const base = defaultModel();
+      const st = settle(base);
+      const fix = m => { m.lrt.mode = 'manual'; m.lrt.tap = st.taps.lrt; m.svrs.forEach((s, i) => { s.mode = 'manual'; s.tap = st.taps.svr[i]; }); return m; };
+      const N = base.sections.length;
+      const endV = (fn) => { const m = fix(clone(base)); fn(m); return powerFlow(m).Vll[N]; };
+      const endS = (fn) => { const m = clone(base); fn(m); return settle(m, st.taps).pf.Vll[N]; };
+      const pvLo = endV(m => m.pvScale = 30), pvHi = endV(m => m.pvScale = 90);
+      const setB = p => m => m.devices.forEach(d => { if (d.type === 'bess') d.p = p; });
+      const bCh = endV(setB(-500)), b0 = endV(setB(0)), bDis = endV(setB(500));
+      const dcOn = endV(() => {}), dcOff = endV(m => m.devices.forEach(d => { if (d.type === 'dc') d.tripped = true; }));
+      const ok = pvHi > pvLo && bCh < b0 && bDis > b0 && dcOff > dcOn;
+      const sPv = [endS(m => m.pvScale = 30), endS(m => m.pvScale = 90)];
+      const sDc = endS(m => m.devices.forEach(d => { if (d.type === 'dc') d.tripped = true; }));
+      T('7. 太陽光増→上昇、蓄電池 充電→低下／放電→上昇、DC離脱→上昇（末端電圧・タップ固定）', ok,
+        `太陽光 30%→90%: ${f1(pvLo)} → ${f1(pvHi)} V（${f1(pvHi - pvLo)}）\n蓄電池 充電500kW / 0 / 放電500kW: ${f1(bCh)} / ${f1(b0)} / ${f1(bDis)} V\nDC 接続→離脱: ${f1(dcOn)} → ${f1(dcOff)} V（${f1(dcOff - dcOn)}）\n（参考・整定後）太陽光30%: ${f1(sPv[0])} V, 90%: ${f1(sPv[1])} V, DC離脱: ${f1(sDc)} V`);
+    }
+    // 8. 初期設定で全ケース逸脱なし
+    {
+      const m = defaultModel();
+      const rows = scenarioCheck(m);
+      const bad = rows.filter(r => r.viol > 0 || r.status !== 'settled');
+      const lo = rows.reduce((a, r) => r.min < a.min ? r : a), hi = rows.reduce((a, r) => r.max > a.max ? r : a);
+      T('8. 初期設定（LDC入）で、太陽光0〜100%×DC接続/離脱の全42ケースに逸脱なし', bad.length === 0,
+        `逸脱・未整定のケース ${bad.length} 件\n最低 ${f1(lo.min)} V（太陽光${lo.pv}%・DC${lo.trip ? '離脱' : '接続'}・節点${lo.iMin}）／下限までの余裕 ${f1(lo.min - m.limits.lo)} V\n最高 ${f1(hi.max)} V（太陽光${hi.pv}%・DC${hi.trip ? '離脱' : '接続'}・節点${hi.iMax}）／上限までの余裕 ${f1(m.limits.hi - hi.max)} V` +
+        (bad.length ? '\n' + bad.slice(0, 5).map(r => `太陽光${r.pv}% DC${r.trip ? '離脱' : '接続'}: 逸脱${r.viol} 最低${f1(r.min)} 最高${f1(r.max)} ${r.status}`).join('\n') : ''));
+    }
+    // 9. LDC の影響デモで上限超過が出る
+    {
+      const m = applyLdcDemo(defaultModel());
+      const r = settle(m, { lrt: 0, svr: m.svrs.map(() => 0) });
+      const s = summarize(m, r.pf);
+      T('9. 「LDCの影響デモ」（補償しすぎ）で上限超過が出る', s.max > m.limits.hi,
+        `Rc ${m.lrt.rc} Ω・Xc ${m.lrt.xc} Ω・目標 ${m.lrt.target} V、太陽光0%・DC接続\nLRT タップ ${r.taps.lrt >= 0 ? '+' : ''}${r.taps.lrt}（${r.status === 'settled' ? '整定' : r.status}${r.limited.length ? '・タップ限界' : ''}）、母線 ${f1(r.pf.Vll[0])} V、最高 ${f1(s.max)} V（節点${s.iMax}）、逸脱 ${s.viol} 節点`);
+    }
+    // 補助: 潮流の収束とエネルギー収支
+    {
+      const m = defaultModel(); const r = settle(m); const pf = r.pf;
+      const { P } = nodeLoads(m); const sumP = P.reduce((a, b) => a + b, 0);
+      const bal = pf.Slrt.re / 1000 - sumP - pf.lossKW;
+      T('補足. 潮流計算の収束と電力収支（送出 = 負荷 + 損失）', pf.converged && Math.abs(bal) < 0.01,
+        `${pf.iter} 回で収束、送出 ${f1(pf.Slrt.re / 1000)} kW = 正味負荷 ${f1(sumP)} kW + 損失 ${f2(pf.lossKW)} kW（差 ${bal.toExponential(1)} kW）`);
+    }
+    return res;
+  }
+
+  return { applyLdcDemo, scenarioCheck, defaultModel, powerFlow, settle, controlVoltage, regFlow, regOrder, summarize, ldcSweep, nodeX, nodeLoads, deviceLoad, currentTaps, runTests, clone, SQ3 };
+})();
+
+/* =====================================================================
+   UI 部
+   ===================================================================== */
+(() => {
+  const $ = s => document.querySelector(s);
+  const F = FeederCalc;
+  const state = { model: F.defaultModel(), cur: null, base: null, unit: 'v', event: null, freeze: false };
+  const M = () => state.model;
+
+  const fmt = (v, d = 0) => Number(v).toLocaleString('ja-JP', { minimumFractionDigits: d, maximumFractionDigits: d });
+  const sgn = t => t > 0 ? '+' + t : t < 0 ? '−' + (-t) : '0';
+  const sgnV = (v, d = 1) => (v > 0 ? '+' : v < 0 ? '−' : '±') + fmt(Math.abs(v), d);
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const typeLabel = { load: '負荷', pv: '太陽光', bess: '蓄電池', dc: 'データセンター' };
+  const typeShort = { load: '負', pv: 'PV', bess: '蓄', dc: 'DC' };
+
+  /* ---------- テーマ ---------- */
+  const themeNames = { auto: '自動', light: 'ライト', dark: 'ダーク' };
+  let theme = 'auto';
+  try { theme = localStorage.getItem('feeder-theme') || 'auto'; } catch (e) {}
+  function applyTheme() {
+    if (theme === 'auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = theme;
+    $('#themeBtn').textContent = 'テーマ: ' + themeNames[theme];
+  }
+  $('#themeBtn').onclick = () => {
+    theme = theme === 'auto' ? 'light' : theme === 'light' ? 'dark' : 'auto';
+    try { localStorage.setItem('feeder-theme', theme); } catch (e) {}
+    applyTheme();
+  };
+  applyTheme();
+
+  /* ---------- 汎用 折れ線チャート（SVG） ---------- */
+  function niceTicks(min, max, count) {
+    const span = max - min || 1, raw = span / count, mag = Math.pow(10, Math.floor(Math.log10(raw))), n = raw / mag;
+    const step = (n < 1.5 ? 1 : n < 3 ? 2 : n < 7 ? 5 : 10) * mag;
+    const out = []; for (let v = Math.ceil(min / step) * step; v <= max + step * 1e-6; v += step) out.push(+v.toFixed(8));
+    return out;
+  }
+  function legendHTML(items) {
+    return items.map(it => `<span><svg viewBox="0 0 26 10" aria-hidden="true"><line x1="1" y1="5" x2="25" y2="5" stroke="${it.color}" stroke-width="${it.width || 2}" stroke-dasharray="${it.dash || ''}" opacity="${it.opacity ?? 1}" stroke-linecap="round"/></svg>${esc(it.name)}</span>`).join('');
+  }
+  function lineChart(host, o) {
+    const W = Math.max(280, Math.round(host.clientWidth || 600));
+    const H = o.height || (W < 520 ? 270 : 320);
+    const iconStack = o.icons ? Math.max(0, ...Object.values(o.icons.reduce((a, ic) => (a[ic.x] = (a[ic.x] || 0) + 1, a), {}))) : 0;
+    const ml = 52, mr = 12, mt = o.vlines && o.vlines.length ? 36 : 12;
+    const mb = 34 + (iconStack ? iconStack * 17 + 18 : 0);
+    const pw = W - ml - mr, ph = Math.max(80, H - mt - mb);
+    let y0 = Infinity, y1 = -Infinity;
+    o.series.forEach(s => s.pts.forEach(p => { y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); }));
+    if (o.band) { y0 = Math.min(y0, o.band[0]); y1 = Math.max(y1, o.band[1]); }
+    if (!isFinite(y0)) { y0 = 0; y1 = 1; }
+    const pad = (y1 - y0) * 0.08 || 1; y0 -= pad; y1 += pad;
+    const [x0, x1] = o.xDomain;
+    const X = v => ml + (v - x0) / ((x1 - x0) || 1) * pw;
+    const Y = v => mt + (1 - (v - y0) / (y1 - y0)) * ph;
+    const g = [];
+    // grid + y ticks
+    niceTicks(y0, y1, ph < 180 ? 4 : 6).forEach(t => {
+      if (t < y0 || t > y1) return;
+      g.push(`<line x1="${ml}" x2="${ml + pw}" y1="${Y(t)}" y2="${Y(t)}" stroke="var(--grid)"/>`);
+      g.push(`<text x="${ml - 6}" y="${Y(t) + 4}" text-anchor="end">${o.yFmt(t)}</text>`);
+    });
+    // x ticks
+    niceTicks(x0, x1, pw < 360 ? 4 : 8).forEach(t => {
+      g.push(`<line x1="${X(t)}" x2="${X(t)}" y1="${mt + ph}" y2="${mt + ph + 4}" stroke="var(--muted)"/>`);
+      g.push(`<text x="${X(t)}" y="${mt + ph + 16}" text-anchor="middle">${o.xFmt(t)}</text>`);
+    });
+    g.push(`<line x1="${ml}" x2="${ml + pw}" y1="${mt + ph}" y2="${mt + ph}" stroke="var(--muted)"/>`);
+    g.push(`<text x="${ml + pw}" y="${H - 4}" text-anchor="end">${esc(o.xLabel)}</text>`);
+    g.push(`<text x="4" y="${mt - (o.vlines && o.vlines.length ? 24 : 2)}" text-anchor="start">${esc(o.yLabel)}</text>`);
+    // band
+    if (o.band) {
+      const yb1 = Y(o.band[1]), yb0 = Y(o.band[0]);
+      g.push(`<rect x="${ml}" y="${yb1}" width="${pw}" height="${yb0 - yb1}" fill="var(--band)"/>`);
+      g.push(`<line x1="${ml}" x2="${ml + pw}" y1="${yb1}" y2="${yb1}" stroke="var(--bad)" stroke-dasharray="4 4" opacity=".7"/>`);
+      g.push(`<line x1="${ml}" x2="${ml + pw}" y1="${yb0}" y2="${yb0}" stroke="var(--bad)" stroke-dasharray="4 4" opacity=".7"/>`);
+      g.push(`<text x="${ml + pw - 2}" y="${yb1 - 3}" text-anchor="end">上限 ${o.yFmt(o.band[1])}</text>`);
+      g.push(`<text x="${ml + pw - 2}" y="${yb0 + 12}" text-anchor="end">下限 ${o.yFmt(o.band[0])}</text>`);
+    }
+    // vlines（LRT/SVR）
+    (o.vlines || []).forEach((v, i) => {
+      const xx = X(v.x);
+      g.push(`<line x1="${xx}" x2="${xx}" y1="${mt - 4}" y2="${mt + ph}" stroke="var(--i-reg)" stroke-dasharray="3 3" opacity=".8"/>`);
+      const row = i % 2, ty = mt - 8 - row * 13;
+      const anchor = xx < ml + 30 ? 'start' : xx > ml + pw - 30 ? 'end' : 'middle';
+      g.push(`<text x="${xx}" y="${ty}" text-anchor="${anchor}" style="fill:var(--text);font-weight:700">${esc(v.label)}</text>`);
+    });
+    // series
+    o.series.forEach(s => {
+      if (!s.pts.length) return;
+      const d = s.pts.map((p, i) => (i ? 'L' : 'M') + X(p[0]).toFixed(1) + ' ' + Y(p[1]).toFixed(1)).join('');
+      g.push(`<path d="${d}" fill="none" stroke="${s.color}" stroke-width="${s.width || 2}" stroke-dasharray="${s.dash || ''}" opacity="${s.opacity ?? 1}" stroke-linejoin="round" stroke-linecap="round"/>`);
+    });
+    // dots
+    (o.dots || []).forEach(p => {
+      if (p.bad) g.push(`<circle cx="${X(p.x)}" cy="${Y(p.y)}" r="5.5" fill="var(--bad)" stroke="var(--surface)" stroke-width="2"/>`);
+      else g.push(`<circle cx="${X(p.x)}" cy="${Y(p.y)}" r="3.5" fill="var(--surface)" stroke="${p.color}" stroke-width="2"/>`);
+    });
+    // icons
+    if (o.icons) {
+      const cnt = {};
+      o.icons.forEach(ic => {
+        const k = cnt[ic.x] = (cnt[ic.x] || 0) + 1;
+        const cy = mt + ph + 30 + (k - 1) * 17 + 8;
+        const cx = X(ic.x);
+        g.push(`<g><rect x="${cx - 12}" y="${cy - 7}" width="24" height="14" rx="7" fill="var(--i-${ic.type})"/><text x="${cx}" y="${cy + 4}" text-anchor="middle" style="fill:#fff;font-size:9px;font-weight:700">${typeShort[ic.type]}</text></g>`);
+      });
+    }
+    g.push(`<line class="xh" x1="0" x2="0" y1="${mt}" y2="${mt + ph}" stroke="var(--text-2)" opacity="0" />`);
+    g.push(`<rect class="hit" x="${ml}" y="${mt}" width="${pw}" height="${ph}" fill="transparent"/>`);
+    host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(o.aria || '')}">${g.join('')}</svg><div class="tip"></div>`;
+    const svg = host.querySelector('svg'), tip = host.querySelector('.tip'), xh = svg.querySelector('.xh');
+    const move = ev => {
+      const r = svg.getBoundingClientRect();
+      const px = (ev.clientX - r.left) * W / r.width;
+      const xv = x0 + (px - ml) / pw * (x1 - x0);
+      let bi = 0; o.snap.forEach((s, i) => { if (Math.abs(s - xv) < Math.abs(o.snap[bi] - xv)) bi = i; });
+      const sx = X(o.snap[bi]);
+      xh.setAttribute('x1', sx); xh.setAttribute('x2', sx); xh.setAttribute('opacity', '.5');
+      tip.innerHTML = o.tip(bi); tip.style.display = 'block';
+      const tw = tip.offsetWidth, hw = host.clientWidth;
+      const left = sx * r.width / W;
+      tip.style.left = Math.max(0, Math.min(hw - tw, left + (left > hw / 2 ? -tw - 12 : 12))) + 'px';
+      tip.style.top = Math.max(0, (ev.clientY - r.top) - 20) + 'px';
+    };
+    const leave = () => { tip.style.display = 'none'; xh.setAttribute('opacity', '0'); };
+    svg.addEventListener('pointermove', move);
+    svg.addEventListener('pointerdown', move);
+    svg.addEventListener('pointerleave', leave);
+  }
+
+  /* ---------- 計算の実行 ---------- */
+  function startTaps() { return F.currentTaps(M()); }
+  function compute() {
+    const m = M();
+    if (state.freeze) {
+      const pf = F.powerFlow(m, startTaps());
+      const regs = F.regOrder(m).map(o => { const vc = F.controlVoltage(m, pf, o.reg); return { name: o.reg.name, kind: o.kind, i: o.i, mode: o.reg.mode, tap: o.kind === 'lrt' ? pf.taps.lrt : pf.taps.svr[o.i], vc, target: o.reg.target, db: o.reg.db, inBand: Math.abs(vc - o.reg.target) <= o.reg.db, limit: false }; });
+      return { pf, taps: pf.taps, status: 'frozen', moves: [], cycle: [], regs, limited: [] };
+    }
+    return F.settle(m, startTaps());
+  }
+  function writeBack(taps) {
+    const m = M();
+    if (m.lrt.mode === 'auto') m.lrt.tap = taps.lrt;
+    m.svrs.forEach((s, i) => { if (s.mode === 'auto') s.tap = taps.svr[i]; });
+  }
+  function snapshot(r) { return { pf: r.pf, nSec: M().sections.length }; }
+
+  let ldcTimer = 0;
+  function recompute(opt = {}) {
+    const r = compute();
+    if (!state.freeze) writeBack(r.taps);
+    state.cur = r;
+    renderAlerts(); renderTiles(); renderProfile(); renderNodeTable(); renderRegStatus(); renderHowto();
+    if (opt.ldc !== false) { clearTimeout(ldcTimer); ldcTimer = setTimeout(renderLdc, 120); }
+  }
+
+  /* ---------- 表示: 警告・タイル ---------- */
+  function renderAlerts() {
+    const r = state.cur, a = [];
+    if (r.status === 'hunting') a.push(`<div class="alert warn"><b>ハンチングの可能性：</b>タップが行き来して整定しません（関係機器: ${r.cycle.map(esc).join('・')}）。不感帯が 1段の電圧変化の半分より狭くないか、多段の目標・LDC 設定が干渉していないか確認してください。表示は最後の状態です。</div>`);
+    if (r.status === 'maxiter') a.push(`<div class="alert warn">タップの整定計算が上限回数に達しました。</div>`);
+    if (r.limited.length) a.push(`<div class="alert warn"><b>タップ限界：</b>${r.limited.map(esc).join('・')} が端のタップに達し、目標±不感帯に入れません。</div>`);
+    if (!r.pf.converged) a.push(`<div class="alert bad"><b>潮流計算が収束しません。</b>負荷が過大な可能性があります。</div>`);
+    $('#alerts').innerHTML = a.join('');
+  }
+  function renderTiles() {
+    const m = M(), r = state.cur, pf = r.pf, s = F.summarize(m, pf);
+    const pct = v => fmt(v / m.Vbase * 100, 1) + '%';
+    const bad = v => v < m.limits.lo || v > m.limits.hi;
+    const lf = F.regFlow(m, pf, m.lrt);
+    const st = { settled: ['整定', ''], hunting: ['ハンチングの可能性', 'warn'], maxiter: ['上限到達', 'warn'], frozen: ['タップ固定', ''] }[r.status];
+    const taps = [`LRT ${sgn(pf.taps.lrt)}`].concat(m.svrs.map((v, i) => `${v.name} ${sgn(pf.taps.svr[i])}`)).join(' / ');
+    const t = [
+      ['末端電圧', fmt(s.end) + ' V', pct(s.end) + `（節点${m.sections.length}）`, bad(s.end) ? 'bad' : ''],
+      ['最低電圧', fmt(s.min) + ' V', `節点${s.iMin}・${pct(s.min)}`, bad(s.min) ? 'bad' : ''],
+      ['最高電圧', fmt(s.max) + ' V', `節点${s.iMax}・${pct(s.max)}`, bad(s.max) ? 'bad' : ''],
+      ['逸脱節点数', s.viol + ' / ' + pf.Vll.length, `範囲 ${fmt(m.limits.lo)}〜${fmt(m.limits.hi)} V`, s.viol ? 'bad' : ''],
+      ['線路損失', fmt(s.loss, 1) + ' kW', `送出 ${fmt(lf.P / 1000, 2)} MW${lf.P < 0 ? '（逆潮流）' : ''}`, ''],
+      ['LRT 通過電流', fmt(lf.I) + ' A', `Q ${fmt(lf.Q)} kvar`, ''],
+      ['タップ位置', taps, '', ''],
+      ['整定状態', st[0], r.status === 'frozen' ? '' : r.moves.length ? `直前の計算で ${r.moves.length}手 動作` : '直前の計算でタップ動作なし', st[1]]
+    ];
+    $('#tiles').innerHTML = t.map(x => `<div class="tile ${x[3]}"><div class="k">${x[0]}</div><div class="v" style="${x[0] === 'タップ位置' || x[0] === '整定状態' ? 'font-size:14px' : ''}">${x[1]}</div><div class="s">${x[2]}</div></div>`).join('');
+  }
+
+  /* ---------- 表示: 初心者向けの説明（現在の値で例を出す） ---------- */
+  function renderHowto() {
+    const m = M(), r = state.cur, pf = r.pf, L = m.lrt;
+    const step = m.Vbase * L.step / 100;
+    $('#howDb').innerHTML = ` 今の LRT：1段 ≒ ${fmt(m.Vbase)} × ${L.step}% = <b>${fmt(step, 1)} V</b>、帯の幅 = 2 × ${fmt(L.db)} = <b>${fmt(2 * L.db)} V</b> → ${2 * L.db > step ? '<span class="pass">帯のほうが広いので整定できる</span>' : '<span class="fail">帯のほうが狭いのでハンチングしやすい</span>'}。`;
+    const tapStr = t => [`LRT ${sgn(t.lrt)}`].concat(m.svrs.map((s, i) => `${s.name} ${sgn(t.svr[i])}`)).join(' / ');
+    const neutral = { lrt: L.mode === 'auto' ? 0 : L.tap, svr: m.svrs.map(s => s.mode === 'auto' ? 0 : s.tap) };
+    const rn = F.settle(m, neutral);
+    const same = rn.taps.lrt === r.taps.lrt && rn.taps.svr.every((t, i) => t === r.taps.svr[i]);
+    $('#howOrder').innerHTML = state.freeze ? '' : ` 今の状態：<b>${tapStr(r.taps)}</b>。同じ条件を「全台中立」から計算し直すと <b>${tapStr(rn.taps)}</b>${same ? '（同じ）' : ` <b class="fail">（違う。どちらも帯の中で、止まれる位置が複数ある例）</b>`}。`;
+    const fl = F.regFlow(m, pf, L), vs = pf.Vll[0];
+    const approx = (L.rc * fl.P * 1000 + L.xc * fl.Q * 1000) / vs;
+    const vc = F.controlVoltage(m, pf, L, true);
+    $('#howLdc').innerHTML = `今の値で計算すると：P = ${fmt(fl.P)} kW、Q = ${fmt(fl.Q)} kvar、Vs = ${fmt(vs)} V、Rc = ${L.rc} Ω、Xc = ${L.xc} Ω<br>` +
+      `ΔV_LDC ≒ (${L.rc} × ${fmt(fl.P)}k + ${L.xc} × ${fmt(fl.Q)}k) ÷ ${fmt(vs)} ≒ <b>${fmt(approx)} V</b>（複素数での正確な値 ${fmt(vs - vc)} V）→ Vc ≒ ${fmt(vs)} − ${fmt(vs - vc)} = <b>${fmt(vc)} V</b>${L.ldc ? '' : '（いまは LDC 切なので、判定には Vs をそのまま使っています）'}。<br>` +
+      `太陽光が増えて P が減る（逆潮流で負になる）と ΔV_LDC が小さくなり、LRT は「線路で下がらない」と判断して送り出し電圧を下げます。実際には太陽光より上流の負荷で電圧は下がり続けるため、LDC は降下を<b>過小に見積もる</b>ことになります。`;
+  }
+
+  /* ---------- 表示: 電圧プロファイル ---------- */
+  function profilePts(pf, conv) {
+    const m = M(), pts = [[0, conv(m.Vbase)]];
+    pf.Vll.forEach((v, k) => { pts.push([pf.x[k], conv(v)]); if (Math.abs(pf.aNode[k] - 1) > 1e-12) pts.push([pf.x[k], conv(v * pf.aNode[k])]); });
+    return pts;
+  }
+  function convFn() { const m = M(); return state.unit === 'pct' ? v => v / m.Vbase * 100 : v => v; }
+  function yFmtFn() { return state.unit === 'pct' ? v => fmt(v, 1) + '%' : v => fmt(v); }
+  function vlinesFor(pf) {
+    const m = M();
+    return [{ x: 0, label: `LRT ${sgn(pf.taps.lrt)}` }].concat(m.svrs.map((s, i) => ({ x: pf.x[s.node], label: `${s.name} ${sgn(pf.taps.svr[i])}` })));
+  }
+  function devIcons() { const m = M(), xs = F.nodeX(m); return m.devices.filter(d => d.node < xs.length).sort((a, b) => ['load', 'pv', 'bess', 'dc'].indexOf(a.type) - ['load', 'pv', 'bess', 'dc'].indexOf(b.type)).map(d => ({ x: xs[d.node], type: d.type })); }
+  function vText(v) { const m = M(); return `${fmt(v)} V（${fmt(v / m.Vbase * 100, 2)}%）`; }
+
+  function renderProfile() {
+    const m = M(), pf = state.cur.pf, conv = convFn(), xs = F.nodeX(m);
+    const series = [];
+    const base = state.base && state.base.nSec === m.sections.length ? state.base.pf : null;
+    if (base) series.push({ name: '比較用（動かす前）', color: 'var(--ghost)', dash: '5 4', width: 2, opacity: .9, pts: profilePts(base, conv) });
+    series.push({ name: state.freeze ? '現在（タップ固定）' : '現在（整定後）', color: 'var(--s1)', width: 2.5, pts: profilePts(pf, conv) });
+    $('#profLegend').innerHTML = legendHTML(series.slice().reverse());
+    const devAt = k => m.devices.filter(d => d.node === k).map(d => typeLabel[d.type]).join('・');
+    lineChart($('#profChart'), {
+      aria: '電圧プロファイル', xDomain: [0, xs[xs.length - 1]], xLabel: '変電所からの距離 (km)', yLabel: state.unit === 'pct' ? '電圧 (%)' : '線間電圧 (V)',
+      xFmt: v => fmt(v, v % 1 ? 1 : 0), yFmt: yFmtFn(), band: [conv(m.limits.lo), conv(m.limits.hi)],
+      series, vlines: vlinesFor(pf), icons: devIcons(),
+      dots: pf.Vll.map((v, k) => ({ x: xs[k], y: conv(v), bad: v < m.limits.lo || v > m.limits.hi, color: 'var(--s1)' })),
+      snap: xs,
+      tip: k => {
+        const v = pf.Vll[k];
+        let h = `<b>節点 ${k}</b>（${fmt(xs[k], 2)} km）<br>${vText(v)}${(v < m.limits.lo || v > m.limits.hi) ? ' <b style="color:var(--bad)">逸脱</b>' : ''}`;
+        if (Math.abs(pf.aNode[k] - 1) > 1e-12 || m.svrs.some(s => s.node === k)) h += `<br>SVR 出力側 ${vText(v * pf.aNode[k])}`;
+        if (base) h += `<br><span style="color:var(--text-2)">比較用 ${fmt(base.Vll[k])} V（${sgnV(v - base.Vll[k])} V）</span>`;
+        const dv = devAt(k); if (dv) h += `<br><span style="color:var(--text-2)">${dv}</span>`;
+        return h;
+      }
+    });
+  }
+  function renderNodeTable() {
+    const m = M(), pf = state.cur.pf, { P, Q } = F.nodeLoads(m);
+    const rows = pf.Vll.map((v, k) => {
+      const bad = v < m.limits.lo || v > m.limits.hi;
+      const svr = m.svrs.filter(s => s.node === k).map(s => s.name).join('・');
+      const I = k > 0 ? Math.hypot(pf.Isec[k].re, pf.Isec[k].im) : null;
+      return `<tr><td>${k}</td><td>${fmt(pf.x[k], 2)}</td><td class="${bad ? 'bad' : ''}">${fmt(v)}</td><td>${fmt(v / m.Vbase * 100, 2)}</td><td>${fmt(P[k])}</td><td>${fmt(Q[k])}</td><td>${I === null ? '—' : fmt(I)}</td><td>${svr ? svr + '→' : ''}</td></tr>`;
+    }).join('');
+    $('#nodeTable').innerHTML = `<table><thead><tr><th>節点</th><th>距離 km</th><th>電圧 V</th><th>%</th><th>正味P kW</th><th>正味Q kvar</th><th>上流区間 A</th><th>SVR</th></tr></thead><tbody>${rows}</tbody></table><div class="note">正味P・Q は消費が正（太陽光・放電は負）。</div>`;
+  }
+
+  /* ---------- 2. スライダー ---------- */
+  function captureBase() { if ($('#autoBase').checked) state.base = snapshot(state.cur); }
+  function slider(label, min, max, step, value, fmtV, onInput) {
+    const w = document.createElement('div'); w.className = 'sl';
+    w.innerHTML = `<label>${label}</label><output>${fmtV(value)}</output><input type="range" min="${min}" max="${max}" step="${step}" value="${value}" aria-label="${esc(label)}">`;
+    const inp = w.querySelector('input'), out = w.querySelector('output');
+    inp.addEventListener('pointerdown', captureBase);
+    inp.addEventListener('keydown', e => { if (!e.repeat && /Arrow|Page|Home|End/.test(e.key)) captureBase(); });
+    inp.addEventListener('input', () => { const v = +inp.value; out.textContent = fmtV(v); onInput(v); });
+    return w;
+  }
+  function renderSliders() {
+    const m = M(), box = $('#sliders'); box.innerHTML = '';
+    const pvTotal = m.devices.filter(d => d.type === 'pv').reduce((a, d) => a + d.p, 0);
+    box.appendChild(slider(`太陽光 出力（全台共通の％、定格合計 ${fmt(pvTotal)} kW）`, 0, 100, 1, m.pvScale, v => `${v}%（${fmt(pvTotal * v / 100)} kW）`, v => { m.pvScale = v; recompute(); }));
+    m.devices.filter(d => d.type === 'bess').forEach(d => {
+      box.appendChild(slider(`蓄電池 #${d.id}（節点${d.node}）有効電力 P：放電＋／充電−`, -d.rated, d.rated, 10, d.p, v => `${v > 0 ? '放電 ' : v < 0 ? '充電 ' : ''}${fmt(Math.abs(v))} kW`, v => { d.p = v; recompute(); syncDevInputs(); }));
+      box.appendChild(slider(`蓄電池 #${d.id}（節点${d.node}）無効電力 Q：注入（進み）＋／吸収−`, -d.rated, d.rated, 10, d.q, v => `${fmt(v)} kvar`, v => { d.q = v; recompute(); syncDevInputs(); }));
+    });
+    if (!m.devices.some(d => d.type === 'bess')) box.insertAdjacentHTML('beforeend', '<div class="note">蓄電池がありません（「負荷・DER」から追加できます）。</div>');
+  }
+  $('#freeze').onchange = e => { state.freeze = e.target.checked; recompute(); };
+  $('#setBase').onclick = () => { state.base = snapshot(state.cur); renderProfile(); };
+  $('#clearBase').onclick = () => { state.base = null; renderProfile(); };
+  $('#unitSeg').onclick = e => {
+    const b = e.target.closest('button'); if (!b) return;
+    state.unit = b.dataset.u; [...$('#unitSeg').children].forEach(x => x.classList.toggle('on', x === b));
+    renderProfile(); renderEvent(); renderLdc();
+  };
+
+  /* ---------- 3. 変化の3段表示 ---------- */
+  function doEvent(kind) {
+    const m = M();
+    if (state.freeze) { state.freeze = false; $('#freeze').checked = false; recompute({ ldc: false }); }
+    const before = state.cur;
+    const tb = { lrt: before.taps.lrt, svr: before.taps.svr.slice() };
+    const bs = m.devices.filter(d => d.type === 'bess'), dcs = m.devices.filter(d => d.type === 'dc');
+    const kb = Math.max(0, +$('#evBess').value || 0), kp = Math.max(0, +$('#evPv').value || 0);
+    let label = '';
+    const clampB = (d, v) => Math.max(-d.rated, Math.min(d.rated, v));
+    if (kind === 'bessCh' || kind === 'bessDis') {
+      if (!bs.length) { $('#evBody').innerHTML = '<div class="note">蓄電池がありません。</div>'; return; }
+      const sgnK = kind === 'bessCh' ? -1 : 1;
+      const from = bs.map(d => d.p);
+      bs.forEach(d => d.p = clampB(d, d.p + sgnK * kb));
+      label = `蓄電池 ${kind === 'bessCh' ? '充電' : '放電'}方向へ ${fmt(kb)} kW（P: ${from.map(fmt).join(',')} → ${bs.map(d => fmt(d.p)).join(',')} kW）`;
+    } else if (kind === 'pvUp' || kind === 'pvDown') {
+      const from = m.pvScale;
+      m.pvScale = Math.max(0, Math.min(100, m.pvScale + (kind === 'pvUp' ? kp : -kp)));
+      label = `太陽光 ${from}% → ${m.pvScale}%`;
+    } else if (kind === 'dc') {
+      if (!dcs.length) { $('#evBody').innerHTML = '<div class="note">データセンターがありません。</div>'; return; }
+      const trip = !dcs.every(d => d.tripped);
+      dcs.forEach(d => d.tripped = trip);
+      label = trip ? `データセンター 離脱（${fmt(dcs.reduce((a, d) => a + d.p, 0))} kW）` : 'データセンター 復帰';
+    }
+    const imm = F.powerFlow(m, tb);
+    const set = F.settle(m, tb);
+    writeBack(set.taps);
+    state.event = { label, before: before.pf, imm, set: set.pf, setRes: set, nSec: m.sections.length };
+    state.base = snapshot(before);
+    renderSliders(); renderDevices(); recompute(); renderEvent();
+  }
+  $('#evBtns').onclick = e => { const b = e.target.closest('button[data-ev]'); if (b) doEvent(b.dataset.ev); };
+  function updateDcBtn() { const dcs = M().devices.filter(d => d.type === 'dc'); $('#evDc').textContent = dcs.length && dcs.every(d => d.tripped) ? 'DC 復帰' : 'DC 離脱'; }
+
+  function renderEvent() {
+    updateDcBtn();
+    const ev = state.event, m = M();
+    if (!ev || ev.nSec !== m.sections.length) return;
+    const conv = convFn(), xs = ev.before.x;
+    const series = [
+      { name: '変化前', color: 'var(--ghost)', width: 2, pts: profilePts(ev.before, conv) },
+      { name: '変化直後（タップが動く前）', color: 'var(--s2)', dash: '6 4', width: 2, pts: profilePts(ev.imm, conv) },
+      { name: '整定後（タップが動いたあと）', color: 'var(--s1)', width: 2.5, pts: profilePts(ev.set, conv) }
+    ];
+    const N = xs.length - 1;
+    const dI = ev.imm.Vll.map((v, k) => v - ev.before.Vll[k]), dS = ev.set.Vll.map((v, k) => v - ev.before.Vll[k]);
+    const amax = a => a.reduce((bi, v, i) => Math.abs(v) > Math.abs(a[bi]) ? i : bi, 0);
+    const kI = amax(dI), kS = amax(dS);
+    const tapStr = pf => [`LRT ${sgn(pf.taps.lrt)}`].concat(m.svrs.map((s, i) => `${s.name} ${sgn(pf.taps.svr[i])}`)).join(' / ');
+    const bad = v => v < m.limits.lo || v > m.limits.hi;
+    const rows = ev.before.Vll.map((v, k) => `<tr class="${k === kI || k === kS ? 'max' : ''}"><td>${k}${k === kI ? ' ◆直後最大' : ''}${k === kS ? ' ●整定後最大' : ''}</td><td class="${bad(v) ? 'bad' : ''}">${fmt(v)}</td><td class="${bad(ev.imm.Vll[k]) ? 'bad' : ''}">${fmt(ev.imm.Vll[k])}</td><td class="${bad(ev.set.Vll[k]) ? 'bad' : ''}">${fmt(ev.set.Vll[k])}</td><td>${sgnV(dI[k])}</td><td>${sgnV(dS[k])}</td></tr>`).join('');
+    const st = ev.setRes.status === 'hunting' ? `<span class="fail">ハンチングの可能性（${ev.setRes.cycle.join('・')}）</span>` : `${ev.setRes.moves.length}手で整定`;
+    $('#evBody').innerHTML = `
+      <div class="alert warn" style="background:var(--surface-2);border-color:var(--border)"><b>${esc(ev.label)}</b><br>
+      タップ：変化前 ${tapStr(ev.before)} → 整定後 ${tapStr(ev.set)}（${st}）<br>
+      最大の変化：直後 <b>節点${kI}</b> ${sgnV(dI[kI])} V ／ 整定後 <b>節点${kS}</b> ${sgnV(dS[kS])} V</div>
+      <div class="legend">${legendHTML(series.slice().reverse())}</div>
+      <div class="chart" id="evChart"></div>
+      <div class="tbl" style="max-height:340px;overflow:auto"><table><thead><tr><th>節点</th><th>変化前 V</th><th>直後 V</th><th>整定後 V</th><th>ΔV 直後</th><th>ΔV 整定後</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    lineChart($('#evChart'), {
+      aria: '変化の3段表示', xDomain: [0, xs[N]], xLabel: '変電所からの距離 (km)', yLabel: state.unit === 'pct' ? '電圧 (%)' : '線間電圧 (V)',
+      xFmt: v => fmt(v, v % 1 ? 1 : 0), yFmt: yFmtFn(), band: [conv(m.limits.lo), conv(m.limits.hi)], series,
+      vlines: vlinesFor(ev.set), snap: xs,
+      dots: ev.set.Vll.map((v, k) => ({ x: xs[k], y: conv(v), bad: bad(v), color: 'var(--s1)' })),
+      tip: k => `<b>節点 ${k}</b>（${fmt(xs[k], 2)} km）<br>変化前 ${fmt(ev.before.Vll[k])} V<br>直後 ${fmt(ev.imm.Vll[k])} V（${sgnV(dI[k])}）<br>整定後 ${fmt(ev.set.Vll[k])} V（${sgnV(dS[k])}）`
+    });
+  }
+
+  /* ---------- 4. LDC 比較 ---------- */
+  function renderLdc() {
+    const m = M(), sw = F.ldcSweep(m, 5), met = $('#ldcMetric').value, conv = convFn();
+    const mlab = { end: '末端電圧', min: '最低電圧', max: '最高電圧' }[met];
+    const series = [
+      { name: 'LDC 入', color: 'var(--s1)', width: 2.5, pts: sw.on.map(p => [p.pv, conv(p[met])]) },
+      { name: 'LDC 切', color: 'var(--s2)', width: 2.5, dash: '6 4', pts: sw.off.map(p => [p.pv, conv(p[met])]) }
+    ];
+    $('#ldcLegend').innerHTML = legendHTML(series);
+    const bad = v => v < m.limits.lo || v > m.limits.hi;
+    lineChart($('#ldcChart'), {
+      aria: 'LDCの影響', xDomain: [0, 100], xLabel: '太陽光出力 (%)', yLabel: mlab + (state.unit === 'pct' ? ' (%)' : ' (V)'),
+      xFmt: v => v + '%', yFmt: yFmtFn(), band: [conv(m.limits.lo), conv(m.limits.hi)], series, snap: sw.on.map(p => p.pv),
+      dots: sw.on.map(p => ({ x: p.pv, y: conv(p[met]), bad: bad(p[met]), color: 'var(--s1)' })).concat(sw.off.map(p => ({ x: p.pv, y: conv(p[met]), bad: bad(p[met]), color: 'var(--s2)' }))),
+      tip: i => {
+        const a = sw.on[i], b = sw.off[i];
+        const row = (n, p) => `${n}: <b>${fmt(p[met])} V</b> ／ LRT ${sgn(p.lrtTap)}${p.svrTaps.length ? ' / ' + p.svrTaps.map((t, j) => `${m.svrs[j].name} ${sgn(t)}`).join(' / ') : ''}${p.status === 'hunting' ? ' ⚠ハンチング' : ''}${met !== 'end' ? `（節点${met === 'min' ? p.iMin : p.iMax}）` : ''}`;
+        return `<b>太陽光 ${a.pv}%</b>（LRT 通過 P ${fmt(a.lrtP / 1000, 2)} MW${a.lrtP < 0 ? '・逆潮流' : ''}）<br>${row('LDC入', a)}<br>${row('LDC切', b)}<br><span style="color:var(--text-2)">LDC入：送出 ${fmt(a.bus)} V、LDC の推定降下 ${fmt(a.estDrop)} V ／ 実際の降下（送出−最低）${fmt(a.actDrop)} V</span>`;
+      }
+    });
+    const hunt = sw.on.concat(sw.off).filter(p => p.status === 'hunting').length;
+    const t0 = sw.on[0], t1 = sw.on[sw.on.length - 1];
+    $('#ldcNote').innerHTML = `各点で太陽光出力だけを変え、LRT をタップ中立から整定しなおした結果です。LDC入＝LRT の LDC（Rc ${m.lrt.rc}Ω・Xc ${m.lrt.xc}Ω、目標 ${fmt(m.lrt.target)} V）、LDC切＝LRT の送出電圧を ${fmt(m.lrt.targetOff)} V に保つ。SVR は各自の設定のままです。<br>` +
+      `LDC入では、太陽光 0%→100% で LRT 通過電力が ${fmt(t0.lrtP / 1000, 2)} → ${fmt(t1.lrtP / 1000, 2)} MW に減り、LDC の推定降下は ${fmt(t0.estDrop)} → ${fmt(t1.estDrop)} V、LRT のタップは ${sgn(t0.lrtTap)} → ${sgn(t1.lrtTap)} になります。` +
+      `一方、太陽光より上流の負荷による実際の降下（送出−最低）は ${fmt(t0.actDrop)} → ${fmt(t1.actDrop)} V です。逆潮流で通過電流が減ると、LDC は降下を<b>過小に見積もり</b>、送り出し電圧を下げすぎます。` +
+      (hunt ? ` <b class="fail">ハンチングの可能性がある点が ${hunt} 点あります。</b>` : '');
+  }
+  $('#ldcMetric').onchange = renderLdc;
+
+  /* LDC の影響デモ（補償しすぎで上限超過） */
+  function demoText() {
+    const m = M(), r = state.cur, s = F.summarize(m, r.pf), lf = F.regFlow(m, r.pf, m.lrt);
+    const est = r.pf.Vll[0] - F.controlVoltage(m, r.pf, m.lrt, true);
+    return `<div class="alert bad"><b>LDCの影響デモ（補償しすぎ）</b><br>
+      補償値を<b>末端までの線路インピーダンス</b>（Rc ${m.lrt.rc} Ω・Xc ${m.lrt.xc} Ω）、目標 ${fmt(m.lrt.target)} V にし、重負荷（太陽光0%・DC接続）にしました。<br>
+      LDC の推定降下 (Rc·P₀ + Xc·Q₀)/V ≒ (${m.lrt.rc}×${fmt(lf.P)}k + ${m.lrt.xc}×${fmt(lf.Q)}k)/${fmt(r.pf.Vll[0])} ≒ <b>${fmt(est)} V</b>。実際の降下（送出 − 最低）は ${fmt(r.pf.Vll[0] - s.min)} V です。<br>
+      LRT は Vc = Vs − ΔV_LDC を目標に近づけようとタップを上げ（${sgn(r.taps.lrt)}${r.limited.includes('LRT') ? '・タップ限界' : ''}）、母線 ${fmt(r.pf.Vll[0])} V／最高 ${fmt(s.max)} V で上限 ${fmt(m.limits.hi)} V を超え、逸脱 ${s.viol} 節点になります。破線は押す前の状態です。</div>`;
+  }
+  $('#ldcDemo').onclick = () => {
+    if (!state.demoSaved) {
+      const m = M();
+      state.demoSaved = { lrt: F.clone(m.lrt), pvScale: m.pvScale, dc: m.devices.filter(d => d.type === 'dc').map(d => [d.id, d.tripped]) };
+    }
+    state.base = snapshot(state.cur);
+    F.applyLdcDemo(M());
+    $('#ldcMetric').value = 'max';
+    renderRegs(); renderDevices(); renderSliders(); recompute();
+    $('#ldcDemoBox').innerHTML = demoText();
+    $('#ldcDemoBack').hidden = false;
+    $('#profileCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  $('#ldcDemoBack').onclick = () => {
+    const m = M(), sv = state.demoSaved; if (!sv) return;
+    Object.assign(m.lrt, sv.lrt); m.pvScale = sv.pvScale;
+    sv.dc.forEach(([id, t]) => { const d = m.devices.find(x => x.id === id); if (d) d.tripped = t; });
+    state.demoSaved = null; state.base = snapshot(state.cur);
+    $('#ldcMetric').value = 'end';
+    renderRegs(); renderDevices(); renderSliders(); recompute();
+    $('#ldcDemoBox').innerHTML = ''; $('#ldcDemoBack').hidden = true;
+  };
+  $('#ldcOffTarget').addEventListener('input', e => { const v = parseFloat(e.target.value); if (isFinite(v)) { M().lrt.targetOff = v; renderLdc(); } });
+
+  /* ---------- 設定 UI ---------- */
+  function numField(label, obj, key, opt = {}) {
+    const l = document.createElement('label');
+    l.innerHTML = `${label}<input type="number" step="${opt.step ?? 'any'}" ${opt.min !== undefined ? `min="${opt.min}"` : ''} ${opt.max !== undefined ? `max="${opt.max}"` : ''} value="${obj[key]}">`;
+    const inp = l.querySelector('input');
+    inp.addEventListener('input', () => {
+      const v = parseFloat(inp.value); if (!isFinite(v)) return;
+      if (opt.min !== undefined && v < opt.min) return;
+      obj[key] = v; opt.after && opt.after(); recompute();
+    });
+    return l;
+  }
+  function chkField(label, obj, key, after) {
+    const l = document.createElement('label'); l.className = 'chk';
+    l.innerHTML = `<input type="checkbox" ${obj[key] ? 'checked' : ''}>${label}`;
+    l.querySelector('input').onchange = e => { obj[key] = e.target.checked; after && after(); recompute(); };
+    return l;
+  }
+  function regKey(reg) { return reg === M().lrt ? 'lrt' : 'svr' + reg.id; }
+  function regCard(reg, isLrt) {
+    const m = M(), d = document.createElement('div'); d.className = 'reg';
+    const hd = document.createElement('div'); hd.className = 'hd';
+    hd.innerHTML = `<b>${esc(reg.name)}</b>`;
+    const mode = document.createElement('div'); mode.className = 'seg';
+    mode.innerHTML = `<button type="button" data-m="manual" class="${reg.mode === 'manual' ? 'on' : ''}">手動</button><button type="button" data-m="auto" class="${reg.mode === 'auto' ? 'on' : ''}">自動</button>`;
+    mode.onclick = e => { const b = e.target.closest('button'); if (!b) return; reg.mode = b.dataset.m; renderRegs(); recompute(); };
+    hd.appendChild(mode);
+    if (!isLrt) {
+      const pos = document.createElement('select'); pos.setAttribute('aria-label', '設置位置');
+      for (let k = 0; k < m.sections.length; k++) pos.insertAdjacentHTML('beforeend', `<option value="${k}" ${k === reg.node ? 'selected' : ''}>節点${k}→${k + 1} 間</option>`);
+      pos.onchange = () => { reg.node = +pos.value; state.base = null; recompute(); };
+      hd.appendChild(pos);
+      const del = document.createElement('button'); del.type = 'button'; del.className = 'sm danger'; del.textContent = '削除';
+      del.onclick = () => { m.svrs.splice(m.svrs.indexOf(reg), 1); state.base = null; state.event = null; renderRegs(); recompute(); };
+      hd.appendChild(del);
+    }
+    d.appendChild(hd);
+    const key = regKey(reg);
+    const tapW = document.createElement('div'); tapW.className = 'sl';
+    tapW.innerHTML = `<label>タップ位置（${reg.mode === 'auto' ? '自動：整定結果を表示' : '手動：スライダーで設定'}）</label><output data-tapout="${key}">${sgn(reg.tap)}</output><input type="range" data-tapin="${key}" min="${-reg.nDown}" max="${reg.nUp}" step="1" value="${reg.tap}" ${reg.mode === 'auto' ? 'disabled' : ''} aria-label="${esc(reg.name)} タップ位置">`;
+    const tin = tapW.querySelector('input');
+    tin.addEventListener('pointerdown', captureBase);
+    tin.addEventListener('input', () => { reg.tap = +tin.value; recompute(); });
+    d.appendChild(tapW);
+    const f = document.createElement('div'); f.className = 'fields';
+    const clampTap = () => { reg.tap = Math.max(-reg.nDown, Math.min(reg.nUp, reg.tap)); tin.min = -reg.nDown; tin.max = reg.nUp; };
+    f.append(
+      numField('タップ段数（上）', reg, 'nUp', { step: 1, min: 0, after: clampTap }),
+      numField('タップ段数（下）', reg, 'nDown', { step: 1, min: 0, after: clampTap }),
+      numField('1段の変化率 (%)', reg, 'step', { step: 0.05, min: 0 }),
+      numField('目標電圧 (V)', reg, 'target', { step: 10 }),
+      numField('不感帯 ± (V)', reg, 'db', { step: 5, min: 0 }),
+      chkField('LDC 入', reg, 'ldc'),
+      numField('LDC 補償 Rc (Ω)', reg, 'rc', { step: 0.05 }),
+      numField('LDC 補償 Xc (Ω)', reg, 'xc', { step: 0.05 })
+    );
+    d.appendChild(f);
+    d.insertAdjacentHTML('beforeend', `<div class="status" data-regst="${key}"></div>`);
+    return d;
+  }
+  function renderRegs() {
+    const m = M();
+    $('#lrtBox').innerHTML = '';
+    $('#lrtBox').appendChild(regCard(m.lrt, true));
+    $('#lrtBox').insertAdjacentHTML('beforeend', '<div class="note">タップ +1 段で二次母線電圧が「1段の変化率」だけ上がります（一次側は一定と仮定）。</div>');
+    $('#svrBox').innerHTML = '';
+    m.svrs.slice().sort((a, b) => a.node - b.node || a.id - b.id).forEach(s => $('#svrBox').appendChild(regCard(s, false)));
+    if (!m.svrs.length) $('#svrBox').innerHTML = '<div class="note">SVR はありません。</div>';
+  }
+  function renderRegStatus() {
+    const m = M(), r = state.cur, pf = r.pf;
+    F.regOrder(m).forEach(o => {
+      const reg = o.reg, key = regKey(reg), info = r.regs.find(g => g.kind === o.kind && g.i === o.i);
+      const tap = o.kind === 'lrt' ? pf.taps.lrt : pf.taps.svr[o.i];
+      const out = document.querySelector(`[data-tapout="${key}"]`), inp = document.querySelector(`[data-tapin="${key}"]`);
+      if (out) out.textContent = sgn(tap);
+      if (inp && reg.mode === 'auto') inp.value = tap;
+      const st = document.querySelector(`[data-regst="${key}"]`);
+      if (st && info) {
+        const fl = F.regFlow(m, pf, reg);
+        st.innerHTML = `制御点電圧 Vc = <b>${fmt(info.vc, 1)} V</b>（目標 ${fmt(reg.target)} ± ${fmt(reg.db)} V：${info.inBand ? '<span class="pass">帯の内</span>' : '<span class="fail">帯の外</span>'}）${reg.ldc ? '' : '［LDC 切：Vc = 出力電圧］'}<br>出力側電圧 ${fmt(fl.Vout)} V ／ 通過電流 ${fmt(fl.I, 1)} A ／ P ${fmt(fl.P)} kW${fl.P < 0 ? '（逆潮流）' : ''}, Q ${fmt(fl.Q)} kvar<br>1段あたり 約 ${fmt(m.Vbase * reg.step / 100, 1)} V、不感帯の幅 ${fmt(reg.db * 2)} V${reg.mode === 'auto' && m.Vbase * reg.step / 100 > reg.db * 2 ? ' <span class="fail">（1段が不感帯の幅より大きい → ハンチングしやすい）</span>' : ''}`;
+      }
+    });
+  }
+  $('#addSvr').onclick = () => {
+    const m = M(); const n = m.nextSvr++;
+    m.svrs.push({ id: n, name: 'SVR' + n, node: Math.min(m.sections.length - 1, Math.max(0, Math.round(m.sections.length * 0.75))), mode: 'auto', tap: 0, nUp: 8, nDown: 8, step: 1.0, target: 6600, db: 50, ldc: false, rc: 0.3, xc: 0.5 });
+    state.base = null; state.event = null; renderRegs(); recompute();
+  };
+
+  function nodeOptions(sel) { let h = ''; for (let k = 0; k <= M().sections.length; k++) h += `<option value="${k}" ${k === sel ? 'selected' : ''}>${k}</option>`; return h; }
+  function renderDevices() {
+    const m = M(), box = $('#devBox'); box.innerHTML = '';
+    const order = ['dc', 'bess', 'pv', 'load'];
+    m.devices.slice().sort((a, b) => order.indexOf(a.type) - order.indexOf(b.type) || a.node - b.node).forEach(d => {
+      const row = document.createElement('div'); row.className = 'dev';
+      row.innerHTML = `<span class="badge b-${d.type}" title="${typeLabel[d.type]}">${typeShort[d.type]}</span><span style="min-width:84px;font-size:12px">${typeLabel[d.type]} #${d.id}</span>`;
+      const nl = document.createElement('label'); nl.innerHTML = `節点<select>${nodeOptions(d.node)}</select>`;
+      nl.querySelector('select').onchange = e => { d.node = +e.target.value; renderSliders(); recompute(); };
+      row.appendChild(nl);
+      const after = () => { renderSliders(); };
+      const nf = (lab, key, o) => { const el = numField(lab, d, key, o); el.querySelector('input').dataset.dev = d.id + ':' + key; return el; };
+      if (d.type === 'load') row.append(nf('P (kW)', 'p', { step: 10 }), nf('Q (kvar)', 'q', { step: 10 }));
+      if (d.type === 'pv') row.append(nf('定格 P (kW)', 'p', { step: 10, min: 0, after }), nf('力率', 'pf', { step: 0.01, min: 0.01, max: 1 }));
+      if (d.type === 'bess') row.append(nf('P (kW) 放電+', 'p', { step: 10, after }), nf('Q (kvar) 注入+', 'q', { step: 10, after }), nf('定格 (kW)', 'rated', { step: 50, min: 0, after }));
+      if (d.type === 'dc') { row.append(nf('P (kW)', 'p', { step: 50 }), nf('Q (kvar)', 'q', { step: 10 }), chkField('離脱', d, 'tripped', updateDcBtn)); }
+      const del = document.createElement('button'); del.type = 'button'; del.className = 'sm danger'; del.textContent = '削除';
+      del.onclick = () => { m.devices.splice(m.devices.indexOf(d), 1); renderDevices(); renderSliders(); recompute(); };
+      row.appendChild(del);
+      box.appendChild(row);
+    });
+    if (m.pvScale !== undefined) box.insertAdjacentHTML('beforeend', `<div class="note" style="margin-top:6px">太陽光の実出力 = 定格 × 共通の出力％（現在 ${m.pvScale}%）。力率が 1 未満のときは無効電力を吸収します。</div>`);
+    $('#newDevNode').innerHTML = nodeOptions(Math.round(m.sections.length / 2));
+    updateDcBtn();
+  }
+  function syncDevInputs() {
+    M().devices.forEach(d => ['p', 'q'].forEach(k => { const el = document.querySelector(`input[data-dev="${d.id}:${k}"]`); if (el && document.activeElement !== el) el.value = d[k]; }));
+  }
+  $('#addDev').onclick = () => {
+    const m = M(), t = $('#newDevType').value, node = +$('#newDevNode').value, id = m.nextId++;
+    const d = { load: { p: 150, q: 50 }, pv: { p: 300, pf: 1.0 }, bess: { p: 0, q: 0, rated: 500 }, dc: { p: 2000, q: 400, tripped: false } }[t];
+    m.devices.push(Object.assign({ id, type: t, node }, d));
+    renderDevices(); renderSliders(); recompute();
+  };
+
+  function renderSystem() {
+    const m = M();
+    const sf = $('#sysFields'); sf.innerHTML = '';
+    sf.append(numField('基準電圧（LRT 中立時の二次、線間 V）', m, 'Vbase', { step: 10, min: 1 }), numField('電圧下限 (V)', m.limits, 'lo', { step: 10 }), numField('電圧上限 (V)', m.limits, 'hi', { step: 10 }));
+    sf.insertAdjacentHTML('beforeend', '<div class="note" style="grid-column:1/-1">上下限 6,300〜6,900V は高圧側の目安としてのダミー値です<span class="dummy">根拠は要確認</span></div>');
+    const uf = $('#upFields'); uf.innerHTML = '';
+    uf.append(numField('短絡容量 (MVA)', m.upstream, 'scMVA', { step: 10, min: 0 }), numField('X/R', m.upstream, 'xr', { step: 0.5, min: 0 }));
+    const rows = m.sections.map((s, i) => `<tr><td>${i + 1}（${i}→${i + 1}）</td><td><input type="number" step="0.05" min="0.001" value="${s.len}" data-sec="${i}:len"></td><td><input type="number" step="0.01" min="0" value="${s.r}" data-sec="${i}:r"></td><td><input type="number" step="0.01" min="0" value="${s.x}" data-sec="${i}:x"></td></tr>`).join('');
+    $('#secTable').innerHTML = `<table><thead><tr><th>区間</th><th>長さ km</th><th>R Ω/km</th><th>X Ω/km</th></tr></thead><tbody>${rows}</tbody></table>`;
+    $('#secTable').querySelectorAll('input').forEach(inp => inp.addEventListener('input', () => {
+      const [i, k] = inp.dataset.sec.split(':'); const v = parseFloat(inp.value);
+      if (!isFinite(v) || v < 0 || (k === 'len' && v <= 0)) return;
+      m.sections[+i][k] = v; state.base = null; recompute();
+    }));
+  }
+  function structureChanged() {
+    const m = M(), N = m.sections.length;
+    m.svrs.forEach(s => { if (s.node > N - 1) s.node = N - 1; });
+    m.devices.forEach(d => { if (d.node > N) d.node = N; });
+    state.base = null; state.event = null;
+    renderAll();
+  }
+  $('#addSec').onclick = () => { const m = M(), last = m.sections[m.sections.length - 1] || { len: 0.7, r: 0.12, x: 0.3 }; m.sections.push({ ...last }); structureChanged(); };
+  $('#delSec').onclick = () => { const m = M(); if (m.sections.length <= 1) return; m.sections.pop(); structureChanged(); };
+  $('#resetAll').onclick = () => { state.model = F.defaultModel(); state.freeze = false; state.demoSaved = null; $('#ldcDemoBox').innerHTML = ''; $('#ldcDemoBack').hidden = true; $('#freeze').checked = false; structureChanged(); };
+
+  /* ---------- テスト ---------- */
+  function showTests() {
+    const res = F.runTests();
+    const np = res.filter(r => r.pass).length;
+    $('#testOut').innerHTML = `<p><b>${np} / ${res.length} 件 合格</b></p><ul class="tests">` + res.map(r => `<li><span class="${r.pass ? 'pass' : 'fail'}">${r.pass ? '✔ 合格' : '✘ 不合格'}</span> ${esc(r.name)}<div class="d">${esc(r.detail)}</div></li>`).join('') + '</ul>';
+    return res;
+  }
+  $('#runTests').onclick = showTests;
+
+  /* ---------- 起動 ---------- */
+  function renderAll() { $('#ldcOffTarget').value = M().lrt.targetOff; renderSystem(); renderRegs(); renderDevices(); renderSliders(); recompute(); renderEvent(); }
+  renderAll();
+  state.base = null;
+  let rz = 0;
+  window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { renderProfile(); renderEvent(); renderLdc(); }, 150); });
+  if (/[?&]demo=dc/.test(location.search)) { $('#evDc').click(); }
+  if (/[?&]demo=ldc/.test(location.search)) { $('#ldcDemo').click(); }
+  if (/[?&]test=1/.test(location.search)) {
+    const res = showTests();
+    const m = M(), r = state.cur, s = F.summarize(m, r.pf);
+    const sw = F.ldcSweep(m, 10);
+    const L = p => [p.pv, Math.round(p.bus), Math.round(p.end), Math.round(p.min), p.lrtTap, p.svrTaps.join(','), Math.round(p.estDrop), Math.round(p.actDrop), p.status].join(' ');
+    $('#testJson').textContent = JSON.stringify({ layout: { innerWidth, scrollWidth: document.documentElement.scrollWidth, wide: [...document.querySelectorAll('body *')].filter(e => e.getBoundingClientRect().right > innerWidth + 1 && e.offsetParent).slice(0, 8).map(e => e.tagName + '.' + e.className + '#' + e.id + ' ' + Math.round(e.getBoundingClientRect().right)) }, tests: res.map(t => (t.pass ? 'PASS ' : 'FAIL ') + t.name + '\n' + t.detail), Vll: r.pf.Vll.map(v => Math.round(v)), taps: r.taps, status: r.status, viol: s.viol, loss: s.loss.toFixed(1), ldcOn: sw.on.map(L), ldcOff: sw.off.map(L) }, null, 1);
+  }
+})();
+</script>
+</body>
+</html>
