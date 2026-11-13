@@ -1,0 +1,3 @@
+# 一問一答クイズの実際の問題データは、リポジトリに入れない
+quiz/private/
+questions*.json
