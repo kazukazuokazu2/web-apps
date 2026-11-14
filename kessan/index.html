@@ -1,0 +1,1245 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>決算書の勉強</title>
+<style>
+:root{
+  color-scheme:light;
+  --bg:#f4f4f2; --surface:#fcfcfb; --surface-2:#f0efec; --border:#dddcd6;
+  --text:#0b0b0b; --text-2:#52514e; --muted:#85847f; --grid:#e8e7e2;
+  --accent:#2a78d6;
+  --c1:#2a78d6; --c2:#1baf7a; --c3:#6250d6; --c4:#eb6834; --c5:#eda100; --c6:#e87ba4; --c7:#008300; --c8:#85847f;
+  --good:#0f7b3f; --good-bg:rgba(0,131,0,.10);
+  --warn:#9a5c00; --warn-bg:rgba(237,161,0,.16);
+  --bad:#c62f2f; --bad-bg:rgba(227,73,72,.12);
+  --na:#6b6a66; --na-bg:rgba(133,132,127,.12);
+  --shadow:0 10px 30px rgba(0,0,0,.18);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#111110; --surface:#1a1a19; --surface-2:#242422; --border:#363531;
+    --text:#f0efec; --text-2:#c3c2b7; --muted:#8f8e86; --grid:#2c2b28;
+    --accent:#3987e5;
+    --c1:#3987e5; --c2:#199e70; --c3:#9085e9; --c4:#d95926; --c5:#c98500; --c6:#d55181; --c7:#2f9a2f; --c8:#8f8e86;
+    --good:#4cc27a; --good-bg:rgba(0,131,0,.20);
+    --warn:#e0a63a; --warn-bg:rgba(201,133,0,.20);
+    --bad:#ef7a7a; --bad-bg:rgba(230,103,103,.18);
+    --na:#a9a89f; --na-bg:rgba(143,142,134,.16);
+    --shadow:0 10px 30px rgba(0,0,0,.5);
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#111110; --surface:#1a1a19; --surface-2:#242422; --border:#363531;
+  --text:#f0efec; --text-2:#c3c2b7; --muted:#8f8e86; --grid:#2c2b28;
+  --accent:#3987e5;
+  --c1:#3987e5; --c2:#199e70; --c3:#9085e9; --c4:#d95926; --c5:#c98500; --c6:#d55181; --c7:#2f9a2f; --c8:#8f8e86;
+  --good:#4cc27a; --good-bg:rgba(0,131,0,.20);
+  --warn:#e0a63a; --warn-bg:rgba(201,133,0,.20);
+  --bad:#ef7a7a; --bad-bg:rgba(230,103,103,.18);
+  --na:#a9a89f; --na-bg:rgba(143,142,134,.16);
+  --shadow:0 10px 30px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box}
+[hidden]{display:none !important}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);font:15px/1.6 system-ui,-apple-system,"Segoe UI","Hiragino Sans","Yu Gothic UI",Meiryo,sans-serif;-webkit-text-size-adjust:100%}
+.wrap{max-width:1100px;margin:0 auto;padding:10px 16px 40px}
+header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:4px 0 8px}
+header h1{font-size:20px;margin:0}
+header .sub{font-size:12px;color:var(--text-2)}
+header .sp{flex:1}
+button,input,select{font:inherit;color:inherit}
+button{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 12px;min-height:36px;cursor:pointer}
+button:hover{border-color:var(--text-2)}
+button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.sm{min-height:30px;padding:2px 10px;font-size:13px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:10px;overflow-x:auto}
+.tabs button{border:0;border-bottom:3px solid transparent;border-radius:0;background:transparent;padding:8px 14px;white-space:nowrap;color:var(--text-2)}
+.tabs button[aria-selected="true"]{border-bottom-color:var(--accent);color:var(--text);font-weight:700}
+.maintabs{position:sticky;top:0;z-index:20;background:var(--bg)}
+.maintabs button{font-size:16px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px;min-width:0}
+.card h2{font-size:16px;margin:0 0 8px}
+.card h3{font-size:14px;margin:12px 0 6px;color:var(--text-2)}
+details.card>summary{cursor:pointer;font-weight:700}
+details.card[open]>summary{margin-bottom:8px}
+.note{font-size:12px;color:var(--text-2)}
+.unit{display:inline-block;font-size:12px;color:var(--text-2);background:var(--surface-2);border-radius:6px;padding:0 8px;margin-left:6px;font-weight:600}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.term{background:none;border:0;padding:0;min-height:0;border-radius:2px;color:inherit;font:inherit;text-decoration:underline dotted;text-decoration-thickness:1.5px;text-underline-offset:3px;cursor:help;text-align:left}
+.term:hover{color:var(--accent)}
+/* BS */
+.tacc{display:grid;grid-template-columns:minmax(0,1fr);gap:0;border:2px solid var(--text-2);border-radius:10px;overflow:hidden}
+@media (min-width:720px){.tacc{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.tacc>.side+.side{border-left:2px solid var(--text-2)}}
+@media (max-width:719.98px){.tacc>.side+.side{border-top:2px solid var(--text-2)}}
+.side{padding:8px 10px;min-width:0}
+.side>.sidehd{font-weight:700;text-align:center;padding:4px 0 6px;border-bottom:1px solid var(--border);margin-bottom:4px}
+.grp{margin:6px 0 2px;font-weight:700;font-size:14px;display:flex;justify-content:space-between;gap:6px}
+.fld{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 6px;align-items:center;padding:5px 0;border-bottom:1px dashed var(--grid)}
+.fld .lab{font-size:14px;min-width:0}
+.fld .lab small{color:var(--muted)}
+.fld .ctl{display:flex;align-items:center;gap:3px}
+.fld .ctl input{width:96px;text-align:right;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:4px 6px;min-height:34px;font-variant-numeric:tabular-nums}
+.fld .ctl input[aria-invalid="true"]{border-color:var(--bad);background:var(--bad-bg)}
+.fld .ctl button{min-width:32px;min-height:34px;padding:0 6px}
+.fld .pct{grid-column:1/-1;display:flex;justify-content:space-between;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.fld .msg{grid-column:1/-1;font-size:12px;color:var(--bad);font-weight:600}
+.fld .msg.warn{color:var(--warn)}
+.fld.indent .lab{padding-left:14px}
+.fld.calc{background:var(--surface-2);border-radius:6px;padding:6px 8px;border-bottom:0;margin:4px 0}
+.fld.calc .lab{font-weight:700}
+.fld.calc .val{font-weight:700;font-variant-numeric:tabular-nums;text-align:right}
+.tot{display:flex;justify-content:space-between;font-weight:700;padding:6px 2px;border-top:2px solid var(--text-2);margin-top:6px;font-variant-numeric:tabular-nums}
+.balance{margin-top:10px;padding:8px 12px;border-radius:10px;border:1px solid}
+.balance.ok{border-color:var(--good);background:var(--good-bg)}
+.balance.ng{border-color:var(--bad);background:var(--bad-bg)}
+.stat{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin:8px 0}
+.stat>div{background:var(--surface-2);border-radius:10px;padding:8px 10px}
+.stat .k{font-size:12px;color:var(--text-2)}
+.stat .v{font-size:19px;font-weight:700;font-variant-numeric:tabular-nums}
+.stat .v.neg{color:var(--bad)}
+.chart{position:relative;width:100%}
+.chart svg{display:block;width:100%;height:auto}
+.chart text{fill:var(--text-2);font-size:12px}
+.tip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 8px;font-size:12px;box-shadow:var(--shadow);white-space:nowrap;display:none;z-index:5;font-variant-numeric:tabular-nums}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--text-2);margin:6px 0}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px}
+.caution{border-left:4px solid var(--warn);background:var(--warn-bg);padding:8px 12px;border-radius:6px;font-size:13px;margin:8px 0}
+.disc{border:1px solid var(--border);background:var(--surface-2);padding:8px 12px;border-radius:8px;font-size:13px;margin-bottom:10px}
+/* 判定 */
+.st{display:inline-flex;align-items:center;gap:4px;font-weight:700;font-size:13px;border-radius:999px;padding:1px 10px;white-space:nowrap}
+.st.good{color:var(--good);background:var(--good-bg)}
+.st.warn{color:var(--warn);background:var(--warn-bg)}
+.st.danger{color:var(--bad);background:var(--bad-bg)}
+.st.na,.st.info{color:var(--na);background:var(--na-bg)}
+.ind{border:1px solid var(--border);border-left-width:6px;border-radius:10px;padding:10px 12px;margin-bottom:10px;background:var(--surface)}
+.ind.good{border-left-color:var(--good)}.ind.warn{border-left-color:var(--warn)}.ind.danger{border-left-color:var(--bad)}.ind.na,.ind.info{border-left-color:var(--na)}
+.ind.changed{box-shadow:0 0 0 2px var(--accent)}
+.ind .hd{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
+.ind .nm{font-weight:700;font-size:15px}
+.ind .vv{margin-left:auto;font-weight:700;font-size:18px;font-variant-numeric:tabular-nums}
+.ind p{margin:6px 0 4px}
+.ind .chg{font-size:12px;font-weight:700;color:var(--accent);background:var(--surface-2);border-radius:6px;padding:0 6px}
+.ind details summary{cursor:pointer;font-size:13px;color:var(--text-2)}
+.ind dl{margin:6px 0 0;font-size:13px}
+.ind dt{font-weight:700;color:var(--text-2);margin-top:6px}
+.ind dd{margin:2px 0 0 0}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;border:1px solid var(--border);border-radius:999px;padding:2px 8px;background:var(--surface);min-height:28px}
+.chip.changed{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);font-weight:700}
+.chip .ic{font-weight:700}
+.chip.good .ic{color:var(--good)}.chip.warn .ic{color:var(--warn)}.chip.danger .ic{color:var(--bad)}.chip.na .ic,.chip.info .ic{color:var(--na)}
+.banner{border:2px solid var(--bad);background:var(--bad-bg);border-radius:10px;padding:10px 12px;margin-bottom:10px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:5px 6px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top}
+th{color:var(--text-2);font-weight:600}
+.tbl{overflow-x:auto}
+.th-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:8px}
+.th-item{background:var(--surface-2);border-radius:8px;padding:8px}
+.th-item .ttl{font-weight:700;font-size:13px;margin-bottom:4px}
+.th-item label{font-size:12px;color:var(--text-2);display:inline-flex;align-items:center;gap:4px;margin-right:8px}
+.th-item input{width:70px;text-align:right;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:2px 6px;min-height:30px}
+.th-item .msg{font-size:12px;color:var(--bad);font-weight:600}
+.gl-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px}
+.gl-item{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;text-align:left;min-height:0;display:block;width:100%}
+.gl-item b{display:block;font-size:15px}
+.gl-item .y{font-size:11px;color:var(--muted)}
+.gl-item .s{font-size:13px;color:var(--text-2);display:block;margin-top:2px}
+select{max-width:100%;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:4px 6px;min-height:34px}
+input[type=search]{width:100%;max-width:420px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;min-height:40px}
+/* 用語シート */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:50}
+.sheet{position:fixed;z-index:51;background:var(--surface);color:var(--text);box-shadow:var(--shadow);display:flex;flex-direction:column;
+  left:0;right:0;bottom:0;max-height:82vh;border-radius:16px 16px 0 0;border:1px solid var(--border)}
+@media (min-width:720px){.sheet{left:auto;top:0;bottom:0;right:0;width:420px;max-height:none;border-radius:0}}
+.sheet .sh-hd{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--border)}
+.sheet .sh-hd h2{font-size:18px;margin:0;flex:1}
+.sheet .sh-bd{overflow-y:auto;padding:4px 16px 20px}
+.sheet h3{font-size:13px;color:var(--text-2);margin:14px 0 4px}
+.sheet p{margin:0}
+.sheet .formula{font-family:ui-monospace,Consolas,monospace;font-size:13px;background:var(--surface-2);border-radius:6px;padding:6px 8px}
+.sheet .rel{display:flex;flex-wrap:wrap;gap:6px}
+.sheet .rel button{min-height:32px;font-size:13px}
+.chk{font-size:11px;color:var(--warn);background:var(--warn-bg);border-radius:4px;padding:0 6px;font-weight:700;margin-left:4px}
+.grip{width:40px;height:4px;border-radius:2px;background:var(--border);margin:6px auto 0}
+@media (min-width:720px){.grip{display:none}}
+footer{margin-top:20px;font-size:12px;color:var(--text-2);border-top:1px solid var(--border);padding-top:10px}
+.tests li{margin:6px 0}
+.tests .d{font-size:12px;color:var(--text-2);white-space:pre-wrap}
+.pass{color:var(--good);font-weight:700}.fail{color:var(--bad);font-weight:700}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.seg button{border:0;border-radius:0;min-height:32px;padding:2px 12px;font-size:13px}
+.seg button[aria-pressed="true"]{background:var(--accent);color:#fff}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div><h1>決算書の勉強</h1><div class="sub">貸借対照表・損益計算書を、数字を動かして読む（学習用・数字はすべて架空）</div></div>
+  <div class="sp"></div>
+  <button type="button" id="themeBtn">テーマ: 自動</button>
+</header>
+
+<nav class="tabs maintabs" role="tablist" aria-label="主なタブ" id="mainTabs">
+  <button role="tab" type="button" data-main="home" aria-selected="true">家庭</button>
+  <button role="tab" type="button" data-main="corp" aria-selected="false">企業</button>
+  <button role="tab" type="button" data-main="gloss" aria-selected="false">用語集</button>
+</nav>
+
+<div id="view-home" class="mainview" data-view="home"></div>
+<div id="view-corp" class="mainview" data-view="corp" hidden></div>
+<div id="view-gloss" class="mainview" data-view="gloss" hidden></div>
+
+<section class="card" id="testCard">
+  <h2>確認用テスト</h2>
+  <div class="note">計算関数（KessanCalc）と用語辞書を確かめます。入力した数字には影響しません。</div>
+  <button type="button" class="primary" id="runTests" style="margin-top:8px">テストを実行</button>
+  <div id="testOut"></div>
+</section>
+
+<footer>
+  <p><b>保存について：</b>入力した数字はこのブラウザ内（localStorage）だけに保存され、外部には送られません。公開ページに、実際の家計や会社の数字を載せないでください。</p>
+  <p><b>学習用です。</b>このアプリは決算書の読み方を学ぶためのもので、投資・融資・会計・税務の助言ではありません。目安は一般的なもので、業種・規模・時期・家庭の状況によって異なります。判断が必要なときは専門家にご相談ください。</p>
+</footer>
+<pre id="testJson" hidden></pre>
+</div>
+
+<div class="overlay" id="overlay" hidden></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="shTitle" hidden tabindex="-1">
+  <div class="grip" aria-hidden="true"></div>
+  <div class="sh-hd">
+    <button type="button" class="sm" id="shBack" hidden aria-label="前の用語に戻る">← 戻る</button>
+    <h2 id="shTitle"></h2>
+    <button type="button" class="sm" id="shClose" aria-label="閉じる">閉じる ✕</button>
+  </div>
+  <div class="sh-bd" id="shBody"></div>
+</div>
+
+<script>
+/* =====================================================================
+   用語データ（すべての用語の説明はここ1か所）
+   short: ひとことで言うと / home: 家庭でいうと / corp: 企業でいうと / look: どこを見るとよいか
+   formula: 計算式（指標のみ） / related: 関連用語 / check: true なら「要確認」の印
+   ===================================================================== */
+const GLOSSARY = {
+  '貸借対照表': { yomi: 'たいしゃくたいしょうひょう', short: 'ある時点で、何をどれだけ持っていて（資産）、その元手をどこから調達したか（負債・純資産）を示す表。バランスシート（BS）とも呼ばれる。', home: '「今、家計にどんな財産と借金があるか」の一覧表。', corp: '決算日時点の、会社の財産と借入などの一覧。', look: '左（資産）の合計と、右（負債＋純資産）の合計は必ず一致する。どちら側の何が大きいかを見る。', related: ['資産', '負債', '純資産', '損益計算書'] },
+  '損益計算書': { yomi: 'そんえきけいさんしょ', short: '一定の期間（ふつう1年）に、どれだけ稼ぎ（収益）、どれだけ使い（費用）、いくら利益が残ったかを示す表。PLとも呼ばれる。', home: '1年間の家計簿のまとめ（収入・支出・年間収支）。', corp: '売上高から始まり、段階ごとに費用を引いて、最後に当期純利益を出す。', look: 'どの段階の利益が大きく減っているか（原価か、販管費か、利息か）。', related: ['売上高', '営業利益', '経常利益', '当期純利益', '貸借対照表'] },
+  '資産': { yomi: 'しさん', short: '持っている、お金やお金に換えられる財産。', home: '現金・預貯金、株式・投資信託、自宅、自動車など。', corp: '現金預金、売掛金、在庫、建物・機械など。', look: '合計額だけでなく、すぐ現金になるもの（流動資産）と、長く使うもの（固定資産）の割合を見る。', related: ['負債', '純資産', '流動資産', '固定資産', '総資産'] },
+  '総資産': { yomi: 'そうしさん', short: '資産の合計。貸借対照表の左側の合計。', home: '家計の財産をすべて足した額。', corp: '会社の資産をすべて足した額。', look: '自己資本比率やROAの分母になる。', related: ['資産', '自己資本比率', 'ROA'] },
+  '負債': { yomi: 'ふさい', short: '将来、返したり支払ったりしなければならない義務。', home: '住宅ローン、自動車ローン、カードローンなど。', corp: '買掛金、借入金、未払金など。', look: '金額と、いつまでに返すか（1年以内か）、金利の高さ。', related: ['資産', '純資産', '流動負債', '固定負債', '負債比率'] },
+  '純資産': { yomi: 'じゅんしさん', short: '資産から負債を引いた残り。返す必要のない元手。', home: '資産をすべて売って負債を返したときに残る額（家計の正味の財産）。', corp: '株主が出したお金（資本金など）と、これまでの利益の積み上げ（利益剰余金）など。', look: 'プラスか、マイナス（債務超過）か。総資産に占める割合（自己資本比率）。', formula: '資産合計 − 負債合計', related: ['自己資本比率', '債務超過', '資本金', '利益剰余金'] },
+  '流動資産': { yomi: 'りゅうどうしさん', short: '1年以内（または通常の商売の流れの中）に現金になる見込みの資産。', home: '現金・預貯金や、すぐ売れる株式・投資信託などが近い。', corp: '現金預金、売掛金、棚卸資産（在庫）など。', look: '流動負債と比べて足りているか（流動比率）。', related: ['固定資産', '流動負債', '流動比率', '当座比率'] },
+  '固定資産': { yomi: 'こていしさん', short: '1年を超えて長く使う、または持ち続ける資産。', home: '自宅や自動車。売ればお金になるが、すぐに、思った値段で売れるとは限らない。', corp: '建物・機械（有形固定資産）、ソフトウェア（無形固定資産）、長期の投資など。', look: '返す必要のない純資産でまかなえているか（固定比率）。', related: ['有形固定資産', '無形固定資産', '投資その他の資産', '固定比率', '減価償却'] },
+  '流動負債': { yomi: 'りゅうどうふさい', short: '1年以内（または通常の商売の流れの中）に支払う予定の負債。', home: '1年以内に払うカードの請求や、ローンのうち1年以内の返済分が近い。', corp: '買掛金、短期借入金、未払金など。', look: '流動資産でまかなえるか（流動比率・当座比率）。', related: ['流動資産', '流動比率', '買掛金', '短期借入金'] },
+  '固定負債': { yomi: 'こていふさい', short: '返済の期限が1年より先の負債。', home: '住宅ローンのうち、1年より先に返す部分が近い。', corp: '長期借入金、社債など。', look: '金額と金利、返済の予定。', related: ['長期借入金', '流動負債', '負債比率'] },
+  '現金預金': { yomi: 'げんきんよきん', short: '手元の現金と、銀行などの預金。', home: '財布の現金と、普通預金・定期預金（このアプリの「現金・預貯金」）。', corp: '会社の手元資金。支払いにすぐ使える。', look: '支出（売上）の何か月分あるか。', related: ['手元流動性', '生活防衛資金', '金融資産'] },
+  '売掛金': { yomi: 'うりかけきん', short: '商品やサービスを売ったが、まだ受け取っていない代金。', home: '家庭ではあまりない。貸したお金が後で返ってくる予定、が近い。', corp: '後で入金される約束の代金。入金されるまでは、支払いには使えない。', look: '売上に比べて大きすぎないか。回収が遅れていないか。', related: ['当座比率', '買掛金', '黒字倒産'] },
+  '棚卸資産': { yomi: 'たなおろししさん', short: '売るために持っている商品・製品や、材料・作りかけの品（在庫）。', home: '家庭の買い置きの品が近いが、家計の資産としては、ふつう数えない。', corp: '在庫。売れるまでは現金にならず、売れ残ると価値が下がることがある。', look: '売上に比べて増えすぎていないか。', related: ['流動資産', '当座比率', '売上原価', '黒字倒産'] },
+  '有形固定資産': { yomi: 'ゆうけいこていしさん', short: '建物、機械、土地、車両など、形のある、長く使う資産。', home: '自宅、自動車が近い。', corp: '工場、店舗、機械、車両など。土地以外は、使うにつれて少しずつ費用にしていく（減価償却）。', look: '事業に見合った規模か。借入でまかないすぎていないか。', related: ['減価償却', '固定資産', '無形固定資産'] },
+  '無形固定資産': { yomi: 'むけいこていしさん', short: '形はないが、長く使う資産。', home: '家計の資産としては、ふつう数えない。', corp: 'ソフトウェア、特許権、のれんなど。', look: '中身が何かと、金額の大きさ。', related: ['有形固定資産', '固定資産'] },
+  '投資その他の資産': { yomi: 'とうしそのたのしさん', short: '長く持つ予定の投資や、長期の貸付金、敷金・保証金など。', home: '長く持つつもりの株式・投資信託や、賃貸の敷金などが近い。', corp: '関係会社の株式、長期保有の投資有価証券、長期貸付金、差入保証金など。', look: '本業との関係と、すぐ現金にできるかどうか。', related: ['固定資産', '有価証券'] },
+  '買掛金': { yomi: 'かいかけきん', short: '材料や商品を仕入れたが、まだ支払っていない代金。', home: 'クレジットカードで買って、まだ引き落とされていない分が近い。', corp: '仕入先への後払いの代金。', look: '売掛金の入金より先に、支払期限が来ないか。', related: ['売掛金', '流動負債'] },
+  '短期借入金': { yomi: 'たんきかりいれきん', short: '1年以内に返す約束で借りたお金。', home: '短期のカードローンなどが近い。', corp: '運転資金として、銀行などから借りるお金。', look: '期限が来たときに返すお金か、借り換えのあてがあるか。', related: ['長期借入金', '流動負債', '支払利息'] },
+  '未払金': { yomi: 'みばらいきん', short: '本業の仕入以外で、まだ払っていない代金（備品の購入代金や経費など）。', home: '後でまとめて払う公共料金などが近い。', corp: '備品代や経費の未払い分など。このアプリでは「その他流動負債」とまとめて入力する。', look: '流動負債の一部として、支払いの予定を確かめる。', related: ['買掛金', '流動負債'] },
+  '長期借入金': { yomi: 'ちょうきかりいれきん', short: '1年より先に返す約束で借りたお金。', home: '住宅ローンが近い。', corp: '設備投資などのための長期の借入。', look: '金利、毎年の返済額、返済期間。', related: ['住宅ローン', '短期借入金', '固定負債'] },
+  '資本金': { yomi: 'しほんきん', short: '株主が会社に出したお金のうち、資本金として計上した額。', home: '家庭にはないが、自分で用意した元手、が近い。', corp: '会社の規模の目安の一つ。ただし、手元にそのまま現金で残っているとは限らない。', look: '資本金の大きさだけでなく、純資産全体を見る。', related: ['純資産', '利益剰余金'] },
+  '利益剰余金': { yomi: 'りえきじょうよきん', short: '会社がこれまでに出した利益のうち、配当などで外に出さずに残してきた分の積み上げ。', home: 'これまでの貯蓄の積み重ね、が近い。', corp: '赤字が続くとマイナスになることもある（このアプリでもマイナスを入力できる）。', look: 'プラスで、少しずつ増えているか。現金として残っているとは限らない点に注意。', related: ['純資産', '当期純利益', '資本金'] },
+  '売上高': { yomi: 'うりあげだか', short: '本業で商品やサービスを売って得た金額の合計。', home: '給与・賞与などの収入（額面）が近い。', corp: '損益計算書のいちばん上の数字。', look: '前の年からの伸びと、利益が伴っているか。', related: ['売上原価', '売上総利益', '額面', '月商'] },
+  '売上原価': { yomi: 'うりあげげんか', short: '売れた商品・製品を、仕入れたり作ったりするのにかかった費用。', home: '家計には、ちょうど対応するものはない。', corp: '小売なら仕入れ値、製造なら材料費や工場の人件費など。', look: '売上高に対する割合（原価率）。', related: ['売上高', '売上総利益', '棚卸資産'] },
+  '売上総利益': { yomi: 'うりあげそうりえき', short: '売上高から売上原価を引いた利益。「粗利（あらり）」とも呼ばれる。', home: '家計には、ちょうど対応するものはない。', corp: '商品やサービスそのものが生む利益。', look: '売上総利益率。業種で大きく違う。', formula: '売上高 − 売上原価', related: ['売上総利益率', '営業利益', '利益率'] },
+  '販売費及び一般管理費': { yomi: 'はんばいひおよびいっぱんかんりひ', short: '商品を売るための費用と、会社を運営するための費用。「販管費」と略される。', home: '食費、光熱費、通信費などの生活費が近い。', corp: '人件費、広告費、家賃、減価償却費など。', look: '売上高に対する割合と、その中身（固定費が多いか）。', related: ['営業利益', '固定費', '変動費', '減価償却'] },
+  '営業利益': { yomi: 'えいぎょうりえき', short: '本業でどれだけもうかったかを示す利益。', home: '収入から生活費を引いた残り、が近い（家計の年間収支とは計算の範囲が違う）。', corp: '売上総利益から販管費を引いたもの。', look: '売上高営業利益率と、前年からの変化。', formula: '売上総利益 − 販売費及び一般管理費', related: ['売上高営業利益率', '経常利益', 'インタレスト・カバレッジ・レシオ'] },
+  '営業外収益': { yomi: 'えいぎょうがいしゅうえき', short: '本業以外で、毎期のように生じる収益。', home: '預金の利息や、株式の配当などが近い。', corp: '受取利息、受取配当金など。', look: '本業の利益と分けて見る。', related: ['受取利息', '営業外費用', '経常利益'] },
+  '営業外費用': { yomi: 'えいぎょうがいひよう', short: '本業以外で、毎期のように生じる費用。', home: 'ローンの利息が近い（元金の返済は費用ではない）。', corp: '支払利息など。', look: '借入が多いと大きくなる。', related: ['支払利息', '営業外収益', '経常利益'] },
+  '受取利息': { yomi: 'うけとりりそく', short: '預金や貸付金について受け取る利息。', home: '預金の利息。', corp: '営業外収益の一部。', look: 'インタレスト・カバレッジ・レシオの計算に使う。', related: ['営業外収益', 'インタレスト・カバレッジ・レシオ'] },
+  '支払利息': { yomi: 'しはらいりそく', short: '借入金について支払う利息。', home: 'ローン返済額のうち、利息の部分。', corp: '営業外費用の一部。元金の返済は費用ではない。', look: '営業利益で無理なく払えているか。', related: ['営業外費用', 'インタレスト・カバレッジ・レシオ', '元利均等返済'] },
+  '経常利益': { yomi: 'けいじょうりえき', short: '本業の利益に、本業以外で毎期のように生じる収益・費用を加減した利益。', home: 'ふだんの年の家計の収支、が近い。', corp: '会社のふだんの実力を見るときによく使われる。', look: '営業利益との差（利息の負担など）。', formula: '営業利益 ＋ 営業外収益 − 営業外費用', related: ['営業利益', '特別利益', '特別損失'] },
+  '特別利益': { yomi: 'とくべつりえき', short: 'その期だけに生じた、臨時の利益。', home: '持っていた物を思ったより高く売れたときの利益、が近い。', corp: '土地などの売却益など。', look: '毎年続くものではないので、分けて見る。', related: ['特別損失', '税引前当期純利益'] },
+  '特別損失': { yomi: 'とくべつそんしつ', short: 'その期だけに生じた、臨時の損失。', home: '災害による損害などが近い。', corp: '災害による損失、資産の価値の切り下げ（減損）など。', look: '毎年続くものではないので、分けて見る。', related: ['特別利益', '税引前当期純利益'] },
+  '税引前当期純利益': { yomi: 'ぜいびきまえとうきじゅんりえき', short: '法人税等を引く前の、その期の利益。', home: '税金を引く前の年間の収支、が近い。', corp: '経常利益に、特別利益・特別損失を加減したもの。', look: '特別な損益で、経常利益から大きく変わっていないか。', formula: '経常利益 ＋ 特別利益 − 特別損失', related: ['法人税等', '当期純利益', '経常利益'] },
+  '法人税等': { yomi: 'ほうじんぜいとう', short: '会社の利益（所得）にかかる税金（法人税、住民税、事業税など）。', home: '家庭の所得税・住民税が近い。ただし、家庭は収入（所得）にかかり、会社は利益にかかるという違いがある。', corp: '税引前当期純利益から差し引く。', look: '利益に比べて大きすぎ・小さすぎないか。', related: ['当期純利益', '税金・社会保険料'] },
+  '当期純利益': { yomi: 'とうきじゅんりえき', short: 'すべての収益から、すべての費用と税金を引いた、その期の最終的な利益。', home: '年間収支（貯蓄に回せる額）が近い。ただし家計では元金返済も支出に入れるので、同じではない。', corp: '配当や利益剰余金のもとになる。', look: 'ROE・ROA、前年からの変化。', formula: '税引前当期純利益 − 法人税等', related: ['ROE', 'ROA', '利益剰余金', '年間収支'] },
+  '減価償却': { yomi: 'げんかしょうきゃく', short: '長く使う建物・機械などの購入代金を、使う年数にわたって少しずつ費用にしていく手続き。', home: '10年乗る車なら、1年あたりの値段で考える、が近い。', corp: '費用として計上されるが、その年に現金が出ていくわけではない（現金は買ったときに出ている）。', look: '利益と現金の動きが違う理由の一つ。', related: ['有形固定資産', '販売費及び一般管理費', '黒字倒産'] },
+  '債務超過': { yomi: 'さいむちょうか', short: '負債が資産を上回り、純資産がマイナスになっている状態。', home: '家や車をすべて売っても、ローンを返しきれない状態。', corp: '資産をすべて売っても負債を返しきれない状態。資金の調達や取引に影響することがある。', look: '純資産の符号（マイナスかどうか）。', related: ['純資産', '自己資本比率'] },
+  '黒字倒産': { yomi: 'くろじとうさん', short: '損益計算書では利益が出ているのに、支払いに使う現金が足りなくなって倒産すること。', home: '家計の年間収支は黒字なのに、引き落とし日に口座のお金が足りない状態、が近い。', corp: '売掛金の回収が遅い、在庫が増えた、借入の返済が重い、などで起こりうる。', look: '利益だけでなく、現金預金と手元流動性。', related: ['手元流動性', '売掛金', '棚卸資産', '当期純利益'] },
+  '流動比率': { yomi: 'りゅうどうひりつ', short: '1年以内に払う負債を、1年以内に現金になる資産でどれだけまかなえるか。', home: '1年以内の支払いに対して、預貯金などが何%あるか、が近い。', corp: '短い期間の支払い能力の目安。', look: '100%を下回ると、1年以内の支払いに対して資産が足りない。在庫が多いと高めに出る。', formula: '流動資産 ÷ 流動負債 × 100（%）', related: ['当座比率', '流動資産', '流動負債'] },
+  '当座比率': { yomi: 'とうざひりつ', short: '流動資産のうち、すぐ現金になるもので、流動負債をどれだけまかなえるか。', home: '預貯金だけで、1年以内の支払いをどれだけまかなえるか、が近い。', corp: '在庫を除くので、流動比率より厳しめの見方。一般には有価証券なども含めるが、このアプリでは現金預金と売掛金で計算する。', look: '在庫を除いても支払いに足りるか。', formula: '（現金預金 ＋ 売掛金）÷ 流動負債 × 100（%）', related: ['流動比率', '現金預金', '売掛金'] },
+  '手元流動性': { yomi: 'てもとりゅうどうせい', short: '手元の現金が、売上の何か月分あるか。', home: '生活防衛資金（預貯金が生活費の何か月分か）と同じ考え方。', corp: '一般には現金預金にすぐ売れる有価証券などを加えることが多いが、このアプリでは現金預金だけで計算する。', look: '入金の遅れや急な支出に耐えられるか。', formula: '現金預金 ÷ 月商（売上高 ÷ 12）（か月）', related: ['月商', '生活防衛資金', '黒字倒産'] },
+  '月商': { yomi: 'げっしょう', short: '1か月あたりの売上高。', home: '月収が近い。', corp: 'このアプリでは、年間の売上高 ÷ 12 で計算する。', look: '手元流動性の分母。', formula: '売上高 ÷ 12', related: ['手元流動性', '売上高'] },
+  '自己資本比率': { yomi: 'じこしほんひりつ', short: '総資産のうち、返す必要のない純資産が占める割合。', home: '家や貯金などの財産のうち、ローンでまかなっていない部分の割合。', corp: '高いほど借入などへの依存が小さい。業種によって目安が違う。', look: '割合と、純資産がマイナス（債務超過）でないか。', formula: '純資産 ÷ 総資産 × 100（%）', related: ['純資産', '債務超過', '負債比率'] },
+  '固定比率': { yomi: 'こていひりつ', short: '長く使う固定資産を、返す必要のない純資産でどれだけまかなえているか。', home: '自宅や車を、ローンでなく自分の財産でどれだけまかなえているか、が近い。', corp: '100%以下なら、固定資産を純資産でまかなえている。超える部分は、借入などでまかなっている。', look: '100%を大きく超えていないか。長期借入金でまかなう場合は、固定長期適合率という指標で見ることもある。', formula: '固定資産 ÷ 純資産 × 100（%）', related: ['固定資産', '純資産', '自己資本比率'] },
+  '負債比率': { yomi: 'ふさいひりつ', short: '負債が、純資産の何%（何倍）あるか。', home: 'ローンの残高が、正味の財産の何倍あるか、が近い。', corp: '高いほど借入などへの依存が大きい。', look: '自己資本比率とあわせて見る。', formula: '負債合計 ÷ 純資産 × 100（%）', related: ['自己資本比率', '負債'] },
+  '利益率': { yomi: 'りえきりつ', short: '売上高に対して、利益がどれだけの割合あるか。', home: '収入のうち、どれだけ残せたか（貯蓄率）が近い。', corp: '売上総利益率、売上高営業利益率など、利益の段階ごとに計算する。', look: '同じ業種や、同じ会社の前年と比べる。', formula: '各段階の利益 ÷ 売上高 × 100（%）', related: ['売上総利益率', '売上高営業利益率', '貯蓄率'] },
+  '売上総利益率': { yomi: 'うりあげそうりえきりつ', short: '売上高のうち、売上総利益（粗利）が何%あるか。', home: '家計には、ちょうど対応するものはない。', corp: '業種によって大きく違う（仕入れて売る小売と、自社で作る製造業など）。', look: '同じ業種や、同じ会社の前年と比べる。', formula: '売上総利益 ÷ 売上高 × 100（%）', related: ['売上総利益', '利益率'] },
+  '売上高営業利益率': { yomi: 'うりあげだかえいぎょうりえきりつ', short: '売上高のうち、本業の利益（営業利益）が何%残るか。', home: '収入のうち、生活費を払った後に残る割合、が近い。', corp: '本業の稼ぐ力を表す。', look: 'マイナスなら本業が赤字。', formula: '営業利益 ÷ 売上高 × 100（%）', related: ['営業利益', '利益率'] },
+  'ROE': { yomi: 'あーるおーいー（じこしほんりえきりつ）', short: '株主が出したお金などの純資産に対して、1年でどれだけ利益を上げたか（自己資本利益率）。', home: '自分の正味の財産に対して、1年でどれだけ増やせたか、が近い。', corp: '株主から見た、お金の使い方の効率。', look: '借入を増やして純資産を小さくしても高くなる点に注意。一般には期首と期末の平均を使うことが多いが、このアプリでは期末の値で計算する。', formula: '当期純利益 ÷ 純資産 × 100（%）', related: ['ROA', '当期純利益', '自己資本比率'] },
+  'ROA': { yomi: 'あーるおーえー（そうしさんりえきりつ）', short: '会社が使っているすべての資産に対して、1年でどれだけ利益を上げたか（総資産利益率）。', home: '持っている財産全体で、1年にどれだけ増やせたか、が近い。', corp: '資産の使い方の効率。分子に経常利益などを使う場合もあるが、このアプリでは当期純利益を使う。', look: '業種で差が大きい。', formula: '当期純利益 ÷ 総資産 × 100（%）', related: ['ROE', '総資産', '当期純利益'] },
+  'インタレスト・カバレッジ・レシオ': { yomi: 'いんたれすと・かばれっじ・れしお', short: '本業の利益などで、借入の利息を何倍まかなえるか。', home: '収入の余り（生活費を払った残り）で、ローンの利息を何回分払えるか、が近い。', corp: '一般には受取配当金も足して計算するが、このアプリでは受取利息だけを足す。', look: '1倍を下回ると、本業の利益などで利息を払いきれない。', formula: '（営業利益 ＋ 受取利息）÷ 支払利息（倍）', related: ['支払利息', '受取利息', '営業利益'] },
+  '金融資産': { yomi: 'きんゆうしさん', short: '預貯金、株式、投資信託、保険の解約返戻金など、お金や金融商品の形の資産。', home: 'このアプリでは、現金・預貯金、有価証券、保険の解約返戻金の合計。', corp: '現金預金、有価証券など。', look: 'すぐ使えるお金（預貯金）と、値動きのあるもの（株式など）に分けて見る。', related: ['現金預金', '有価証券', '解約返戻金'] },
+  '有価証券': { yomi: 'ゆうかしょうけん', short: '株式、債券、投資信託など、財産としての権利を表すもの。', home: '株式・投資信託。値動きがあり、売るときの価格は変わる。', corp: '売買目的の株式や、長く持つ債券など。', look: '値動きの大きさと、すぐ売れるかどうか。', related: ['金融資産', '投資その他の資産'] },
+  '解約返戻金': { yomi: 'かいやくへんれいきん', short: '保険を途中で解約したときに戻ってくるお金。', home: '貯蓄型の保険（終身保険など）で生じる。掛け捨ての保険では、ほとんどないことが多い。金額は保険会社からの通知などで確かめる。', corp: '会社が契約する保険でも同じように生じる。', look: '解約すると保障もなくなる点に注意。', related: ['金融資産'], check: true },
+  '住宅ローン': { yomi: 'じゅうたくろーん', short: '住宅を買う・建てるために、金融機関から長い期間で借りるお金。', home: '残高は負債（貸借対照表）、毎年の返済額は支出（家計の収支）に入れる。', corp: '長期借入金にあたる。', look: '残高、金利（固定か変動か）、毎年の返済額、完済するときの年齢。', related: ['長期借入金', '元利均等返済', '返済負担率', '住居費比率'] },
+  '元利均等返済': { yomi: 'がんりきんとうへんさい', short: '毎回の返済額（元金＋利息）が一定になる返済方法。', home: '住宅ローンでよく使われる。はじめのうちは利息の割合が大きく、元金がなかなか減らない。', corp: '借入の返済でも同じ方法がある。', look: '返済額のうち、利息がいくらで元金がいくらか。', related: ['住宅ローン', '支払利息', '返済負担率'] },
+  '自動車ローン・教育ローン': { yomi: 'じどうしゃろーん・きょういくろーん', short: '車の購入や、学費などのために借りるお金。', home: '住宅ローンより期間が短いことが多い。', corp: '借入金（長期・短期）にあたる。', look: '残高、金利、毎年の返済額。', related: ['返済負担率', '住宅ローン'] },
+  '高金利負債': { yomi: 'こうきんりふさい', short: 'リボ払い、カードローン、消費者金融など、ほかのローンより金利が高いことが多い借入。', home: '利息が大きく、返済しても残高が減りにくい。', corp: '金利の高い短期の借入が近い。', look: '残高と、収入に対する割合。', related: ['リボ払い', '負債'] },
+  'リボ払い': { yomi: 'りぼばらい', short: 'クレジットカードの支払いを、毎月ほぼ一定の額に分けて払う方法（リボルビング払い）。', home: '毎月の支払いは軽く見えるが、残高に手数料（利息）がかかり続け、残高が減りにくい。', corp: '会社の決算書では、借入や未払金にあたる。', look: '残高と手数料率、完済までの期間。', related: ['高金利負債'] },
+  '生活防衛資金': { yomi: 'せいかつぼうえいしきん', short: '病気や失業などで収入が止まったときに、生活を支えるためのお金。', home: '預貯金が、毎月の生活費の何か月分あるか。', corp: '手元流動性と同じ考え方。', look: '月の生活費の何か月分あるか。', formula: '現金・預貯金 ÷ 月間支出（か月）', related: ['手元流動性', '現金預金'] },
+  '貯蓄率': { yomi: 'ちょちくりつ', short: '収入のうち、使わずに残せた割合。', home: '年間収支 ÷ 収入合計。', corp: '売上高に対する当期純利益の割合（利益率）が近い。', look: 'マイナス（赤字）でないか、毎年続けられるか。', formula: '年間収支 ÷ 収入合計 × 100（%）', related: ['年間収支', '利益率'] },
+  '住居費比率': { yomi: 'じゅうきょひひりつ', short: '手取りのうち、住居にかかるお金（家賃・管理費・住宅ローン返済）の割合。', home: '毎月必ず出ていく、大きな固定費の重さを見る。', corp: '販管費に占める家賃の割合、が近い。', look: '手取りに対して重すぎないか。', formula: '（住居費 ＋ 住宅ローン返済）÷ 手取り × 100（%）', related: ['手取り', '住宅ローン', '固定費'] },
+  '返済負担率': { yomi: 'へんさいふたんりつ', short: '額面の年収に対する、1年間のローン返済額の割合。', home: '住宅ローンの審査などで使われる考え方。計算方法や基準は金融機関によって異なる。', corp: '利益や手元資金に対する借入の返済の重さ、が近い。', look: '返済が重すぎないか。金利が上がったときの余裕。', formula: 'ローン返済額の合計 ÷ 収入合計（額面）× 100（%）', related: ['住宅ローン', '額面', '元利均等返済'] },
+  '固定費': { yomi: 'こていひ', short: '収入や使う量に関係なく、毎月ほぼ同じだけかかる費用。', home: '住居費、保険料、通信費、ローン返済など。', corp: '家賃、正社員の人件費、減価償却費など。', look: '一度見直すと効果が続く。', related: ['変動費', '住居費比率'] },
+  '変動費': { yomi: 'へんどうひ', short: '使う量や売上に応じて増減する費用。', home: '食費、娯楽費など。', corp: '材料費、仕入れ、運送費など。', look: '売上（収入）に対する割合。', related: ['固定費', '売上原価'] },
+  '手取り': { yomi: 'てどり', short: '額面の収入から、税金と社会保険料を引いた、実際に受け取る金額。', home: '生活費や貯蓄に使えるお金。', corp: '家計に特有の考え方。', look: '住居費比率などの分母。', formula: '収入合計 − 税金・社会保険料', related: ['額面', '税金・社会保険料', '住居費比率'] },
+  '額面': { yomi: 'がくめん', short: '税金や社会保険料を引く前の、収入の金額。', home: '給与明細の「総支給額」が近い。', corp: '売上高が近い。', look: '返済負担率などの分母。', related: ['手取り', '売上高', '返済負担率'] },
+  '税金・社会保険料': { yomi: 'ぜいきん・しゃかいほけんりょう', short: '所得税・住民税と、健康保険・年金などの保険料。', home: '会社員は給与から天引きされることが多い。', corp: '法人税等が近いが、会社の法人税は利益にかかる。', look: '額面と手取りの差。', related: ['手取り', '額面', '法人税等'] },
+  '年間収支': { yomi: 'ねんかんしゅうし', short: '1年の収入合計から、支出合計を引いた額。', home: 'プラスなら貯蓄が増え、マイナスなら貯蓄の取り崩しや借入が必要になる。', corp: '当期純利益が近いが、家計では元金返済も支出に入れる点が違う。', look: 'プラスかマイナスか、収入に対する割合（貯蓄率）。', formula: '収入合計 − 支出合計', related: ['貯蓄率', '当期純利益'] },
+  '構成比': { yomi: 'こうせいひ', short: '全体（合計）に対する、各項目の割合。', home: '財産のうち、預貯金が何%か、など。', corp: '資産のうち、流動資産が何%か、など。', look: '合計額だけでは分からない、偏りが見える。', formula: '各項目 ÷ 合計 × 100（%）', related: ['貸借対照表'] }
+};
+
+/* =====================================================================
+   計算部（UIに依存しない）: KessanCalc
+   ===================================================================== */
+const KessanCalc = (() => {
+  const EPS = 1e-9;
+  const LABEL = { good: '健全', warn: '注意', danger: '危険', na: '判定なし', info: '判定なし' };
+  const ICON = { good: '✓', warn: '！', danger: '✕', na: '—', info: 'ⓘ' };
+  const ORDER = { danger: 0, warn: 1, na: 2, info: 3, good: 4 };
+
+  /* ---------- 入力項目の定義 ---------- */
+  const HOME = {
+    bs: [
+      { key: 'as', title: '資産', term: '資産', side: 'L', fields: [
+        { k: 'cash', label: '現金・預貯金', term: '現金預金' },
+        { k: 'sec', label: '有価証券（株式・投資信託）', term: '有価証券' },
+        { k: 'ins', label: '保険の解約返戻金', term: '解約返戻金' },
+        { k: 'house', label: '自宅（不動産）', term: '固定資産' },
+        { k: 'car', label: '自動車' },
+        { k: 'oa', label: 'その他の資産' }] },
+      { key: 'li', title: '負債', term: '負債', side: 'R', fields: [
+        { k: 'mort', label: '住宅ローン', term: '住宅ローン' },
+        { k: 'carLoan', label: '自動車ローン・教育ローン', term: '自動車ローン・教育ローン' },
+        { k: 'high', label: 'リボ払い・カードローン・消費者金融（高金利負債）', term: '高金利負債' },
+        { k: 'ol', label: 'その他の負債' }] }
+    ],
+    pl: [
+      { key: 'inc', title: '収入', fields: [
+        { k: 'salary', label: '給与（額面）', term: '額面' },
+        { k: 'bonus', label: '賞与（額面）', term: '額面', annualOnly: true },
+        { k: 'oinc', label: 'その他の収入' }] },
+      { key: 'exp', title: '支出', fields: [
+        { k: 'tax', label: '税金・社会保険料', term: '税金・社会保険料' },
+        { k: 'rent', label: '住居費（家賃・管理費。ローンは別欄）' },
+        { k: 'mortPay', label: '住宅ローン返済（元利合計）', term: '元利均等返済' },
+        { k: 'loanPay', label: 'その他のローン返済' },
+        { k: 'food', label: '食費' },
+        { k: 'util', label: '光熱・通信費' },
+        { k: 'insPrem', label: '保険料' },
+        { k: 'edu', label: '教育費' },
+        { k: 'trans', label: '交通・車の維持費' },
+        { k: 'fun', label: '娯楽・その他' }] }
+    ]
+  };
+  const CORP = {
+    bs: [
+      { key: 'ca', title: '流動資産', term: '流動資産', side: 'L', fields: [
+        { k: 'cash', label: '現金預金', term: '現金預金' },
+        { k: 'ar', label: '売掛金', term: '売掛金' },
+        { k: 'inv', label: '棚卸資産（在庫）', term: '棚卸資産' },
+        { k: 'oca', label: 'その他流動資産' }] },
+      { key: 'fa', title: '固定資産', term: '固定資産', side: 'L', fields: [
+        { k: 'tang', label: '有形固定資産（建物・機械など）', term: '有形固定資産' },
+        { k: 'intang', label: '無形固定資産', term: '無形固定資産' },
+        { k: 'invest', label: '投資その他の資産', term: '投資その他の資産' }] },
+      { key: 'cl', title: '流動負債', term: '流動負債', side: 'R', fields: [
+        { k: 'ap', label: '買掛金', term: '買掛金' },
+        { k: 'stl', label: '短期借入金', term: '短期借入金' },
+        { k: 'ocl', label: '未払金・その他流動負債', term: '未払金' }] },
+      { key: 'ncl', title: '固定負債', term: '固定負債', side: 'R', fields: [
+        { k: 'ltl', label: '長期借入金', term: '長期借入金' },
+        { k: 'oncl', label: 'その他固定負債' }] },
+      { key: 'eq', title: '純資産', term: '純資産', side: 'R', fields: [
+        { k: 'cap', label: '資本金', term: '資本金' },
+        { k: 're', label: '利益剰余金', term: '利益剰余金', neg: true }] }
+    ],
+    pl: [
+      { k: 'sales', label: '売上高', term: '売上高' },
+      { k: 'cogs', label: '売上原価', term: '売上原価', sign: '−' },
+      { calc: 'gross', label: '売上総利益', term: '売上総利益' },
+      { k: 'sga', label: '販売費及び一般管理費', term: '販売費及び一般管理費', sign: '−' },
+      { calc: 'op', label: '営業利益', term: '営業利益' },
+      { k: 'noi', label: '営業外収益', term: '営業外収益', sign: '＋' },
+      { k: 'intInc', label: 'うち受取利息', term: '受取利息', indent: true },
+      { k: 'noe', label: '営業外費用', term: '営業外費用', sign: '−' },
+      { k: 'intExp', label: 'うち支払利息', term: '支払利息', indent: true },
+      { calc: 'ord', label: '経常利益', term: '経常利益' },
+      { k: 'xg', label: '特別利益', term: '特別利益', sign: '＋' },
+      { k: 'xl', label: '特別損失', term: '特別損失', sign: '−' },
+      { calc: 'pre', label: '税引前当期純利益', term: '税引前当期純利益' },
+      { k: 'tax', label: '法人税等', term: '法人税等', sign: '−' },
+      { calc: 'net', label: '当期純利益', term: '当期純利益' }
+    ]
+  };
+  const fieldsOf = groups => groups.flatMap(g => g.fields || [g]).filter(f => f.k);
+  function zeros() {
+    const z = list => Object.fromEntries(list.map(f => [f.k, 0]));
+    return { home: { bs: z(fieldsOf(HOME.bs)), pl: z(fieldsOf(HOME.pl)) }, corp: { bs: z(fieldsOf(CORP.bs)), pl: z(CORP.pl.filter(f => f.k)) } };
+  }
+
+  /* ---------- しきい値（一般的な目安。要確認） ---------- */
+  const TH_DEF = {
+    home: {
+      eq: { name: '自己資本比率', dir: 'high', unit: '%', good: 40, bad: 20 },
+      ef: { name: '生活防衛資金', dir: 'high', unit: 'か月', good: 6, bad: 3 },
+      sr: { name: '貯蓄率', dir: 'high', unit: '%', good: 15, bad: 5 },
+      hr: { name: '住居費比率', dir: 'low', unit: '%', good: 25, bad: 35 },
+      lb: { name: '返済負担率', dir: 'low', unit: '%', good: 20, bad: 35 },
+      hi: { name: '高金利負債（収入合計に対する割合）', dir: 'low', unit: '%', good: 0, bad: 10, onlyBad: true }
+    },
+    corp: {
+      cr: { name: '流動比率', dir: 'high', unit: '%', good: 150, bad: 100 },
+      qr: { name: '当座比率', dir: 'high', unit: '%', good: 100, bad: 70 },
+      liq: { name: '手元流動性', dir: 'high', unit: 'か月', good: 1.5, bad: 0.5 },
+      eq: { name: '自己資本比率', dir: 'high', unit: '%', good: 40, bad: 20 },
+      fr: { name: '固定比率', dir: 'low', unit: '%', good: 100, bad: 150 },
+      dr: { name: '負債比率', dir: 'low', unit: '%', good: 100, bad: 200 },
+      om: { name: '売上高営業利益率', dir: 'high', unit: '%', good: 5, bad: 0 },
+      roe: { name: 'ROE', dir: 'high', unit: '%', good: 8, bad: 0 },
+      roa: { name: 'ROA', dir: 'high', unit: '%', good: 3, bad: 0 },
+      icr: { name: 'インタレスト・カバレッジ・レシオ', dir: 'high', unit: '倍', good: 3, bad: 1 }
+    }
+  };
+  const clone = o => JSON.parse(JSON.stringify(o));
+  function defaultThresholds() { const t = { home: {}, corp: {} }; for (const m of ['home', 'corp']) for (const [k, v] of Object.entries(TH_DEF[m])) t[m][k] = { good: v.good, bad: v.bad }; return t; }
+  /** しきい値の妥当性：高いほど良い→ 健全の境界 ≥ 危険の境界、低いほど良い→ 健全 ≤ 危険 */
+  function validThreshold(def, th) {
+    if (!isFinite(th.good) || !isFinite(th.bad)) return '数字を入れてください';
+    if (def.dir === 'high' && th.good < th.bad) return '「健全」の境界は「危険」の境界以上にしてください';
+    if (def.dir === 'low' && th.good > th.bad) return '「健全」の境界は「危険」の境界以下にしてください';
+    return '';
+  }
+  /** 判定：境界ちょうどは良い側（例：自己資本比率 40% は健全、20% は注意） */
+  function judge(v, dir, th) {
+    if (v === null || !isFinite(v)) return 'na';
+    if (dir === 'high') return v >= th.good - EPS ? 'good' : v >= th.bad - EPS ? 'warn' : 'danger';
+    return v <= th.good + EPS ? 'good' : v <= th.bad + EPS ? 'warn' : 'danger';
+  }
+  const div = (a, b) => (b === 0 || !isFinite(a) || !isFinite(b)) ? null : a / b;
+  const sum = (o, keys) => keys.reduce((a, k) => a + (+o[k] || 0), 0);
+  const f1 = v => (Math.round(v * 10) / 10).toLocaleString('ja-JP', { maximumFractionDigits: 1 });
+  const f0 = v => Math.round(v).toLocaleString('ja-JP');
+
+  /* ---------- 家庭：合計 ---------- */
+  function homeTotals(d) {
+    const b = d.bs, p = d.pl;
+    const assets = sum(b, ['cash', 'sec', 'ins', 'house', 'car', 'oa']);
+    const liab = sum(b, ['mort', 'carLoan', 'high', 'ol']);
+    const income = sum(p, ['salary', 'bonus', 'oinc']);
+    const expense = sum(p, ['tax', 'rent', 'mortPay', 'loanPay', 'food', 'util', 'insPrem', 'edu', 'trans', 'fun']);
+    return {
+      assets, liab, nw: assets - liab, fin: sum(b, ['cash', 'sec', 'ins']),
+      income, expense, balance: income - expense, takeHome: income - p.tax,
+      monthly: (expense - p.tax) / 12, loanPay: p.mortPay + p.loanPay, housing: p.rent + p.mortPay
+    };
+  }
+  /* ---------- 企業：合計 ---------- */
+  function corpTotals(d) {
+    const b = d.bs, p = d.pl;
+    const ca = sum(b, ['cash', 'ar', 'inv', 'oca']), fa = sum(b, ['tang', 'intang', 'invest']);
+    const cl = sum(b, ['ap', 'stl', 'ocl']), ncl = sum(b, ['ltl', 'oncl']), eq = sum(b, ['cap', 're']);
+    const assets = ca + fa, liab = cl + ncl;
+    const gross = p.sales - p.cogs, op = gross - p.sga, ord = op + p.noi - p.noe, pre = ord + p.xg - p.xl, net = pre - p.tax;
+    const m = v => div(v * 100, p.sales);
+    return { ca, fa, cl, ncl, eq, assets, liab, diff: assets - (liab + eq), gross, op, ord, pre, net,
+      margin: { gross: m(gross), op: m(op), ord: m(ord), pre: m(pre), net: m(net) }, monthlySales: p.sales / 12 };
+  }
+
+  function mk(o) { return Object.assign({ status: 'na', value: null, valueText: '計算できません' }, o); }
+  const pct = v => f1(v) + '%';
+  const thText = (def, th) => def.dir === 'high'
+    ? `健全 ${f1(th.good)}${def.unit}以上／注意 ${f1(th.bad)}〜${f1(th.good)}${def.unit}／危険 ${f1(th.bad)}${def.unit}未満`
+    : `健全 ${f1(th.good)}${def.unit}以下／注意 ${f1(th.good)}〜${f1(th.bad)}${def.unit}／危険 ${f1(th.bad)}${def.unit}超`;
+
+  /* ---------- 家庭：指標 ---------- */
+  function homeIndicators(d, TH) {
+    const t = homeTotals(d), b = d.bs, R = [];
+    const D = TH_DEF.home;
+    // 純資産
+    R.push(mk({ id: 'nw', term: '純資産', value: t.nw, valueText: f1(t.nw) + '万円', status: t.nw < 0 ? 'danger' : 'good',
+      criteria: '健全 0以上／危険 マイナス（債務超過の家庭版）',
+      comment: t.nw < 0 ? `負債が資産を${f1(-t.nw)}万円上回っています。資産をすべて売っても、借金が残る状態です（債務超過）。` : `資産が負債を${f1(t.nw)}万円上回っています。`,
+      why: '純資産がマイナスだと、資産をすべて手放しても借金を返しきれません。家計の土台がどれだけあるかを見る、いちばん基本の数字です。',
+      except: '住宅ローンを組んで間もない時期は、自宅の評価額よりローン残高が大きく、一時的にマイナスになることがあります。自宅の評価額は、実際に売れる値段と違うことがあります。',
+      hint: '「リボ払い・カードローン…」などの負債を減らすか、「現金・預貯金」を増やすと改善します。' }));
+    // 自己資本比率
+    { const v = div(t.nw * 100, t.assets), s = judge(v, D.eq.dir, TH.home.eq);
+      R.push(mk({ id: 'eq', term: '自己資本比率', value: v, valueText: v === null ? '計算できません（資産が0）' : pct(v), status: v === null ? 'na' : s, criteria: thText(D.eq, TH.home.eq),
+        comment: v === null ? '資産の合計が0のため計算できません。' : t.nw < 0 ? `純資産がマイナス（債務超過）です。資産の${pct(-v)}にあたる額だけ、負債が資産を上回っています。` :
+          s === 'good' ? `財産のうち${pct(v)}が、ローンなどでまかなっていない部分です。借入への依存は小さめです。` : s === 'warn' ? `財産のうち${pct(v)}が自分の分で、残りはローンなどでまかなっています。` : `財産のうち自分の分は${pct(v)}だけで、大部分がローンなどでまかなわれています。`,
+        why: '純資産の割合が高いほど、収入が減ったり資産の値段が下がったりしても、借金を返せなくなる心配が小さくなるためです。',
+        except: '住宅ローンを組んで間もない時期は低くなりがちで、返済が進むと上がっていきます。',
+        hint: '「住宅ローン」などの負債を減らすか、「現金・預貯金」などの資産を増やすと上がります。' })); }
+    // 生活防衛資金
+    { const v = div(b.cash, t.monthly), s = judge(v, D.ef.dir, TH.home.ef);
+      R.push(mk({ id: 'ef', term: '生活防衛資金', value: v, valueText: v === null ? '計算できません（月間支出が0）' : f1(v) + 'か月', status: v === null ? 'na' : s, criteria: thText(D.ef, TH.home.ef),
+        comment: v === null ? '月間支出（税金・社会保険料を除く支出÷12）が0のため計算できません。' : `預貯金で、生活費（月${f1(t.monthly)}万円）の${f1(v)}か月分をまかなえます。` +
+          (s === 'good' ? '急な出費や収入の減少に備えがあります。' : s === 'warn' ? 'もう少し厚くすると安心です。' : '病気や失業で収入が止まると、短い期間で生活費が足りなくなるおそれがあります。'),
+        why: '病気・失業などで収入が止まっても、次の収入が得られるまでの数か月を、借金をせずに暮らせるかを見るためです。',
+        except: '会社員か自営業か、家族の人数、すぐに売れる投資信託などがあるかで、必要な月数は変わります。',
+        hint: '「現金・預貯金」を増やすか、「食費」「娯楽・その他」などの支出を減らすと延びます。' })); }
+    // 貯蓄率
+    { const v = div(t.balance * 100, t.income), s = judge(v, D.sr.dir, TH.home.sr);
+      R.push(mk({ id: 'sr', term: '貯蓄率', value: v, valueText: v === null ? '計算できません（収入が0）' : pct(v), status: v === null ? 'na' : (t.balance < 0 ? 'danger' : s), criteria: thText(D.sr, TH.home.sr) + '（赤字は危険）',
+        comment: v === null ? '収入の合計が0のため計算できません。' : t.balance < 0 ? `年間${f1(-t.balance)}万円の赤字です。貯蓄を取り崩すか、借入で生活費をまかなっている状態です。` :
+          s === 'good' ? `収入の${pct(v)}（年${f1(t.balance)}万円）を残せています。` : s === 'warn' ? `収入の${pct(v)}（年${f1(t.balance)}万円）を残せていますが、余裕は大きくありません。` : `収入のうち残せているのは${pct(v)}（年${f1(t.balance)}万円）だけです。`,
+        why: '収入の一部を毎年残せるかは、教育・住宅・老後などの将来の支出に備えられるかの基本になるためです。',
+        except: 'このアプリでは住宅ローンの元金返済も支出に入れています。元金返済は負債を減らすので、実質的には貯蓄に近い面もあります。教育費が多い時期など、一時的に下がることもあります。',
+        hint: '支出を減らす（固定費から見直すと効果が続きます）か、収入を増やすと上がります。' })); }
+    // 住居費比率
+    { const v = t.takeHome > 0 ? div(t.housing * 100, t.takeHome) : null, s = judge(v, D.hr.dir, TH.home.hr);
+      R.push(mk({ id: 'hr', term: '住居費比率', value: v, valueText: v === null ? '計算できません（手取りが0以下）' : pct(v), status: v === null ? 'na' : s, criteria: thText(D.hr, TH.home.hr),
+        comment: v === null ? '手取り（収入合計−税金・社会保険料）が0以下のため計算できません。' : `住居費（家賃・管理費＋住宅ローン返済、年${f1(t.housing)}万円）は手取りの${pct(v)}です。` +
+          (s === 'good' ? '無理のない範囲です。' : s === 'warn' ? 'やや重めです。' : '手取りに対して重く、ほかの支出や貯蓄を圧迫しています。'),
+        why: '住居費は毎月必ずかかる固定費で、いったん決めると簡単には減らせないためです。',
+        except: '住む地域（都市部は家賃が高い）や、共働きかどうかで、無理のない割合は変わります。',
+        hint: '「住居費」や「住宅ローン返済」を減らす（借り換え・住み替えなど）か、収入を増やすと下がります。' })); }
+    // 返済負担率
+    { const v = t.income > 0 ? div(t.loanPay * 100, t.income) : null, s = judge(v, D.lb.dir, TH.home.lb);
+      R.push(mk({ id: 'lb', term: '返済負担率', value: v, valueText: v === null ? '計算できません（収入が0）' : pct(v), status: v === null ? 'na' : s, criteria: thText(D.lb, TH.home.lb),
+        comment: v === null ? '収入の合計が0のため計算できません。' : t.loanPay === 0 ? 'ローンの返済はありません。' : `ローン返済額（年${f1(t.loanPay)}万円）は額面年収の${pct(v)}です。` +
+          (s === 'good' ? '' : s === 'warn' ? '返済の負担がやや重めです。' : '返済の負担が重く、金利の上昇や収入の減少に弱い状態です。'),
+        why: '住宅ローンの審査などで、年収に対する年間返済額の割合が使われることがあるためです。基準は金融機関によって異なります。',
+        except: '共働きで二人の収入で返す場合や、まとまった返済のめどがある場合は、見え方が変わります。',
+        hint: '「住宅ローン返済」「その他のローン返済」を減らす（繰上返済・借り換えなど）か、収入を増やすと下がります。' })); }
+    // 高金利負債
+    { const bal = b.high, r = t.income > 0 ? div(bal * 100, t.income) : null;
+      let s; if (bal <= 0) s = 'good'; else if (r === null) s = 'danger'; else s = r <= TH.home.hi.bad + EPS ? 'warn' : 'danger';
+      R.push(mk({ id: 'hi', term: '高金利負債', value: bal, valueText: bal <= 0 ? 'なし' : f1(bal) + '万円' + (r === null ? '' : `（収入の${pct(r)}）`), status: s,
+        criteria: `健全 0／注意 あり（収入合計の${f1(TH.home.hi.bad)}%以下）／危険 収入合計の${f1(TH.home.hi.bad)}%超`,
+        comment: bal <= 0 ? 'リボ払い・カードローンなど、高金利の借入はありません。' : s === 'warn' ? `高金利の借入が${f1(bal)}万円あります。早めに減らすと、利息の負担が軽くなります。` : `高金利の借入が${f1(bal)}万円あり${r === null ? '、収入がありません' : `、収入の${pct(r)}にあたります`}。利息で残高が減りにくい状態です。`,
+        why: '高金利の借入は利息の負担が大きく、返済しても残高が減りにくいためです。少しでもあれば注意、収入に比べて多ければ危険としています。',
+        except: '短い期間で確実に返せる少額の利用など、状況によっては問題が小さいこともあります。',
+        hint: '「リボ払い・カードローン…」の欄を0に近づけると改善します。返し方は、必要に応じて専門の相談窓口などに相談してください。' })); }
+    return { totals: t, list: R, flags: {} };
+  }
+
+  /* ---------- 企業：指標 ---------- */
+  function corpIndicators(d, TH) {
+    const t = corpTotals(d), b = d.bs, p = d.pl, R = [], D = TH_DEF.corp, T = TH.corp;
+    const insolvent = t.eq < 0;
+    const ratio = (id, term, num, den, denName, f) => {
+      const v = div(num * 100, den), s = judge(v, D[id].dir, T[id]);
+      R.push(mk(Object.assign({ id, term, value: v, valueText: v === null ? `計算できません（${denName}が0）` : pct(v), status: v === null ? 'na' : s, criteria: thText(D[id], T[id]) }, f(v, s))));
+    };
+    ratio('cr', '流動比率', t.ca, t.cl, '流動負債', (v, s) => ({
+      comment: v === null ? '流動負債が0のため計算できません（1年以内に払う負債がない状態）。' : s === 'good' ? `流動資産は流動負債の${pct(v)}あり、1年以内の支払いに余裕があります。` : s === 'warn' ? `流動資産は流動負債の${pct(v)}です。1年以内の支払いはまかなえますが、余裕は大きくありません。` : `1年以内に払う負債を、1年以内に現金化できる資産でまかなえていません（流動資産は流動負債の${pct(v)}）。`,
+      why: '1年以内に支払う負債に対して、1年以内に現金になる資産が十分あるかを見るためです。',
+      except: '在庫が多い会社は高めに出やすく、現金で売る商売（小売・飲食など）は低くても回ることがあります。',
+      hint: '「現金預金」を増やす、「短期借入金」を長期借入金に借り換える、などで上がります。' }));
+    ratio('qr', '当座比率', b.cash + b.ar, t.cl, '流動負債', (v, s) => ({
+      comment: v === null ? '流動負債が0のため計算できません。' : s === 'good' ? `すぐ現金になる資産（現金預金と売掛金）で、流動負債の${pct(v)}をまかなえます。` : s === 'warn' ? `すぐ現金になる資産で、流動負債の${pct(v)}をまかなえます。在庫を除くと余裕は小さめです。` : `すぐ現金になる資産では、流動負債の${pct(v)}しかまかなえません。在庫が売れないと支払いが苦しくなります。`,
+      why: '流動資産から、すぐには現金にならない在庫などを除いて、より厳しめに支払い能力を見るためです。',
+      except: '売掛金の回収が遅い場合は、数字ほどの余裕はありません。',
+      hint: '「現金預金」を増やす、「棚卸資産（在庫）」を減らして現金にする、「短期借入金」を減らす、などで上がります。' }));
+    { const v = p.sales > 0 ? div(b.cash, t.monthlySales) : null, s = judge(v, D.liq.dir, T.liq);
+      R.push(mk({ id: 'liq', term: '手元流動性', value: v, valueText: v === null ? '計算できません（売上高が0）' : f1(v) + 'か月', status: v === null ? 'na' : s, criteria: thText(D.liq, T.liq),
+        comment: v === null ? '売上高が0のため計算できません。' : `手元の現金預金は月商（${f1(t.monthlySales)}百万円）の${f1(v)}か月分です。` + (s === 'good' ? '入金の遅れや急な支出に耐えやすい状態です。' : s === 'warn' ? 'やや薄めです。' : '入金が少し遅れるだけで、支払いが滞るおそれがあります。'),
+        why: '売上の何か月分の現金があるかで、入金の遅れや急な支出に耐えられるかを見るためです。',
+        except: '入金と支払いのタイミングや、借入の枠があるかどうかで、必要な額は変わります。',
+        hint: '「現金預金」を増やす（売掛金を早く回収する、在庫を減らす、など）と改善します。' })); }
+    { const v = div(t.eq * 100, t.assets), s = insolvent ? 'danger' : judge(v, D.eq.dir, T.eq);
+      R.push(mk({ id: 'eq', term: '自己資本比率', value: v, valueText: v === null ? '計算できません（総資産が0）' : pct(v) + (insolvent ? '（債務超過）' : ''), status: v === null ? 'na' : s, criteria: thText(D.eq, T.eq) + '。純資産がマイナスなら債務超過で危険',
+        comment: v === null ? '総資産が0のため計算できません。' : insolvent ? `債務超過です。負債が資産を${f1(-t.eq)}百万円上回り、資産をすべて売っても負債を返しきれません。` : s === 'good' ? `総資産のうち${pct(v)}が、返す必要のない純資産です。` : s === 'warn' ? `総資産のうち純資産は${pct(v)}で、残りは借入などでまかなっています。` : `総資産のうち純資産は${pct(v)}だけで、借入などへの依存が大きい状態です。`,
+        why: '返す必要のない純資産の割合が高いほど、業績が悪化したときにも耐えやすいためです。',
+        except: '業種によって目安が違います（設備の多い業種や、金融業は低めになりやすい）。',
+        hint: '利益を積み上げて「利益剰余金」を増やす、借入（「短期借入金」「長期借入金」）を減らす、などで上がります。' })); }
+    const eqRatio = (id, term, num, okText, warnText, badText, why, except, hint) => {
+      let v = null, s = 'na', vt, c;
+      if (t.eq < 0) { s = 'danger'; vt = '債務超過のため計算できません'; c = '純資産がマイナス（債務超過）のため、この比率は意味をなしません。債務超過は危険な状態です。'; }
+      else if (t.eq === 0) { vt = '計算できません（純資産が0）'; c = '純資産が0のため計算できません。'; }
+      else { v = num * 100 / t.eq; s = judge(v, D[id].dir, T[id]); vt = pct(v); c = (s === 'good' ? okText : s === 'warn' ? warnText : badText)(v); }
+      R.push(mk({ id, term, value: v, valueText: vt, status: s, criteria: thText(D[id], T[id]) + '。純資産がマイナスなら危険', comment: c, why, except, hint }));
+    };
+    eqRatio('fr', '固定比率', t.fa,
+      v => `固定資産を、返す必要のない純資産でまかなえています（${pct(v)}）。`,
+      v => `固定資産の一部（純資産を超える分）を、借入などでまかなっています（${pct(v)}）。`,
+      v => `固定資産が純資産の${pct(v)}あり、長く使う資産の多くを借入などでまかなっています。`,
+      '長く使う資産はすぐには現金にならないので、返す必要のない純資産でまかなうのが安全とされるためです。',
+      '長期借入金でまかなっている場合は、固定長期適合率（固定資産 ÷（純資産＋固定負債））で見ることもあります。',
+      '利益を積み上げて「利益剰余金」を増やす、使っていない「有形固定資産」を売る、などで下がります。');
+    eqRatio('dr', '負債比率', t.liab,
+      v => `負債は純資産の${pct(v)}で、借入などへの依存は小さめです。`,
+      v => `負債が純資産の${pct(v)}あります。`,
+      v => `負債が純資産の${pct(v)}（約${f1(v / 100)}倍）あり、借入などへの依存が大きい状態です。`,
+      '負債が多いほど、金利の上昇や業績の悪化で返済が苦しくなりやすいためです。',
+      '設備に大きく投資する業種や金融業などは、高めになりやすいです。',
+      '「短期借入金」「長期借入金」を減らすか、利益を積み上げて「利益剰余金」を増やすと下がります。');
+    { const v = p.sales > 0 ? div(t.op * 100, p.sales) : null, s = judge(v, D.om.dir, T.om);
+      R.push(mk({ id: 'om', term: '売上高営業利益率', value: v, valueText: v === null ? '計算できません（売上高が0）' : pct(v), status: v === null ? 'na' : s, criteria: thText(D.om, T.om),
+        comment: v === null ? '売上高が0のため計算できません。' : s === 'good' ? `売上高のうち${pct(v)}が本業の利益として残っています。` : s === 'warn' ? `本業で利益は出ていますが、売上高の${pct(v)}と薄めです。` : `本業で赤字です（営業利益 ${f1(t.op)}百万円）。`,
+        why: '本業でどれだけ利益を生み出せているかを見る、基本の指標だからです。',
+        except: '業種によって大きく違います（薄利多売の小売は低めになりやすい、など）。',
+        hint: '「売上原価」や「販売費及び一般管理費」を減らす、または値上げなどで「売上高」を増やすと上がります。' })); }
+    { let v = null, s = 'na', vt, c;
+      if (t.eq <= 0) { vt = t.eq < 0 ? '計算できません（債務超過）' : '計算できません（純資産が0）'; c = t.eq < 0 ? '純資産がマイナスのため、ROE は意味をなしません（判定しません）。' : '純資産が0のため計算できません。'; }
+      else { v = t.net * 100 / t.eq; s = judge(v, D.roe.dir, T.roe); vt = pct(v); c = s === 'good' ? `株主の元手（純資産）に対して、年${pct(v)}の利益を上げています。` : s === 'warn' ? `純資産に対する利益は年${pct(v)}です。` : `当期純利益が赤字で、純資産が減っています（ROE ${pct(v)}）。`; }
+      R.push(mk({ id: 'roe', term: 'ROE', value: v, valueText: vt, status: s, criteria: thText(D.roe, T.roe), comment: c,
+        why: '株主から見て、出したお金がどれだけ効率よく利益を生んでいるかを見るためです。',
+        except: '借入を増やして純資産を小さくしても高くなります。自己資本比率とあわせて見てください。',
+        hint: '「当期純利益」を増やす（売上を伸ばす・費用を減らす）と上がります。' })); }
+    { const v = div(t.net * 100, t.assets), s = judge(v, D.roa.dir, T.roa);
+      R.push(mk({ id: 'roa', term: 'ROA', value: v, valueText: v === null ? '計算できません（総資産が0）' : pct(v), status: v === null ? 'na' : s, criteria: thText(D.roa, T.roa),
+        comment: v === null ? '総資産が0のため計算できません。' : s === 'good' ? `持っている資産全体に対して、年${pct(v)}の利益を上げています。` : s === 'warn' ? `資産全体に対する利益は年${pct(v)}で、効率はやや低めです。` : `当期純利益が赤字です（ROA ${pct(v)}）。`,
+        why: '会社が使っているすべての資産で、どれだけ効率よく利益を出しているかを見るためです。',
+        except: '設備や在庫が多い業種は低めになりやすいです。',
+        hint: '「当期純利益」を増やすか、使っていない資産（余分な在庫・遊休資産など）を減らすと上がります。' })); }
+    { let v = null, s, vt, c;
+      if (p.intExp <= 0) { s = 'good'; vt = '利息負担なし'; c = '支払利息がないため、利息の負担はありません。'; }
+      else { v = (t.op + p.intInc) / p.intExp; s = judge(v, D.icr.dir, T.icr); vt = f1(v) + '倍';
+        c = s === 'good' ? `本業の利益などで、支払利息の${f1(v)}倍をまかなえます。` : s === 'warn' ? `利息は払えていますが、${f1(v)}倍と余裕は小さめです。` : `本業の利益などで、支払利息をまかなえていません（${f1(v)}倍）。`; }
+      R.push(mk({ id: 'icr', term: 'インタレスト・カバレッジ・レシオ', value: v, valueText: vt, status: s, criteria: thText(D.icr, T.icr) + '。支払利息が0なら「利息負担なし」', comment: c,
+        why: '借入の利息を、本業の利益で無理なく払えているかを見るためです。',
+        except: '一時的に利益が落ち込んだ年は低く出ます。',
+        hint: '「支払利息」を減らす（借入の返済・金利の低い借入への借り換え）か、「営業利益」を増やすと上がります。' })); }
+    { const v = p.sales > 0 ? div(t.gross * 100, p.sales) : null;
+      R.push(mk({ id: 'gm', term: '売上総利益率', value: v, valueText: v === null ? '計算できません（売上高が0）' : pct(v), status: v === null ? 'na' : 'info', criteria: '判定しない（業種で大きく違う）',
+        comment: v === null ? '売上高が0のため計算できません。' : `売上総利益率（粗利率）は${pct(v)}です。業種で大きく違うため、判定はしていません。同じ業種や、同じ会社の前年と比べてください。`,
+        why: '仕入れて売る小売と、自社で作る製造業、ソフトウェアなどで、売上原価の性質が大きく違うためです。',
+        except: '—',
+        hint: '「売上原価」を下げるか、値上げで「売上高」を上げると上がります。' })); }
+    const liq = R.find(r => r.id === 'liq');
+    const kuroji = t.net > 0 && liq.status === 'danger';
+    return { totals: t, list: R, flags: { kuroji, insolvent } };
+  }
+
+  function sortList(list) { return list.map((r, i) => [r, i]).sort((a, b) => ORDER[a[0].status] - ORDER[b[0].status] || a[1] - b[1]).map(x => x[0]); }
+  function overall(list) {
+    const goods = list.filter(r => r.status === 'good').slice(0, 3);
+    const bads = list.filter(r => r.status === 'danger').concat(list.filter(r => r.status === 'warn')).slice(0, 3);
+    return { goods, bads };
+  }
+
+  /* ---------- サンプル（すべて架空） ---------- */
+  const SAMPLES = {
+    home: [
+      { id: 'h-good', name: '健全な家庭（架空）', expect: { all: 'good' },
+        bs: { cash: 900, sec: 600, ins: 100, house: 2500, car: 150, oa: 50, mort: 1500, carLoan: 0, high: 0, ol: 0 },
+        pl: { salary: 600, bonus: 150, oinc: 0, tax: 150, rent: 24, mortPay: 90, loanPay: 0, food: 84, util: 36, insPrem: 24, edu: 36, trans: 30, fun: 60 } },
+      { id: 'h-loan', name: 'ローンが重い家庭（架空）', expect: { eq: 'danger', hr: 'danger', lb: 'danger', sr: 'danger' },
+        bs: { cash: 150, sec: 50, ins: 30, house: 4500, car: 200, oa: 20, mort: 4300, carLoan: 250, high: 0, ol: 0 },
+        pl: { salary: 550, bonus: 100, oinc: 0, tax: 130, rent: 30, mortPay: 180, loanPay: 60, food: 80, util: 36, insPrem: 30, edu: 40, trans: 40, fun: 40 } },
+      { id: 'h-high', name: '貯蓄が少なく高金利負債がある家庭（架空）', expect: { hi: 'danger', ef: 'danger', nw: 'danger', sr: 'danger' },
+        bs: { cash: 40, sec: 0, ins: 0, house: 0, car: 80, oa: 20, mort: 0, carLoan: 60, high: 90, ol: 0 },
+        pl: { salary: 380, bonus: 20, oinc: 0, tax: 80, rent: 96, mortPay: 0, loanPay: 48, food: 60, util: 30, insPrem: 12, edu: 0, trans: 24, fun: 48 } }
+    ],
+    corp: [
+      { id: 'c-good', name: '健全な企業：株式会社みどり精機（架空）', expect: { all: 'good' },
+        bs: { cash: 400, ar: 300, inv: 200, oca: 50, tang: 600, intang: 50, invest: 150, ap: 200, stl: 100, ocl: 150, ltl: 250, oncl: 50, cap: 100, re: 900 },
+        pl: { sales: 3000, cogs: 2100, sga: 690, noi: 10, intInc: 2, noe: 8, intExp: 6, xg: 0, xl: 0, tax: 64 } },
+      { id: 'c-kuroji', name: '黒字なのに現金が足りない企業：株式会社あおば商事（架空）', expect: { liq: 'danger', kuroji: true },
+        bs: { cash: 30, ar: 900, inv: 700, oca: 20, tang: 300, intang: 20, invest: 30, ap: 600, stl: 500, ocl: 100, ltl: 200, oncl: 0, cap: 100, re: 500 },
+        pl: { sales: 2400, cogs: 1800, sga: 470, noi: 5, intInc: 0, noe: 30, intExp: 28, xg: 0, xl: 0, tax: 32 } },
+      { id: 'c-insolv', name: '債務超過の企業：株式会社ひなた食品（架空）', expect: { eq: 'danger', insolvent: true },
+        bs: { cash: 50, ar: 100, inv: 80, oca: 20, tang: 400, intang: 10, invest: 40, ap: 120, stl: 300, ocl: 80, ltl: 350, oncl: 30, cap: 50, re: -230 },
+        pl: { sales: 1200, cogs: 900, sga: 330, noi: 5, intInc: 1, noe: 25, intExp: 24, xg: 0, xl: 20, tax: 1 } },
+      { id: 'c-debt', name: '借入が多い企業：株式会社かざみ運輸（架空）', expect: { dr: 'danger', fr: 'danger', eq: 'danger', icr: 'warn' },
+        bs: { cash: 250, ar: 200, inv: 50, oca: 50, tang: 1600, intang: 20, invest: 80, ap: 100, stl: 300, ocl: 100, ltl: 1350, oncl: 50, cap: 100, re: 250 },
+        pl: { sales: 1800, cogs: 1300, sga: 420, noi: 10, intInc: 1, noe: 60, intExp: 55, xg: 0, xl: 0, tax: 9 } }
+    ]
+  };
+
+  /* ---------- 保存と読み込み ---------- */
+  const STORE_KEY = 'kessan-v1';
+  function serialize(st) { return JSON.stringify({ v: 1, data: st.data, monthly: !!st.monthly, th: st.th, ui: st.ui || {} }); }
+  function deserialize(json) {
+    const def = { data: zeros(), monthly: false, th: defaultThresholds(), ui: {} };
+    let o; try { o = JSON.parse(json); } catch (e) { return null; }
+    if (!o || o.v !== 1 || !o.data) return null;
+    const out = clone(def);
+    for (const m of ['home', 'corp']) for (const part of ['bs', 'pl']) for (const k of Object.keys(out.data[m][part])) {
+      const v = o.data?.[m]?.[part]?.[k]; if (typeof v === 'number' && isFinite(v)) out.data[m][part][k] = v;
+    }
+    out.monthly = !!o.monthly;
+    for (const m of ['home', 'corp']) for (const k of Object.keys(out.th[m])) {
+      const t = o.th?.[m]?.[k]; if (t && isFinite(t.good) && isFinite(t.bad) && !validThreshold(TH_DEF[m][k], t)) out.th[m][k] = { good: +t.good, bad: +t.bad };
+    }
+    out.ui = typeof o.ui === 'object' && o.ui ? o.ui : {};
+    return out;
+  }
+  function save(storage, st) { try { storage.setItem(STORE_KEY, serialize(st)); return true; } catch (e) { return false; } }
+  function load(storage) { try { const s = storage.getItem(STORE_KEY); return s ? deserialize(s) : null; } catch (e) { return null; } }
+
+  /** 入力文字列 → 数値（全角・カンマ・「−」に対応） */
+  function parseNum(s) {
+    s = String(s ?? '').trim().replace(/[０-９．－，＋]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).replace(/[−ー‐―]/g, '-').replace(/[,\s]/g, '');
+    if (s === '' || s === '-') return { ok: true, v: 0, empty: true };
+    if (!/^[-+]?\d+(\.\d+)?$/.test(s) && !/^[-+]?\.\d+$/.test(s)) return { ok: false };
+    return { ok: true, v: parseFloat(s) };
+  }
+
+  function sampleData(mode, id) { const s = SAMPLES[mode].find(x => x.id === id); return s ? { bs: clone(s.bs), pl: clone(s.pl) } : null; }
+
+  /* ---------- テスト（計算部だけで実行できるもの） ---------- */
+  function runTests() {
+    const res = [], T = (name, pass, detail) => res.push({ name, pass: !!pass, detail });
+    const TH = defaultThresholds();
+    const homeD = (bs = {}, pl = {}) => { const z = zeros().home; Object.assign(z.bs, bs); Object.assign(z.pl, pl); return z; };
+    const corpD = (bs = {}, pl = {}) => { const z = zeros().corp; Object.assign(z.bs, bs); Object.assign(z.pl, pl); return z; };
+    const get = (r, id) => r.list.find(x => x.id === id);
+    // 1
+    { const out = []; let ok = true;
+      for (const s of SAMPLES.home) { const t = homeTotals(sampleData('home', s.id)); const a = Object.values(s.bs).slice(0, 6).reduce((x, y) => x + y, 0), l = s.bs.mort + s.bs.carLoan + s.bs.high + s.bs.ol;
+        if (t.nw !== t.assets - t.liab || t.assets !== a || t.liab !== l) ok = false; out.push(`${s.name}: 資産 ${t.assets} − 負債 ${t.liab} = 純資産 ${t.nw}`); }
+      T('家庭：純資産 ＝ 資産合計 − 負債合計', ok, out.join('\n')); }
+    // 2
+    { const t = corpTotals(corpD({}, { sales: 1000, cogs: 600, sga: 300 }));
+      T('企業：売上高1,000・売上原価600・販管費300 → 売上総利益400、営業利益100、営業利益率10%', t.gross === 400 && t.op === 100 && Math.abs(t.margin.op - 10) < 1e-9,
+        `売上総利益 ${t.gross}、営業利益 ${t.op}、営業利益率 ${t.margin.op}%`); }
+    // 3
+    { const a = get(corpIndicators(corpD({ oca: 800, ocl: 500 }), TH), 'cr'), b = get(corpIndicators(corpD({ oca: 450, ocl: 500 }), TH), 'cr');
+      T('流動比率：800/500 = 160%（健全）、450/500 = 90%（危険）', Math.abs(a.value - 160) < 1e-9 && a.status === 'good' && Math.abs(b.value - 90) < 1e-9 && b.status === 'danger',
+        `800/500 → ${a.valueText}（${LABEL[a.status]}）\n450/500 → ${b.valueText}（${LABEL[b.status]}）`); }
+    // 4
+    { const r = get(corpIndicators(corpD({ oca: 1500, ocl: 900, cap: 600 }), TH), 'eq');
+      T('自己資本比率：純資産600・総資産1,500 → 40%（健全の下限）', Math.abs(r.value - 40) < 1e-9 && r.status === 'good', `${r.valueText}（${LABEL[r.status]}）／内部値 ${r.value}`); }
+    // 5
+    { const r = get(homeIndicators(homeD({ cash: 300 }, { salary: 600, food: 300 }), TH), 'ef');
+      T('生活防衛資金：現金・預貯金300万円・月間支出25万円 → 12か月（健全）', Math.abs(r.value - 12) < 1e-9 && r.status === 'good', `${r.valueText}（${LABEL[r.status]}）`); }
+    // 6
+    { const r = get(homeIndicators(homeD({}, { salary: 600, mortPay: 120 }), TH), 'lb');
+      T('返済負担率：年間返済120万円・額面年収600万円 → 20%（健全の上限）', Math.abs(r.value - 20) < 1e-9 && r.status === 'good', `${r.valueText}（${LABEL[r.status]}）`); }
+    // 7
+    { const c = corpIndicators(corpD({ oca: 500, stl: 700, cap: 100, re: -300 }), TH), e = get(c, 'eq');
+      const h = get(homeIndicators(homeD({ cash: 100, mort: 300 }), TH), 'nw');
+      T('純資産がマイナス → 「債務超過」で危険', e.status === 'danger' && /債務超過/.test(e.valueText + e.comment) && c.flags.insolvent && h.status === 'danger' && /債務超過/.test(h.comment),
+        `企業：${e.valueText}（${LABEL[e.status]}）「${e.comment}」\n家庭：純資産 ${h.valueText}（${LABEL[h.status]}）`); }
+    // 8
+    { let ok = true, msg = [];
+      try {
+        const h = homeIndicators(zeros().home, TH), c = corpIndicators(zeros().corp, TH);
+        const all = h.list.concat(c.list);
+        if (all.some(r => r.value !== null && !isFinite(r.value))) ok = false;
+        msg.push('すべて0：' + all.map(r => `${r.term}=${r.valueText}`).join('、'));
+        const c2 = corpIndicators(corpD({ cash: 100 }, { sales: 0, intExp: 0 }), TH);
+        msg.push('売上0・支払利息0：' + c2.list.filter(r => ['liq', 'om', 'icr', 'gm'].includes(r.id)).map(r => `${r.term}=${r.valueText}`).join('、'));
+      } catch (e) { ok = false; msg.push('例外: ' + e.message); }
+      T('分母がゼロでもエラーにならない（「計算できません」と表示）', ok, msg.join('\n')); }
+    // 9
+    { const cases = [
+        ['自己資本比率 40%', 'high', TH.corp.eq, 40, 'good'], ['自己資本比率 20%', 'high', TH.corp.eq, 20, 'warn'], ['自己資本比率 19.99%', 'high', TH.corp.eq, 19.99, 'danger'],
+        ['流動比率 150%', 'high', TH.corp.cr, 150, 'good'], ['流動比率 100%', 'high', TH.corp.cr, 100, 'warn'], ['流動比率 99.9%', 'high', TH.corp.cr, 99.9, 'danger'],
+        ['住居費比率 25%', 'low', TH.home.hr, 25, 'good'], ['住居費比率 35%', 'low', TH.home.hr, 35, 'warn'], ['住居費比率 35.01%', 'low', TH.home.hr, 35.01, 'danger'],
+        ['返済負担率 20%', 'low', TH.home.lb, 20, 'good'], ['返済負担率 35%', 'low', TH.home.lb, 35, 'warn'],
+        ['固定比率 100%', 'low', TH.corp.fr, 100, 'good'], ['固定比率 150%', 'low', TH.corp.fr, 150, 'warn'], ['負債比率 200%', 'low', TH.corp.dr, 200, 'warn'],
+        ['営業利益率 0%', 'high', TH.corp.om, 0, 'warn'], ['ICR 3倍', 'high', TH.corp.icr, 3, 'good'], ['ICR 1倍', 'high', TH.corp.icr, 1, 'warn'],
+        ['手元流動性 1.5か月', 'high', TH.corp.liq, 1.5, 'good'], ['手元流動性 0.5か月', 'high', TH.corp.liq, 0.5, 'warn'],
+        ['生活防衛資金 6か月', 'high', TH.home.ef, 6, 'good'], ['貯蓄率 15%', 'high', TH.home.sr, 15, 'good'], ['貯蓄率 5%', 'high', TH.home.sr, 5, 'warn']];
+      const bad = cases.filter(c => judge(c[3], c[1], c[2]) !== c[4]);
+      // 計算経由の境界（浮動小数：600/1500×100 = 40.00000000000001 など）
+      const viaCalc = [
+        [get(homeIndicators(homeD({ cash: 1200 }, {}), TH), 'eq'), 'good', '家庭 自己資本比率（資産1,200・負債0 → 100%）'],
+        [get(homeIndicators(homeD({}, { salary: 700, mortPay: 245 }), TH), 'lb'), 'warn', '返済負担率 245/700 = 35%'],
+        [get(homeIndicators(homeD({ high: 40 }, { salary: 400 }), TH), 'hi'), 'warn', '高金利負債 40/400 = 収入の10%'],
+        [get(homeIndicators(homeD({ high: 41 }, { salary: 400 }), TH), 'hi'), 'danger', '高金利負債 41/400 = 10.25%'],
+        [get(homeIndicators(homeD({}, { salary: 400, tax: 80, rent: 80 }), TH), 'hr'), 'good', '住居費比率 80/320 = 25%']];
+      const bad2 = viaCalc.filter(c => c[0].status !== c[1]);
+      T('目安の境界ちょうどの判定（境界は良い側）', !bad.length && !bad2.length,
+        cases.map(c => `${c[0]} → ${LABEL[judge(c[3], c[1], c[2])]}（期待 ${LABEL[c[4]]}）`).join('、') + '\n' + viaCalc.map(c => `${c[2]} → ${LABEL[c[0].status]}（期待 ${LABEL[c[1]]}）`).join('\n')); }
+    // サンプル
+    { const out = []; let ok = true;
+      for (const m of ['home', 'corp']) for (const s of SAMPLES[m]) {
+        const r = (m === 'home' ? homeIndicators : corpIndicators)(sampleData(m, s.id), TH);
+        const fails = [];
+        for (const [k, v] of Object.entries(s.expect)) {
+          if (k === 'all') { const ng = r.list.filter(x => x.status !== 'good' && x.status !== 'info'); if (ng.length) fails.push('健全でない: ' + ng.map(x => x.term).join('・')); }
+          else if (k === 'kuroji' || k === 'insolvent') { if (r.flags[k] !== v) fails.push(k); }
+          else { const x = get(r, k); if (x.status !== v) fails.push(`${x.term}=${LABEL[x.status]}（期待 ${LABEL[v]}）`); }
+        }
+        if (fails.length) ok = false;
+        const cnt = st => r.list.filter(x => x.status === st).length;
+        out.push(`${s.name}: 危険${cnt('danger')}・注意${cnt('warn')}・健全${cnt('good')}${r.flags.kuroji ? '・黒字倒産の警告' : ''}${fails.length ? ' ✘ ' + fails.join(', ') : ' ✓'}`);
+        if (m === 'corp') { const t = corpTotals(sampleData(m, s.id)); if (Math.abs(t.diff) > 1e-9) { ok = false; out.push('  貸借が一致しない: 差額 ' + t.diff); } }
+      }
+      T('サンプルが、ねらいどおりの判定になる（企業サンプルは貸借も一致）', ok, out.join('\n')); }
+    // 保存・読み込み（メモリ上のストレージ）
+    { const mem = { s: {}, setItem(k, v) { this.s[k] = String(v); }, getItem(k) { return k in this.s ? this.s[k] : null; } };
+      const st = { data: zeros(), monthly: true, th: defaultThresholds(), ui: { main: 'corp' } };
+      st.data.home.bs.cash = 123.5; st.data.corp.bs.re = -45; st.th.corp.cr = { good: 160, bad: 110 };
+      save(mem, st); const back = load(mem);
+      const ok = back && back.data.home.bs.cash === 123.5 && back.data.corp.bs.re === -45 && back.monthly === true && back.th.corp.cr.good === 160 && back.ui.main === 'corp';
+      const broken = deserialize('{壊れたJSON'); const wrong = deserialize(JSON.stringify({ v: 1, data: { home: { bs: { cash: 'abc' } } } }));
+      T('入力値の保存と読み込み（メモリ上のストレージで往復）', ok && broken === null && wrong && wrong.data.home.bs.cash === 0,
+        `往復：現金 ${back && back.data.home.bs.cash}、利益剰余金 ${back && back.data.corp.bs.re}、月額表示 ${back && back.monthly}、流動比率のしきい値 ${back && JSON.stringify(back.th.corp.cr)}\n壊れたデータ → ${broken === null ? '無視（初期値）' : '?'}、数字でない値 → 0`); }
+    // 入力の解釈
+    { const cases = [['1,234', 1234], ['１２３４', 1234], ['−50', -50], ['-12.5', -12.5], ['', 0]], bad = ['12a', '1-2', 'abc'];
+      const ok = cases.every(([s, v]) => { const r = parseNum(s); return r.ok && r.v === v; }) && bad.every(s => !parseNum(s).ok);
+      T('入力の解釈（3桁区切り・全角・マイナス、不正な入力の検出）', ok, cases.map(([s]) => `「${s}」→ ${parseNum(s).v}`).join('、') + '／' + bad.map(s => `「${s}」→ 不正`).join('、')); }
+    return res;
+  }
+
+  return { HOME, CORP, SAMPLES, TH_DEF, LABEL, ICON, zeros, defaultThresholds, validThreshold, judge, homeTotals, corpTotals, homeIndicators, corpIndicators, sortList, overall, serialize, deserialize, save, load, parseNum, sampleData, runTests, fieldsOf, STORE_KEY, clone };
+})();
+
+/* =====================================================================
+   UI 部
+   ===================================================================== */
+(() => {
+  const K = KessanCalc, G = GLOSSARY;
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const fmt = (v, d = 1) => (v === null || !isFinite(v)) ? '—' : (Math.round(v * 10 ** d) / 10 ** d).toLocaleString('ja-JP', { maximumFractionDigits: d });
+  const UNIT = { home: '万円', corp: '百万円' };
+  const term = (key, text) => `<button type="button" class="term" data-term="${esc(key)}">${esc(text ?? key)}</button>`;
+
+  let ls = null; try { ls = window.localStorage; } catch (e) {}
+  const saved = ls ? K.load(ls) : null;
+  const S = saved || { data: { home: K.sampleData('home', 'h-good'), corp: K.sampleData('corp', 'c-good') }, monthly: false, th: K.defaultThresholds(), ui: {} };
+  S.ui = Object.assign({ main: 'home', sub: { home: 'bs', corp: 'bs' } }, S.ui || {});
+  S.ui.sub = Object.assign({ home: 'bs', corp: 'bs' }, S.ui.sub || {});
+  const base = { home: null, corp: null };
+  let started = false;
+  let saveTimer = 0;
+  function persist() { clearTimeout(saveTimer); saveTimer = setTimeout(() => { if (ls) K.save(ls, S); }, 250); }
+
+  /* ---------- テーマ ---------- */
+  const themeNames = { auto: '自動', light: 'ライト', dark: 'ダーク' };
+  let theme = 'auto'; try { theme = localStorage.getItem('kessan-theme') || 'auto'; } catch (e) {}
+  const applyTheme = () => { if (theme === 'auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = theme; $('#themeBtn').textContent = 'テーマ: ' + themeNames[theme]; };
+  $('#themeBtn').onclick = () => { theme = theme === 'auto' ? 'light' : theme === 'light' ? 'dark' : 'auto'; try { localStorage.setItem('kessan-theme', theme); } catch (e) {} applyTheme(); };
+  applyTheme();
+
+  /* ---------- 診断の計算（UI から呼ぶ） ---------- */
+  const diag = mode => (mode === 'home' ? K.homeIndicators : K.corpIndicators)(S.data[mode], S.th);
+  const statusMap = r => Object.fromEntries(r.list.map(x => [x.id, x.status]));
+  function setBase(mode) { base[mode] = statusMap(diag(mode)); }
+
+  /* ---------- 入力欄 ---------- */
+  function fieldHTML(mode, part, f, opt = {}) {
+    const id = `in-${mode}-${part}-${f.k}`;
+    const lab = f.term ? term(f.term, f.label) : esc(f.label);
+    return `<div class="fld${f.indent ? ' indent' : ''}" data-fld="${mode}.${part}.${f.k}">
+      <div class="lab">${f.sign ? `<span aria-hidden="true">${f.sign} </span>` : ''}<span>${lab}</span>${opt.suffix ? ` <small>${opt.suffix}</small>` : ''}</div>
+      <div class="ctl">
+        <button type="button" class="sm" data-step="-1" aria-label="${esc(f.label)}を減らす">−</button>
+        <input id="${id}" type="text" inputmode="decimal" autocomplete="off" data-in="${mode}.${part}.${f.k}" aria-label="${esc(f.label)}（${UNIT[mode]}）" aria-describedby="${id}-msg">
+        <button type="button" class="sm" data-step="1" aria-label="${esc(f.label)}を増やす">＋</button>
+        ${f.neg ? `<button type="button" class="sm" data-flip="1" aria-label="${esc(f.label)}の符号を反転">±</button>` : ''}
+      </div>
+      <div class="pct" data-pct="${mode}.${part}.${f.k}"></div>
+      <div class="msg" id="${id}-msg" role="status" aria-live="polite"></div>
+    </div>`;
+  }
+  // ラベルの term ボタンは label の中なので、クリックでフォーカスが入力欄に移らないよう、term の処理で preventDefault する
+  function fieldDef(mode, part, k) { const list = mode === 'home' ? K.fieldsOf(K.HOME[part]) : part === 'bs' ? K.fieldsOf(K.CORP.bs) : K.CORP.pl.filter(f => f.k); return list.find(f => f.k === k); }
+  const isMonthly = (mode, part, f) => mode === 'home' && part === 'pl' && S.monthly && !f.annualOnly;
+  function showValue(inp) {
+    const [mode, part, k] = inp.dataset.in.split('.'), f = fieldDef(mode, part, k);
+    const v = S.data[mode][part][k];
+    inp.value = fmt(isMonthly(mode, part, f) ? v / 12 : v, isMonthly(mode, part, f) ? 2 : 1);
+  }
+  function onInput(inp, commit) {
+    const [mode, part, k] = inp.dataset.in.split('.'), f = fieldDef(mode, part, k);
+    const msg = document.getElementById(inp.id + '-msg');
+    const r = K.parseNum(inp.value);
+    msg.className = 'msg';
+    if (!r.ok) { inp.setAttribute('aria-invalid', 'true'); msg.textContent = '数字で入力してください（例：1,200　マイナスは −50）。この値は計算に使っていません。'; return; }
+    if (r.v < 0 && !f.neg) { inp.setAttribute('aria-invalid', 'true'); msg.textContent = 'この欄はマイナスにできません（0以上）。この値は計算に使っていません。'; return; }
+    inp.removeAttribute('aria-invalid'); msg.textContent = '';
+    S.data[mode][part][k] = isMonthly(mode, part, f) ? r.v * 12 : r.v;
+    if (commit) showValue(inp);
+    afterChange(mode);
+  }
+  function step(inp, dir) {
+    const [mode, part, k] = inp.dataset.in.split('.'), f = fieldDef(mode, part, k);
+    const st = mode === 'corp' ? 10 : isMonthly(mode, part, f) ? 12 : 10;
+    let v = S.data[mode][part][k] + dir * st;
+    if (!f.neg && v < 0) v = 0;
+    S.data[mode][part][k] = Math.round(v * 1000) / 1000;
+    inp.removeAttribute('aria-invalid'); document.getElementById(inp.id + '-msg').textContent = '';
+    showValue(inp); afterChange(mode);
+  }
+  document.addEventListener('input', e => { if (e.target.matches('input[data-in]')) onInput(e.target, false); });
+  document.addEventListener('change', e => { if (e.target.matches('input[data-in]')) onInput(e.target, true); });
+  document.addEventListener('focusin', e => { if (e.target.matches('input[data-in]') && !e.target.getAttribute('aria-invalid')) { const v = K.parseNum(e.target.value); if (v.ok) e.target.value = String(v.v); } });
+  document.addEventListener('focusout', e => { if (e.target.matches('input[data-in]') && !e.target.getAttribute('aria-invalid')) showValue(e.target); });
+  document.addEventListener('click', e => {
+    const t = e.target.closest('.term'); if (t) { e.preventDefault(); openTerm(t.dataset.term, t); return; }
+    const sb = e.target.closest('[data-step]'); if (sb) { step(sb.closest('.fld').querySelector('input[data-in]'), +sb.dataset.step); return; }
+    const fl = e.target.closest('[data-flip]'); if (fl) { const inp = fl.closest('.fld').querySelector('input[data-in]'); const [m, p, k] = inp.dataset.in.split('.'); S.data[m][p][k] = -S.data[m][p][k]; showValue(inp); afterChange(m); return; }
+    const go = e.target.closest('[data-goto]'); if (go) { const [m, s] = go.dataset.goto.split('.'); setMain(m); setSub(m, s); window.scrollTo({ top: 0 }); }
+  });
+
+  /* ---------- 家庭・企業の共通の枠 ---------- */
+  function buildMode(mode) {
+    const v = $('#view-' + mode);
+    const samples = K.SAMPLES[mode].map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
+    v.innerHTML = `
+      <div class="card" style="padding:10px 14px">
+        <div class="row">
+          <label class="note" for="smp-${mode}">サンプル（架空）</label>
+          <select id="smp-${mode}"><option value="">— 選ぶ —</option>${samples}</select>
+          <button type="button" class="sm" data-load="${mode}">読み込む</button>
+          <button type="button" class="sm" data-base="${mode}">今の判定を比較の基準にする</button>
+          <button type="button" class="sm" data-clear="${mode}">すべて0にする</button>
+          <span class="unit">単位：${UNIT[mode]}${mode === 'home' ? '' : '（企業）'}</span>
+        </div>
+        <div class="note" style="margin-top:4px">−／＋で数字を動かすと、下の診断がすぐ変わります。比較の基準から判定が変わった指標は、青い枠で強調します。</div>
+      </div>
+      <details class="card"><summary>家庭と企業の対応表（同じ考え方を使っています）</summary>${mapTable()}</details>
+      <nav class="tabs" role="tablist" aria-label="${mode === 'home' ? '家庭' : '企業'}の表">
+        <button role="tab" type="button" data-sub="${mode}.bs">貸借対照表</button>
+        <button role="tab" type="button" data-sub="${mode}.pl">損益計算書</button>
+        <button role="tab" type="button" data-sub="${mode}.dx">診断</button>
+      </nav>
+      <div class="chips" id="chips-${mode}" aria-label="診断の一覧（クリックで診断タブへ）"></div>
+      <section data-panel="${mode}.bs"></section>
+      <section data-panel="${mode}.pl" hidden></section>
+      <section data-panel="${mode}.dx" hidden></section>`;
+    // タブ内の用語ボタンはタブ切替と競合するので、用語ボタン以外の部分のクリックでタブを切り替える
+    $$('[data-sub]', v).forEach(b => b.addEventListener('click', () => { const [m, s] = b.dataset.sub.split('.'); setSub(m, s); }));
+    $(`[data-load="${mode}"]`, v).onclick = () => { const id = $('#smp-' + mode).value; if (!id) return; S.data[mode] = K.sampleData(mode, id); refreshInputs(mode); setBase(mode); afterChange(mode); };
+    $(`[data-base="${mode}"]`, v).onclick = () => { setBase(mode); renderDerived(mode); };
+    $(`[data-clear="${mode}"]`, v).onclick = () => { S.data[mode] = K.zeros()[mode]; refreshInputs(mode); afterChange(mode); };
+    if (mode === 'home') buildHome(); else buildCorp();
+  }
+  function mapTable() {
+    const rows = [
+      ['現金・預貯金', '現金預金', '現金預金', ''], ['有価証券（株式・投資信託）', '有価証券', '投資その他の資産', '企業では、短期の売買目的なら流動資産に入ることもある'],
+      ['自宅（不動産）', '固定資産', '有形固定資産', ''], ['住宅ローン', '住宅ローン', '長期借入金', ''],
+      ['リボ払い・カードローン', 'リボ払い', '短期借入金', '家計のリボ払いは金利が高いことが多い'], ['純資産（資産−負債）', '純資産', '純資産', '企業は資本金と利益剰余金に分かれる'],
+      ['給与・賞与（額面）', '額面', '売上高', ''], ['食費・光熱費などの生活費', '固定費', '販売費及び一般管理費', ''],
+      ['税金・社会保険料', '税金・社会保険料', '法人税等', '家庭は収入にかかり、企業の法人税は利益にかかる'],
+      ['年間収支', '年間収支', '当期純利益', '家計は元金返済も支出に入れるが、企業の損益計算書では元金返済は費用ではない'],
+      ['生活防衛資金', '生活防衛資金', '手元流動性', ''], ['貯蓄率', '貯蓄率', '利益率', '']];
+    return `<div class="tbl"><table><thead><tr><th>家庭</th><th>企業</th><th>違い・注意</th></tr></thead><tbody>${rows.map(r => `<tr><td>${term(r[1], r[0])}</td><td>${term(r[2])}</td><td class="note">${esc(r[3])}</td></tr>`).join('')}</tbody></table></div>`;
+  }
+
+  /* ---------- 家庭 ---------- */
+  function buildHome() {
+    const bs = $('[data-panel="home.bs"]'), pl = $('[data-panel="home.pl"]'), dx = $('[data-panel="home.dx"]');
+    const [as, li] = K.HOME.bs;
+    bs.innerHTML = `<div class="card"><h2>${term('貸借対照表')}（家庭）<span class="unit">万円</span></h2>
+      <div class="tacc">
+        <div class="side"><div class="sidehd">${term('資産')}</div>${as.fields.map(f => fieldHTML('home', 'bs', f)).join('')}<div class="tot"><span>資産合計（${term('総資産')}）</span><span data-o="home.assets"></span></div></div>
+        <div class="side"><div class="sidehd">${term('負債')}と${term('純資産')}</div>${li.fields.map(f => fieldHTML('home', 'bs', f)).join('')}
+          <div class="grp"><span>負債合計</span><span data-o="home.liab"></span></div>
+          <div class="fld calc"><span class="lab">${term('純資産')}（自動計算）</span><span class="val" data-o="home.nw"></span><div class="pct" data-o="home.nwpct"></div></div>
+          <div class="tot"><span>負債＋純資産</span><span data-o="home.right"></span></div></div>
+      </div>
+      <p class="note">純資産 ＝ 資産合計 − 負債合計（入力しません）。右下の％は${term('構成比')}（合計に対する割合）。うち${term('金融資産')}：<b data-o="home.fin"></b> 万円。</p>
+      <h3>構成の積み上げ棒</h3><div class="chart" id="bsChart-home"></div></div>`;
+    const [inc, exp] = K.HOME.pl;
+    pl.innerHTML = `<div class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">${term('損益計算書')}（家計の年間収支）<span class="unit" data-o="home.plunit">万円／年</span></h2>
+        <div class="seg" role="group" aria-label="入力の単位"><button type="button" data-monthly="0">年額で入力</button><button type="button" data-monthly="1">月額で入力</button></div></div>
+      <p class="note" data-o="home.mnote"></p>
+      <div class="caution">家計では、住宅ローンなどの<b>元金の返済も支出</b>として扱います。一方、企業会計の損益計算書では、<b>借入の元金返済は費用ではありません</b>（費用になるのは${term('支払利息')}だけ）。そのため、家計の${term('年間収支')}と企業の${term('当期純利益')}は、似ているけれど同じではありません。</div>
+      <div class="tacc">
+        <div class="side"><div class="sidehd">収入</div>${inc.fields.map(f => fieldHTML('home', 'pl', f, { suffix: f.annualOnly ? '（年額）' : '' })).join('')}<div class="tot"><span>収入合計</span><span data-o="home.income"></span></div></div>
+        <div class="side"><div class="sidehd">支出</div>${exp.fields.map(f => fieldHTML('home', 'pl', f)).join('')}<div class="tot"><span>支出合計</span><span data-o="home.expense"></span></div></div>
+      </div>
+      <div class="stat" data-o="home.stats"></div>
+      <h3>収入の使い道</h3><div class="legend" id="useLegend"></div><div class="chart" id="useChart"></div>
+      <p class="note">支出は、毎月ほぼ同じだけかかる${term('固定費')}（住居費・保険料・通信費・ローン返済など）と、使う量で変わる${term('変動費')}（食費・娯楽など）に分けて見直すと、効果が分かりやすくなります。</p></div>`;
+    $$('[data-monthly]', pl).forEach(b => b.onclick = () => { S.monthly = b.dataset.monthly === '1'; refreshInputs('home'); afterChange('home'); });
+    dx.innerHTML = `<div class="disc">診断は<b>一般的な目安</b>であり、業種・規模・時期・家庭の状況で異なります。融資・投資・会計・税務などの判断を示すものではありません。</div><div id="dx-home"></div>${thEditor('home')}`;
+  }
+
+  /* ---------- 企業 ---------- */
+  function buildCorp() {
+    const bs = $('[data-panel="corp.bs"]'), pl = $('[data-panel="corp.pl"]'), dx = $('[data-panel="corp.dx"]');
+    const g = k => K.CORP.bs.find(x => x.key === k);
+    const grp = k => { const x = g(k); return `<div class="grp"><span>${term(x.term, x.title)}</span><span data-o="corp.g.${k}"></span></div>${x.fields.map(f => fieldHTML('corp', 'bs', f)).join('')}`; };
+    bs.innerHTML = `<div class="card"><h2>${term('貸借対照表')}（企業）<span class="unit">百万円</span></h2>
+      <div class="tacc">
+        <div class="side"><div class="sidehd">${term('資産')}の部</div>${grp('ca')}${grp('fa')}<div class="tot"><span>資産合計（${term('総資産')}）</span><span data-o="corp.assets"></span></div></div>
+        <div class="side"><div class="sidehd">${term('負債')}・${term('純資産')}の部</div>${grp('cl')}${grp('ncl')}<div class="grp"><span>負債合計</span><span data-o="corp.liab"></span></div>${grp('eq')}<div class="tot"><span>負債・純資産合計</span><span data-o="corp.right"></span></div></div>
+      </div>
+      <div id="balance"></div>
+      <p class="note">右下の％は${term('構成比')}（資産合計、または負債・純資産合計に対する割合）。</p>
+      <h3>構成の積み上げ棒</h3><div class="chart" id="bsChart-corp"></div></div>`;
+    pl.innerHTML = `<div class="card"><h2>${term('損益計算書')}（企業）<span class="unit">百万円</span></h2>
+      <div>${K.CORP.pl.map(f => f.k ? fieldHTML('corp', 'pl', f) : `<div class="fld calc"><span class="lab">＝ ${term(f.term, f.label)}</span><span class="val" data-o="corp.${f.calc}"></span><div class="pct"><span>売上高に対する${term('利益率')}</span><span data-o="corp.m.${f.calc}"></span></div></div>`).join('')}</div>
+      <h3>売上高から当期純利益までの流れ（ウォーターフォール図）</h3><div class="legend"><span><i style="background:var(--c1)"></i>売上高・各段階の利益</span><span><i style="background:var(--c4)"></i>差し引く費用・損失</span><span><i style="background:var(--c2)"></i>加える収益・利益</span></div>
+      <div class="chart" id="wfChart"></div></div>`;
+    dx.innerHTML = `<div class="disc">診断は<b>一般的な目安</b>であり、業種・規模・時期で異なります。融資・投資・会計・税務などの判断を示すものではありません。</div><div id="dx-corp"></div>${thEditor('corp')}`;
+  }
+
+  /* ---------- しきい値の編集 ---------- */
+  function thEditor(mode) {
+    const items = Object.entries(K.TH_DEF[mode]).map(([k, d]) => `<div class="th-item" data-th="${mode}.${k}"><div class="ttl">${term(d.name.replace(/（.*）/, ''), d.name)}（${d.dir === 'high' ? '高いほど良い' : '低いほど良い'}）</div>
+      ${d.onlyBad ? '' : `<label>健全の境界 <input type="text" inputmode="decimal" data-thk="good" aria-label="${esc(d.name)} 健全の境界"> ${d.unit}</label>`}
+      <label>危険の境界 <input type="text" inputmode="decimal" data-thk="bad" aria-label="${esc(d.name)} 危険の境界"> ${d.unit}</label><div class="msg" role="status"></div></div>`).join('');
+    return `<details class="card"><summary>判定のしきい値を変える</summary><p class="note">初期値は<b>一般的な目安。状況により異なる。要確認</b>。境界の値ちょうどは良い側に判定します（例：自己資本比率がちょうど40%なら健全）。</p><div class="th-grid">${items}</div><button type="button" class="sm" data-threset="${mode}" style="margin-top:8px">初期値に戻す</button></details>`;
+  }
+  function fillTh(mode) { $$(`[data-th^="${mode}."]`).forEach(el => { const k = el.dataset.th.split('.')[1]; $$('input', el).forEach(i => i.value = S.th[mode][k][i.dataset.thk]); $('.msg', el).textContent = ''; }); }
+  document.addEventListener('input', e => {
+    const i = e.target.closest('[data-th] input'); if (!i) return;
+    const el = i.closest('[data-th]'), [mode, k] = el.dataset.th.split('.'), msg = $('.msg', el);
+    const cand = Object.assign({}, S.th[mode][k]);
+    for (const x of $$('input', el)) { const r = K.parseNum(x.value); if (!r.ok) { msg.textContent = '数字で入力してください'; return; } cand[x.dataset.thk] = r.v; }
+    const err = K.validThreshold(K.TH_DEF[mode][k], cand); msg.textContent = err; if (err) return;
+    S.th[mode][k] = cand; afterChange(mode);
+  });
+  document.addEventListener('click', e => { const b = e.target.closest('[data-threset]'); if (!b) return; const m = b.dataset.threset; S.th[m] = K.defaultThresholds()[m]; fillTh(m); afterChange(m); });
+
+  /* ---------- タブ ---------- */
+  function setMain(m) {
+    S.ui.main = m;
+    $$('#mainTabs [data-main]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.main === m)));
+    $$('.mainview').forEach(v => v.hidden = v.dataset.view !== m);
+    if (m !== 'gloss' && started) renderDerived(m);   // 非表示のあいだに描いたグラフを、表示された幅で描き直す
+    persist();
+  }
+  function setSub(mode, s) {
+    S.ui.sub[mode] = s;
+    $$(`[data-sub^="${mode}."]`).forEach(b => b.setAttribute('aria-selected', String(b.dataset.sub === `${mode}.${s}`)));
+    $$(`[data-panel^="${mode}."]`).forEach(p => p.hidden = p.dataset.panel !== `${mode}.${s}`);
+    $('#chips-' + mode).hidden = s === 'dx';
+    if (started) renderDerived(mode);
+    persist();
+  }
+  $$('#mainTabs [data-main]').forEach(b => b.onclick = () => setMain(b.dataset.main));
+
+  function refreshInputs(mode) { $$(`input[data-in^="${mode}."]`).forEach(i => { i.removeAttribute('aria-invalid'); document.getElementById(i.id + '-msg').textContent = ''; showValue(i); }); }
+  function afterChange(mode) { renderDerived(mode); persist(); }
+  const out = (key, html) => $$(`[data-o="${key}"]`).forEach(e => e.innerHTML = html);
+
+  /* ---------- 積み上げ棒（BS） ---------- */
+  function stackBars(host, cols, unit) {
+    const W = Math.max(280, Math.round(host.clientWidth || 600)), H = 280, mt = 26, mb = 10, ph = H - mt - mb;
+    const total = Math.max(...cols.map(c => c.segs.reduce((a, s) => a + Math.max(0, s.v), 0)), 1e-9);
+    const colW = Math.min(170, (W - 40) / cols.length - 30), gap = (W - colW * cols.length) / (cols.length + 1);
+    const g = [];
+    cols.forEach((c, ci) => {
+      const x = gap + ci * (colW + gap); let y = mt + ph;
+      const ctot = c.segs.reduce((a, s) => a + Math.max(0, s.v), 0);
+      g.push(`<text x="${x + colW / 2}" y="14" text-anchor="middle" style="font-weight:700;fill:var(--text)">${esc(c.title)}</text>`);
+      c.segs.forEach(s => {
+        if (s.v <= 0) return;
+        const h = s.v / total * ph; y -= h;
+        g.push(`<rect x="${x}" y="${y + 1}" width="${colW}" height="${Math.max(0, h - 2)}" rx="3" fill="${s.color}" ${s.dash ? 'fill-opacity=".25" stroke="' + s.color + '" stroke-dasharray="5 3"' : ''}><title>${esc(s.name)} ${fmt(s.v)}${unit}（${fmt(s.v / ctot * 100)}%）</title></rect>`);
+        if (h > 26) g.push(`<text x="${x + colW / 2}" y="${y + h / 2 - 2}" text-anchor="middle" style="fill:${s.dash ? 'var(--text)' : '#fff'};font-weight:700">${esc(s.name)}</text><text x="${x + colW / 2}" y="${y + h / 2 + 13}" text-anchor="middle" style="fill:${s.dash ? 'var(--text)' : '#fff'}">${fmt(s.v / ctot * 100)}%</text>`);
+        else if (h > 12) g.push(`<text x="${x + colW / 2}" y="${y + h / 2 + 4}" text-anchor="middle" style="fill:${s.dash ? 'var(--text)' : '#fff'};font-size:11px">${esc(s.name)} ${fmt(s.v / ctot * 100, 0)}%</text>`);
+      });
+    });
+    host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(cols.map(c => c.title + '：' + c.segs.filter(s => s.v > 0).map(s => `${s.name} ${fmt(s.v)}${unit}`).join('、')).join('／'))}">${g.join('')}</svg>
+      <div class="legend">${cols.flatMap(c => c.segs).filter((s, i, a) => s.v > 0 && a.findIndex(x => x.name === s.name) === i).map(s => `<span><i style="background:${s.color}${s.dash ? ';opacity:.4' : ''}"></i>${esc(s.name)} ${fmt(s.v)}${unit}</span>`).join('')}</div>`;
+  }
+
+  /* ---------- 横棒（収入の使い道） ---------- */
+  function useBar(host, legendHost, income, segs) {
+    const W = Math.max(280, Math.round(host.clientWidth || 600)), H = 64, ml = 4, mr = 4, pw = W - ml - mr;
+    const tot = Math.max(income, segs.reduce((a, s) => a + s.v, 0), 1e-9);
+    let x = ml; const g = [];
+    segs.forEach(s => { if (s.v <= 0) return; const w = s.v / tot * pw; g.push(`<rect x="${x + 1}" y="10" width="${Math.max(0, w - 2)}" height="34" rx="3" fill="${s.color}" ${s.dash ? 'fill-opacity=".25" stroke="' + s.color + '" stroke-dasharray="4 3"' : ''}><title>${esc(s.name)} ${fmt(s.v)}万円</title></rect>`); if (w > 46) g.push(`<text x="${x + w / 2}" y="32" text-anchor="middle" style="fill:${s.dash ? 'var(--text)' : '#fff'};font-weight:700;font-size:11px">${fmt(income > 0 ? s.v / income * 100 : 0, 0)}%</text>`); x += w; });
+    if (income > 0 && income < tot) { const xi = ml + income / tot * pw; g.push(`<line x1="${xi}" x2="${xi}" y1="4" y2="52" stroke="var(--text)" stroke-width="2"/><text x="${xi}" y="62" text-anchor="${xi > W - 60 ? 'end' : 'middle'}" style="fill:var(--text);font-size:11px">収入合計</text>`); }
+    host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="収入の使い道">${g.join('')}</svg>`;
+    legendHost.innerHTML = segs.filter(s => s.v > 0).map(s => `<span><i style="background:${s.color}${s.dash ? ';opacity:.4' : ''}"></i>${esc(s.name)} ${fmt(s.v)}万円${income > 0 ? `（${fmt(s.v / income * 100)}%）` : ''}</span>`).join('');
+  }
+
+  /* ---------- ウォーターフォール（横向き） ---------- */
+  function waterfall(host, p, t) {
+    const rows = [
+      ['売上高', p.sales, 'total'], ['売上原価', -p.cogs, 'step'], ['売上総利益', t.gross, 'total'], ['販管費', -p.sga, 'step'], ['営業利益', t.op, 'total'],
+      ['営業外収益', p.noi, 'step'], ['営業外費用', -p.noe, 'step'], ['経常利益', t.ord, 'total'], ['特別利益', p.xg, 'step'], ['特別損失', -p.xl, 'step'],
+      ['税引前当期純利益', t.pre, 'total'], ['法人税等', -p.tax, 'step'], ['当期純利益', t.net, 'total']];
+    let run = 0; const bars = rows.map(([n, v, k]) => { if (k === 'total') { run = v; return { n, a: 0, b: v, v, k }; } const a = run; run += v; return { n, a, b: run, v, k }; });
+    const lo = Math.min(0, ...bars.map(b => Math.min(b.a, b.b))), hi = Math.max(0, ...bars.map(b => Math.max(b.a, b.b)), 1e-9);
+    const W = Math.max(300, Math.round(host.clientWidth || 600)), rowH = 24, ml = W < 480 ? 104 : 130, mr = 70, H = bars.length * rowH + 20, pw = W - ml - mr;
+    const X = v => ml + (v - lo) / (hi - lo) * pw;
+    const g = [`<line x1="${X(0)}" x2="${X(0)}" y1="4" y2="${H - 10}" stroke="var(--muted)"/>`];
+    bars.forEach((b, i) => {
+      const y = 8 + i * rowH, x0 = X(Math.min(b.a, b.b)), w = Math.max(1, Math.abs(X(b.b) - X(b.a)));
+      const col = b.k === 'total' ? (b.v < 0 ? 'var(--bad)' : 'var(--c1)') : b.v < 0 ? 'var(--c4)' : 'var(--c2)';
+      g.push(`<text x="${ml - 6}" y="${y + 15}" text-anchor="end" style="${b.k === 'total' ? 'fill:var(--text);font-weight:700' : ''}">${esc(b.n)}</text>`);
+      g.push(`<rect x="${x0}" y="${y + 3}" width="${w}" height="${rowH - 8}" rx="3" fill="${col}"><title>${esc(b.n)} ${fmt(b.v)}百万円</title></rect>`);
+      if (i < bars.length - 1) g.push(`<line x1="${X(b.b)}" x2="${X(b.b)}" y1="${y + rowH - 5}" y2="${y + rowH + 3}" stroke="var(--muted)" stroke-dasharray="2 2"/>`);
+      g.push(`<text x="${Math.max(X(b.a), X(b.b)) + 4}" y="${y + 15}" style="font-variant-numeric:tabular-nums${b.k === 'total' ? ';fill:var(--text);font-weight:700' : ''}">${b.k === 'step' && b.v > 0 ? '+' : ''}${fmt(b.v)}</text>`);
+    });
+    host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="ウォーターフォール図：${esc(bars.map(b => b.n + ' ' + fmt(b.v)).join('、'))}">${g.join('')}</svg>`;
+  }
+
+  /* ---------- 診断の表示 ---------- */
+  function chipsHTML(mode, r) {
+    const b = base[mode];
+    return r.list.map(x => { const ch = b && b[x.id] && b[x.id] !== x.status; return `<button type="button" class="chip ${x.status}${ch ? ' changed' : ''}" data-goto="${mode}.dx" title="${esc(x.term)}：${esc(K.LABEL[x.status])}"><span class="ic" aria-hidden="true">${K.ICON[x.status]}</span>${esc(x.term)} ${esc(K.LABEL[x.status])}${ch ? `（前：${esc(K.LABEL[b[x.id]])}）` : ''}</button>`; }).join('');
+  }
+  function dxHTML(mode, r) {
+    const b = base[mode], sorted = K.sortList(r.list);
+    const changed = sorted.filter(x => b && b[x.id] && b[x.id] !== x.status);
+    const rank = { danger: 0, warn: 1, na: 2, info: 2, good: 3 };
+    let h = '';
+    if (r.flags.kuroji) h += `<div class="banner" role="alert"><b>✕ ${term('黒字倒産')}の危険：</b>${term('当期純利益')}は黒字（${fmt(r.totals.net)}百万円）ですが、${term('手元流動性')}が「危険」です。利益が出ていても、${term('売掛金')}の入金が遅れたり、${term('棚卸資産')}（在庫）に現金が寝ていたりすると、支払いに使う現金が足りなくなることがあります。利益と現金の動きは同じではありません。</div>`;
+    if (r.flags.insolvent) h += `<div class="banner" role="alert"><b>✕ ${term('債務超過')}：</b>純資産がマイナス（${fmt(r.totals.eq)}百万円）です。</div>`;
+    h += `<p class="note">${b ? (changed.length ? `比較の基準から判定が変わった指標：<b>${changed.length}件</b>（青い枠）` : '比較の基準から、判定が変わった指標はありません。') : ''}　悪い指標から順に並べています。</p>`;
+    h += sorted.map(x => {
+      const prev = b && b[x.id], ch = prev && prev !== x.status;
+      const dirTxt = ch ? (rank[x.status] > rank[prev] ? '改善' : rank[x.status] < rank[prev] ? '悪化' : '変化') : '';
+      return `<article class="ind ${x.status}${ch ? ' changed' : ''}">
+        <div class="hd"><span class="st ${x.status}"><span aria-hidden="true">${K.ICON[x.status]}</span>${esc(K.LABEL[x.status])}</span><span class="nm">${term(x.term)}</span>${ch ? `<span class="chg">${esc(K.LABEL[prev])} → ${esc(K.LABEL[x.status])}（${dirTxt}）</span>` : ''}<span class="vv">${esc(x.valueText)}</span></div>
+        <p>${esc(x.comment)}</p>
+        <details><summary>目安・なぜ・例外・改善のヒント</summary><dl>
+          <dt>目安</dt><dd>${esc(x.criteria)}</dd>
+          ${G[x.term] && G[x.term].formula ? `<dt>計算式</dt><dd>${esc(G[x.term].formula)}</dd>` : ''}
+          <dt>なぜその目安か</dt><dd>${esc(x.why)}</dd><dt>例外（当てはまらない場合）</dt><dd>${esc(x.except)}</dd><dt>改善のヒント</dt><dd>${esc(x.hint)}</dd></dl></details>
+      </article>`;
+    }).join('');
+    const o = K.overall(r.list);
+    const li = arr => arr.map(x => `<li>${term(x.term)}（${esc(x.valueText)}）：${esc(x.comment)}</li>`).join('');
+    h += `<div class="card"><h2>総合コメント</h2>
+      <h3>良い点</h3>${o.goods.length ? `<ul>${li(o.goods)}</ul>` : '<p class="note">今のところ、目安を満たしている指標はありません。</p>'}
+      <h3>気をつけたい点</h3>${o.bads.length ? `<ul>${li(o.bads)}</ul>` : '<p class="note">目安から外れている指標はありません。</p>'}
+      <p class="note">指標は互いに関係しています。1つの数字だけでなく、いくつかを組み合わせて見てください。</p></div>`;
+    return h;
+  }
+
+  /* ---------- 計算結果の表示（入力欄は作り直さない） ---------- */
+  function renderDerived(mode) {
+    const r = diag(mode), t = r.totals;
+    if (mode === 'home') {
+      const d = S.data.home;
+      out('home.assets', fmt(t.assets)); out('home.liab', fmt(t.liab)); out('home.right', fmt(t.liab + t.nw)); out('home.fin', fmt(t.fin));
+      out('home.nw', `<span style="${t.nw < 0 ? 'color:var(--bad)' : ''}">${fmt(t.nw)}${t.nw < 0 ? '（債務超過）' : ''}</span>`);
+      out('home.nwpct', `<span>構成比</span><span>${t.assets > 0 ? fmt(t.nw / t.assets * 100) + '%' : '—'}</span>`);
+      $$('[data-pct^="home.bs."]').forEach(e => { const k = e.dataset.pct.split('.')[2]; e.innerHTML = `<span>構成比</span><span>${t.assets > 0 ? fmt(d.bs[k] / t.assets * 100) + '%' : '—'}</span>`; });
+      $$('[data-pct^="home.pl."]').forEach(e => { const k = e.dataset.pct.split('.')[2]; e.innerHTML = `<span>収入合計に対して${S.monthly ? `（年額 ${fmt(d.pl[k])}万円）` : ''}</span><span>${t.income > 0 ? fmt(d.pl[k] / t.income * 100) + '%' : '—'}</span>`; });
+      const ym = S.monthly ? 12 : 1;
+      out('home.income', fmt(t.income / ym, 2) + (S.monthly ? '／月' : '')); out('home.expense', fmt(t.expense / ym, 2) + (S.monthly ? '／月' : ''));
+      out('home.plunit', S.monthly ? '万円／月（年額に換算して計算）' : '万円／年');
+      out('home.mnote', S.monthly ? '月額で入力しています。入力した値を12倍して年額として計算します（賞与は年額のまま）。' : '年額で入力しています。');
+      $$('[data-monthly]').forEach(b => b.setAttribute('aria-pressed', String((b.dataset.monthly === '1') === S.monthly)));
+      out('home.stats', [['収入合計（年）', t.income, ''], ['支出合計（年）', t.expense, ''], [term('年間収支'), t.balance, t.balance < 0 ? 'neg' : ''], [term('手取り') + '（年）', t.takeHome, ''], ['月間支出（税・社保を除く）', t.monthly, '']]
+        .map(([k, v, c]) => `<div><div class="k">${k}</div><div class="v ${c}">${fmt(v)} 万円</div></div>`).join(''));
+      stackBars($('#bsChart-home'), [
+        { title: '資産', segs: [{ name: '金融資産', v: t.fin, color: 'var(--c1)' }, { name: '自宅', v: d.bs.house, color: 'var(--c2)' }, { name: '自動車・その他', v: d.bs.car + d.bs.oa, color: 'var(--c3)' }, { name: '債務超過分', v: t.nw < 0 ? -t.nw : 0, color: 'var(--bad)', dash: true }] },
+        { title: '負債＋純資産', segs: [{ name: '住宅ローン', v: d.bs.mort, color: 'var(--c4)' }, { name: 'その他のローン', v: d.bs.carLoan + d.bs.ol, color: 'var(--c5)' }, { name: '高金利負債', v: d.bs.high, color: 'var(--c6)' }, { name: '純資産', v: Math.max(0, t.nw), color: 'var(--c7)' }] }], '万円');
+      const p = d.pl;
+      useBar($('#useChart'), $('#useLegend'), t.income, [
+        { name: '税金・社会保険料', v: p.tax, color: 'var(--c8)' }, { name: '住居費・住宅ローン', v: p.rent + p.mortPay, color: 'var(--c4)' }, { name: 'その他のローン', v: p.loanPay, color: 'var(--c6)' },
+        { name: '食費', v: p.food, color: 'var(--c5)' }, { name: '光熱・通信・保険・交通', v: p.util + p.insPrem + p.trans, color: 'var(--c3)' }, { name: '教育・娯楽ほか', v: p.edu + p.fun, color: 'var(--c2)' },
+        { name: t.balance >= 0 ? '残る貯蓄' : '不足（赤字）', v: Math.abs(t.balance), color: t.balance >= 0 ? 'var(--c7)' : 'var(--bad)', dash: t.balance < 0 }]);
+    } else {
+      const d = S.data.corp, p = d.pl;
+      out('corp.assets', fmt(t.assets)); out('corp.liab', fmt(t.liab)); out('corp.right', fmt(t.liab + t.eq));
+      ['ca', 'fa', 'cl', 'ncl', 'eq'].forEach(k => out('corp.g.' + k, `<span style="${t[k] < 0 ? 'color:var(--bad)' : ''}">${fmt(t[k])}</span>`));
+      const L = new Set(['cash', 'ar', 'inv', 'oca', 'tang', 'intang', 'invest']), right = t.liab + t.eq;
+      $$('[data-pct^="corp.bs."]').forEach(e => { const k = e.dataset.pct.split('.')[2], den = L.has(k) ? t.assets : right; e.innerHTML = `<span>構成比</span><span>${den !== 0 ? fmt(d.bs[k] / den * 100) + '%' : '—'}</span>`; });
+      $$('[data-pct^="corp.pl."]').forEach(e => { const k = e.dataset.pct.split('.')[2]; e.innerHTML = `<span>売上高に対して</span><span>${p.sales > 0 ? fmt(p[k] / p.sales * 100) + '%' : '—'}</span>`; });
+      $('#balance').innerHTML = Math.abs(t.diff) < 1e-9
+        ? `<div class="balance ok"><b>✓ 貸借が一致しています。</b> 資産合計 ${fmt(t.assets)} ＝ 負債合計 ${fmt(t.liab)} ＋ 純資産合計 ${fmt(t.eq)}</div>`
+        : `<div class="balance ng" role="alert"><b>✕ 貸借が一致していません。</b> 資産合計 ${fmt(t.assets)} − （負債合計 ${fmt(t.liab)} ＋ 純資産合計 ${fmt(t.eq)}）＝ 差額 <b>${t.diff > 0 ? '+' : ''}${fmt(t.diff)}</b> 百万円。学習のため、自動では直しません。<div style="margin-top:6px"><button type="button" class="sm" id="fixRe">利益剰余金で差額を調整</button></div></div>`;
+      const fx = $('#fixRe'); if (fx) fx.onclick = () => { d.bs.re = Math.round((d.bs.re + t.diff) * 1000) / 1000; refreshInputs('corp'); afterChange('corp'); };
+      // 内訳の整合（受取利息 ≤ 営業外収益 など）
+      [['intInc', 'noi', '営業外収益'], ['intExp', 'noe', '営業外費用']].forEach(([a, b, n]) => {
+        const m = document.getElementById(`in-corp-pl-${a}-msg`), inp = document.getElementById(`in-corp-pl-${a}`);
+        if (!inp || inp.getAttribute('aria-invalid')) return;
+        if (p[a] > p[b] + 1e-9) { m.className = 'msg warn'; m.textContent = `「うち〜」は${n}の内訳なので、${n}（${fmt(p[b])}）以下にしてください。`; } else if (m.className.includes('warn')) { m.className = 'msg'; m.textContent = ''; }
+      });
+      ['gross', 'op', 'ord', 'pre', 'net'].forEach(k => { out('corp.' + k, `<span style="${t[k] < 0 ? 'color:var(--bad)' : ''}">${fmt(t[k])}</span>`); out('corp.m.' + k, t.margin[k] === null ? '計算できません' : fmt(t.margin[k]) + '%'); });
+      stackBars($('#bsChart-corp'), [
+        { title: '資産', segs: [{ name: '流動資産', v: t.ca, color: 'var(--c1)' }, { name: '固定資産', v: t.fa, color: 'var(--c2)' }, { name: '債務超過分', v: t.eq < 0 ? -t.eq : 0, color: 'var(--bad)', dash: true }] },
+        { title: '負債＋純資産', segs: [{ name: '流動負債', v: t.cl, color: 'var(--c4)' }, { name: '固定負債', v: t.ncl, color: 'var(--c5)' }, { name: '純資産', v: Math.max(0, t.eq), color: 'var(--c7)' }] }], '百万円');
+      waterfall($('#wfChart'), p, t);
+    }
+    $('#chips-' + mode).innerHTML = chipsHTML(mode, r);
+    $('#dx-' + mode).innerHTML = dxHTML(mode, r);
+  }
+
+  /* ---------- 用語集 ---------- */
+  function buildGloss() {
+    const v = $('#view-gloss');
+    v.innerHTML = `<div class="card"><h2>用語集</h2><label class="vh" for="glq">用語を検索</label><input type="search" id="glq" placeholder="用語・読み・説明で検索（例：りゅうどう、利益、ローン）"><p class="note" id="glCount"></p><div class="gl-list" id="glList"></div></div>
+      <details class="card"><summary>家庭と企業の対応表</summary>${mapTable()}</details>`;
+    const draw = () => {
+      const q = $('#glq').value.trim().toLowerCase();
+      const keys = Object.keys(G).sort((a, b) => G[a].yomi.localeCompare(G[b].yomi, 'ja')).filter(k => !q || [k, G[k].yomi, G[k].short, G[k].home, G[k].corp].join(' ').toLowerCase().includes(q));
+      $('#glCount').textContent = `${keys.length} 語${q ? '（検索結果）' : ''}`;
+      $('#glList').innerHTML = keys.map(k => `<button type="button" class="gl-item term" data-term="${esc(k)}" style="text-decoration:none"><b>${esc(k)}${G[k].check ? '<span class="chk">要確認</span>' : ''}</b><span class="y">${esc(G[k].yomi)}</span><span class="s">${esc(G[k].short)}</span></button>`).join('') || '<p class="note">見つかりませんでした。</p>';
+    };
+    $('#glq').addEventListener('input', draw); draw();
+  }
+
+  /* ---------- 用語の説明パネル ---------- */
+  let lastFocus = null; const hist = [];
+  function openTerm(key, from) {
+    const e = G[key]; if (!e) return;
+    if ($('#sheet').hidden) { lastFocus = from || document.activeElement; hist.length = 0; } else hist.push($('#shTitle').dataset.key);
+    $('#shTitle').textContent = key; $('#shTitle').dataset.key = key;
+    $('#shBack').hidden = !hist.length;
+    $('#shBody').innerHTML = `<p class="note">${esc(e.yomi)}${e.check ? '<span class="chk">要確認</span>' : ''}</p>
+      <h3>① ひとことで言うと</h3><p>${esc(e.short)}</p>
+      <h3>② 家庭でいうと／企業でいうと</h3><p><b>家庭：</b>${esc(e.home)}</p><p style="margin-top:4px"><b>企業：</b>${esc(e.corp)}</p>
+      <h3>③ どこを見るとよいか</h3><p>${esc(e.look)}</p>
+      ${e.formula ? `<h3>④ 計算式</h3><p class="formula">${esc(e.formula)}</p>` : ''}
+      <h3>${e.formula ? '⑤' : '④'} 関連用語</h3><div class="rel">${(e.related || []).map(r => `<button type="button" data-rel="${esc(r)}">${esc(r)}</button>`).join('')}</div>
+      <p class="note" style="margin-top:14px">一般的な説明です。業種や制度によって扱いが異なることがあります。</p>`;
+    $('#overlay').hidden = false; $('#sheet').hidden = false;
+    $('#sheet').focus();
+  }
+  function closeTerm() { $('#overlay').hidden = true; $('#sheet').hidden = true; if (lastFocus && lastFocus.focus) lastFocus.focus(); }
+  $('#shClose').onclick = closeTerm; $('#overlay').onclick = closeTerm;
+  $('#shBack').onclick = () => { const k = hist.pop(); if (k) { openTerm(k); hist.pop(); $('#shBack').hidden = !hist.length; } };
+  $('#shBody').addEventListener('click', e => { const b = e.target.closest('[data-rel]'); if (b) openTerm(b.dataset.rel); });
+  document.addEventListener('keydown', e => {
+    if ($('#sheet').hidden) return;
+    if (e.key === 'Escape') { e.preventDefault(); closeTerm(); return; }
+    if (e.key === 'Tab') {
+      const f = $$('button:not([hidden]), [tabindex="0"]', $('#sheet')).filter(x => x.offsetParent !== null);
+      if (!f.length) return;
+      const first = f[0], last = f[f.length - 1];
+      if (e.shiftKey && (document.activeElement === first || document.activeElement === $('#sheet'))) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+  });
+
+  /* ---------- テスト（UI が必要なものを追加） ---------- */
+  function uiTests() {
+    const res = K.runTests();
+    const used = new Set($$('[data-term]').map(e => e.dataset.term));
+    // 描画の外で使う用語（指標名・しきい値の名前）も対象
+    for (const m of ['home', 'corp']) diag(m).list.forEach(x => used.add(x.term));
+    const missing = [...used].filter(k => !G[k]);
+    res.push({ name: '画面に出るすべての用語に、辞書の説明がある', pass: missing.length === 0, detail: `画面の用語 ${used.size} 語を確認。辞書にない用語：${missing.length ? missing.join('、') : 'なし'}` });
+    const badRel = Object.entries(G).flatMap(([k, e]) => (e.related || []).filter(r => !G[r]).map(r => `${k}→${r}`));
+    const incomplete = Object.entries(G).filter(([, e]) => !e.short || !e.home || !e.corp || !e.look || !e.yomi).map(([k]) => k);
+    res.push({ name: '辞書の関連用語がすべて辞書にあり、各用語に①〜③がそろっている', pass: !badRel.length && !incomplete.length, detail: `辞書 ${Object.keys(G).length} 語。辞書にない関連用語：${badRel.join('、') || 'なし'}／説明が欠けている用語：${incomplete.join('、') || 'なし'}` });
+    // 本物の localStorage でも往復
+    let lsOk = false, lsMsg = '';
+    try { const key = K.STORE_KEY; const prev = localStorage.getItem(key); K.save(localStorage, S); const back = K.load(localStorage); lsOk = !!back && JSON.stringify(back.data) === JSON.stringify(S.data); if (prev === null) localStorage.removeItem(key); else localStorage.setItem(key, prev); lsMsg = lsOk ? 'このブラウザの localStorage で保存→読み込みが一致' : '一致しない'; }
+    catch (e) { lsMsg = 'localStorage が使えない環境のため省略（' + e.message + '）'; lsOk = true; }
+    res.push({ name: 'このブラウザの localStorage での保存と読み込み', pass: lsOk, detail: lsMsg });
+    res.push({ name: '計算関数が UI から分かれている（KessanCalc は DOM に触らない）', pass: !/document\.|window\./.test(KessanCalc.runTests.toString() + KessanCalc.homeIndicators.toString() + KessanCalc.corpIndicators.toString()), detail: 'KessanCalc の計算・判定・テスト関数のソースに document / window の参照がないことを確認' });
+    return res;
+  }
+  function showTests() {
+    const res = uiTests(), np = res.filter(r => r.pass).length;
+    $('#testOut').innerHTML = `<p><b>${np} / ${res.length} 件 合格</b></p><ul class="tests">${res.map(r => `<li><span class="${r.pass ? 'pass' : 'fail'}">${r.pass ? '✔ 合格' : '✘ 不合格'}</span> ${esc(r.name)}<div class="d">${esc(r.detail)}</div></li>`).join('')}</ul>`;
+    return res;
+  }
+  $('#runTests').onclick = showTests;
+
+  /* ---------- 起動 ---------- */
+  buildMode('home'); buildMode('corp'); buildGloss();
+  refreshInputs('home'); refreshInputs('corp'); fillTh('home'); fillTh('corp');
+  setBase('home'); setBase('corp');
+  renderDerived('home'); renderDerived('corp');
+  setMain(S.ui.main); setSub('home', S.ui.sub.home); setSub('corp', S.ui.sub.corp);
+  started = true;
+  if (S.ui.main !== 'gloss') renderDerived(S.ui.main);
+  let rz = 0; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { renderDerived('home'); renderDerived('corp'); }, 150); });
+  const q = new URLSearchParams(location.search);
+  if (q.get('view')) { const [m, s] = q.get('view').split('.'); setMain(m); if (s) setSub(m, s); }
+  if (q.get('sample')) { const id = q.get('sample'), m = id.startsWith('h-') ? 'home' : 'corp'; S.data[m] = K.sampleData(m, id); refreshInputs(m); renderDerived(m); }
+  if (q.get('term')) openTerm(q.get('term'));
+  if (q.get('test') === '1') { const res = showTests(); $('#testJson').textContent = JSON.stringify(res.map(r => (r.pass ? 'PASS ' : 'FAIL ') + r.name + '\n' + r.detail), null, 1); }
+})();
+</script>
+</body>
+</html>
