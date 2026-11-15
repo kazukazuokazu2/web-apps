@@ -121,6 +121,12 @@ td.bad{color:var(--bad);font-weight:700}
 ul.assume{margin:4px 0;padding-left:20px}
 ul.assume li{margin:2px 0}
 code{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:var(--surface-2);padding:0 4px;border-radius:4px}
+.pgrid{display:grid;grid-template-columns:minmax(0,1fr);gap:4px 14px}
+@media (min-width:640px){.pgrid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+.pgrid h3{margin-top:8px}
+.say{background:var(--surface-2);border-radius:8px;padding:8px 10px;margin:8px 0;font-size:13px}
+details.pcs{flex-basis:100%;border:1px dashed var(--border);border-radius:8px;padding:4px 8px}
+details.pcs>summary{cursor:pointer;font-size:12px;color:var(--text-2)}
 .formula{background:var(--surface-2);border-radius:8px;padding:8px 10px;margin:6px 0;font-family:ui-monospace,Consolas,monospace;font-size:12px;overflow-x:auto;white-space:pre}
 </style>
 </head>
@@ -278,6 +284,39 @@ SVR（節点5 の下流）: 下流での最大降下 215 V、最大上昇 111 V
     </div>
     <div id="hcBody"></div>
   </section>
+
+  <section class="card" id="pcsCard">
+    <h2>6. PCS の無効電力制御（太陽光・蓄電池）</h2>
+    <div class="note">
+      <b>前提：</b>3相平衡・単線表現・定電力・<b>定常状態</b>の簡易モデルです。PCS の出力は接続点の電圧で決まり、その出力が電圧を変えるので、潮流計算と<b>固定点反復</b>で解きます（更新は減衰係数で混ぜる）。
+      タップ整定と組み合わせるときは、<b>PCS の反復が内側・タップ整定が外側</b>です。特性・容量の初期値はダミーです<span class="dummy">実機の整定は要確認</span><br>
+      無効電力 Q は <b>＋供給（電圧を上げる方向）／−吸収（電圧を下げる方向）</b>で表します。LDC 比較（4）とホスティング容量（5）は PCS 制御を含めず、制御なし（力率の入力のまま）で計算します。
+    </div>
+    <div class="row note" style="margin-top:8px" id="pcsTop"></div>
+    <div id="pcsAlerts" style="margin-top:8px"></div>
+    <div id="pcsBody"></div>
+    <h3>比較</h3>
+    <div class="row note">
+      <label>太陽光の出力 <input type="number" id="pcsCmpPv" value="100" min="0" max="100" step="5"> ％</label>
+      <label>タップを整定したときの太陽光 <input type="number" id="pcsCmpTapPv" value="0" min="0" max="100" step="10"> ％</label>
+      <label>重負荷の倍率 <input type="number" id="pcsCmpLoad" value="1.5" min="1" step="0.1"> 倍</label>
+    </div>
+    <div class="btns"><button type="button" id="pcsStep">電圧上昇の抑制を、順に見る</button><button type="button" id="pcsSupport">電圧低下を支える</button></div>
+    <div id="pcsCmp"><div class="note">「順に見る」：太陽光の出力を上げ、タップを制御なしで整定した位置に固定して、全太陽光の PCS を A→B→C→E と切り替えます。「支える」：負荷を重くし（太陽光 0%・DC 接続）、蓄電池（なければ夜間の太陽光）を P=0 のまま Volt-VAR にします。どちらも現在の状態は変えません。</div></div>
+    <details style="margin-top:8px"><summary class="note" style="cursor:pointer">用語・式（進み・遅れ、ループゲイン）</summary>
+      <ul class="assume note">
+        <li>日本語の「進み・遅れ」は、基準を機器側にとるか系統側にとるかで向きが逆になります<span class="dummy">要確認</span>。このアプリの式と表示では使わず、「供給・吸収」で表します。</li>
+        <li>容量制約 P² + Q² ≦ S²。有効電力優先なら Q の上限 = √(S² − P²)（P が大きいほど無効電力を出せない）。無効電力優先なら P の上限 = √(S² − Q²)。</li>
+        <li>電圧変化 ≒ (R × P + X × Q) ÷ V（P・Q は区間を流れる電力）。1kvar あたりの電圧変化（感度）≒ X合計 ÷ V、1kW あたり ≒ R合計 ÷ V。</li>
+      </ul>
+      <div class="formula">ループゲイン（各 PCS）  g = |特性の傾き dQ/dV [kvar/V]| × (X合計 × 1000 ÷ V) ＋ |dP/dV [kW/V]| × (R合計 × 1000 ÷ V)
+  特性の傾き = |ΔQ[pu] ÷ ΔV[pu]| × S ÷ V基準（動作点のある区間。不感帯・端の外・容量で頭打ちのときは 0）
+全体のゲイン  ρ = 行列 G_ij = (kq_i × X共通_ij + kp_i × R共通_ij) × 1000 ÷ V_i の最大固有値
+  （X共通_ij：変電所から PCS i・j までの経路のうち、共通の部分のリアクタンス。近くの PCS 同士は互いの電圧を動かし合う）
+減衰なし（α=1）の反復は ρ > 1 で振動。減衰 α で混ぜると、収束の目安は ρ < 2/α − 1（α=0.5 なら 3）</div>
+      <div class="note">ゲインは定常状態の簡易モデルです。実機の安定性は、応答の遅れや時定数にも左右されます。</div>
+    </details>
+  </section>
 </div>
 
 <div>
@@ -378,10 +417,17 @@ const FeederCalc = (() => {
     }
     return { p: 0, q: 0 };
   }
-  function nodeLoads(m) {
+  /** ovr（任意）: { 機器id: {p, q} } … PCS の出力（注入が正, kW / kvar）。指定された機器は deviceLoad の代わりにこの値を使う */
+  function nodeLoads(m, ovr) {
     const n = m.sections.length + 1;
     const P = new Array(n).fill(0), Q = new Array(n).fill(0);
-    m.devices.forEach(d => { if (d.node >= 0 && d.node < n) { const l = deviceLoad(d, m); P[d.node] += l.p; Q[d.node] += l.q; } });
+    m.devices.forEach(d => {
+      if (d.node >= 0 && d.node < n) {
+        const o = ovr && ovr[d.id];
+        const l = o ? { p: -o.p, q: -o.q } : deviceLoad(d, m);
+        P[d.node] += l.p; Q[d.node] += l.q;
+      }
+    });
     return { P, Q };
   }
   const ratio = (reg, tap) => 1 + tap * reg.step / 100;
@@ -397,7 +443,7 @@ const FeederCalc = (() => {
     const aL = ratio(m.lrt, taps.lrt);
     const Vph = m.Vbase / SQ3;
     const V0 = C(Vph * aL, 0);
-    const { P, Q } = nodeLoads(m);
+    const { P, Q } = nodeLoads(m, opt.pcsOut);
     const S = P.map((p, k) => C(p * 1000 / 3, Q[k] * 1000 / 3));      // 相あたり VA
     const Z = [null].concat(m.sections.map(s => C(s.len * s.r, s.len * s.x)));
     let V = [V0];
@@ -451,9 +497,11 @@ const FeederCalc = (() => {
     return list;
   }
 
-  /** タップ整定（静的）。上流から順に 1段ずつ動かし、同じ状態が再現したらハンチング。 */
+  /** タップ整定（静的）。上流から順に 1段ずつ動かし、同じ状態が再現したらハンチング。
+      opt.flow（任意）: タップ状態ごとの潮流計算を差し替える（PCS 制御の固定点反復を内側に入れる口）。既定は powerFlow。 */
   function settle(m, start, opt = {}) {
     const maxMoves = opt.maxMoves ?? 400;
+    const flow = opt.flow || ((mm, t) => powerFlow(mm, t));
     start = start || currentTaps(m);
     const clampT = (reg, t) => Math.max(-reg.nDown, Math.min(reg.nUp, Math.round(t)));
     const taps = { lrt: clampT(m.lrt, start.lrt), svr: m.svrs.map((s, i) => clampT(s, start.svr[i] ?? 0)) };
@@ -465,8 +513,9 @@ const FeederCalc = (() => {
     const moves = [];
     let pf, status = 'settled', cycle = [];
     while (true) {
-      pf = powerFlow(m, taps);
+      pf = flow(m, taps);
       seen.set(key(), moves.length);
+      if (pf.pcs && !pf.pcs.converged) { status = 'pcsHunting'; break; }   // 内側（PCS）が収束しない → タップの判定をせずに止める
       let moved = false;
       for (const o of order) {
         const r = o.reg;
@@ -480,10 +529,10 @@ const FeederCalc = (() => {
       if (seen.has(k)) {
         status = 'hunting';
         cycle = [...new Set(moves.slice(seen.get(k)).map(x => x.name))];
-        pf = powerFlow(m, taps);
+        pf = flow(m, taps);
         break;
       }
-      if (moves.length >= maxMoves) { status = 'maxiter'; pf = powerFlow(m, taps); break; }
+      if (moves.length >= maxMoves) { status = 'maxiter'; pf = flow(m, taps); break; }
     }
     const regs = order.map(o => {
       const r = o.reg, vc = controlVoltage(m, pf, r), t = get(o);
@@ -830,12 +879,461 @@ const FeederCalc = (() => {
 })();
 
 /* =====================================================================
+   計算部（UIに依存しない）: PcsCalc … PCS の無効電力・有効電力制御
+   潮流計算・タップ整定は FeederCalc の powerFlow / settle をそのまま呼ぶ。
+   符号：PCS の出力 p, q は「注入が正」。q > 0 = 供給（電圧を上げる方向）、q < 0 = 吸収（電圧を下げる方向）。
+   ===================================================================== */
+const PcsCalc = (() => {
+  const F = FeederCalc, SQ3 = F.SQ3, clone = F.clone;
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const MODES = { A: 'A：制御なし（力率の入力のまま）', B: 'B：力率一定（無効電力を吸収）', C: 'C：Volt-VAR', D: 'D：Volt-Watt', E: 'E：Volt-VAR ＋ Volt-Watt' };
+  const DEF_OPT = { alpha: 0.5, maxIter: 100, tol: 1e-4 };
+
+  /** PCS 設定の初期値（ダミー）。太陽光は定格 kW の 1.1 倍の kVA、蓄電池は定格と同じ kVA */
+  function defaultPcs(d) {
+    return {
+      S: d.type === 'pv' ? Math.round(d.p * 1.1) : Math.round(d.rated ?? 500),
+      mode: 'A', pfB: 0.95, priority: 'P', qAtZeroP: d.type === 'bess',
+      vv: [[0.96, 0.44], [0.99, 0], [1.01, 0], [1.04, -0.44]],
+      vw: { v1: 1.03, v2: 1.05, pMin: 20 }
+    };
+  }
+  function ensurePcs(m) { m.devices.forEach(d => { if ((d.type === 'pv' || d.type === 'bess') && !d.pcs) d.pcs = defaultPcs(d); }); if (!m.pcsOpt) m.pcsOpt = Object.assign({}, DEF_OPT); return m; }
+  const isActive = d => (d.type === 'pv' || d.type === 'bess') && d.pcs && d.pcs.mode && d.pcs.mode !== 'A';
+  const activeDevs = m => m.devices.filter(d => isActive(d) && d.node >= 0 && d.node <= m.sections.length);
+  const usesVV = c => c.mode === 'C' || c.mode === 'E';
+  const usesVW = c => c.mode === 'D' || c.mode === 'E';
+
+  /* ---------- 特性（純粋関数） ---------- */
+  /** 区分線形（両端の外は端の値のまま） */
+  function interp(pts, v) {
+    if (v <= pts[0][0]) return pts[0][1];
+    for (let i = 1; i < pts.length; i++) {
+      if (v <= pts[i][0]) { const [x0, y0] = pts[i - 1], [x1, y1] = pts[i]; return x1 === x0 ? y1 : y0 + (y1 - y0) * (v - x0) / (x1 - x0); }
+    }
+    return pts[pts.length - 1][1];
+  }
+  /** 区分線形の傾き（両端の外は 0） */
+  function slopeAt(pts, v) {
+    if (v < pts[0][0] || v > pts[pts.length - 1][0]) return 0;
+    for (let i = 1; i < pts.length; i++) {
+      if (v <= pts[i][0]) { const [x0, y0] = pts[i - 1], [x1, y1] = pts[i]; return x1 > x0 ? (y1 - y0) / (x1 - x0) : 0; }
+    }
+    return 0;
+  }
+  const maxSlope = pts => pts.slice(1).reduce((a, p, i) => { const q = pts[i]; return p[0] > q[0] ? Math.max(a, Math.abs((p[1] - q[1]) / (p[0] - q[0]))) : a; }, 0);
+  const vvPts = c => c.vv.map(p => [+p[0], +p[1]]).sort((a, b) => a[0] - b[0]);
+  const vwPts = c => [[+c.vw.v1, 1], [Math.max(+c.vw.v2, +c.vw.v1), clamp(+c.vw.pMin, 0, 100) / 100]];
+  /** Volt-VAR：電圧[pu] → Q [S 基準 pu]（＋供給／−吸収） */
+  const voltVar = (c, v) => interp(vvPts(c), v);
+  /** Volt-Watt：電圧[pu] → 出せる有効電力の割合（0〜1） */
+  const voltWatt = (c, v) => interp(vwPts(c), v);
+
+  /** 容量制約 P² + Q² ≦ S²。priority 'P'＝有効電力優先（Q の上限 √(S²−P²)）、'Q'＝無効電力優先 */
+  function capLimit(p, q, S, priority) {
+    const s = Math.max(0, S);
+    if (priority === 'Q') {
+      const qc = clamp(q, -s, s), pm = Math.sqrt(Math.max(0, s * s - qc * qc)), pc = clamp(p, -pm, pm);
+      return { p: pc, q: qc, qMax: s, pMax: pm, clipQ: Math.abs(qc - q) > 1e-9, clipP: Math.abs(pc - p) > 1e-9 };
+    }
+    const pc = clamp(p, -s, s), qm = Math.sqrt(Math.max(0, s * s - pc * pc)), qc = clamp(q, -qm, qm);
+    return { p: pc, q: qc, qMax: qm, pMax: s, clipQ: Math.abs(qc - q) > 1e-9, clipP: Math.abs(pc - p) > 1e-9 };
+  }
+  /** 制御がないときに出す有効電力（太陽光＝定格×出力％、蓄電池＝充放電 kW。放電が正） */
+  function availP(d, m) { return d.type === 'pv' ? d.p * ((d.scale ?? m.pvScale) / 100) : d.p; }
+
+  /** 接続点の電圧 vpu から、PCS の目標出力（特性 → 容量制約）を求める */
+  function target(d, m, vpu) {
+    const c = d.pcs, S = +c.S, pa = availP(d, m);
+    let p = pa, q = 0, frac = 1;
+    if (usesVW(c)) { frac = voltWatt(c, vpu); if (pa > 0) p = pa * frac; }
+    if (c.mode === 'B') q = -Math.abs(p) * Math.tan(Math.acos(clamp(+c.pfB, 0.01, 1)));
+    if (usesVV(c)) q = voltVar(c, vpu) * S;
+    const zeroP = Math.abs(pa) < 1e-9;
+    if (zeroP && !c.qAtZeroP) q = 0;                         // P=0 のとき無効電力を出さない設定
+    const lim = capLimit(p, q, S, c.priority);
+    return { vpu, pAvail: pa, pWant: p, qWant: q, p: lim.p, q: lim.q, qMax: lim.qMax, pMax: lim.pMax, clipQ: lim.clipQ, clipP: lim.clipP, vwFrac: frac, S, mode: c.mode, zeroP };
+  }
+  /** 「制御が働く前」の出力：P はそのまま（容量で頭打ち）、Q = 0 */
+  function noControlOut(m) {
+    const o = {};
+    activeDevs(m).forEach(d => { const l = capLimit(availP(d, m), 0, +d.pcs.S, d.pcs.priority); o[d.id] = { p: l.p, q: 0 }; });
+    return o;
+  }
+  /** 外乱の直後：PCS の Q と抑制の割合は直前の値のまま（まだ反応していない） */
+  function heldOut(m, prevPcs) {
+    const o = {};
+    activeDevs(m).forEach(d => {
+      const pr = prevPcs && prevPcs.info && prevPcs.info[d.id], pa = availP(d, m);
+      if (!pr) { const l = capLimit(pa, 0, +d.pcs.S, d.pcs.priority); o[d.id] = { p: l.p, q: 0 }; return; }
+      const frac = pr.pAvail > 1e-9 ? pr.p / pr.pAvail : 1;
+      const l = capLimit(pa > 0 ? pa * frac : pa, pr.q, +d.pcs.S, d.pcs.priority);
+      o[d.id] = { p: l.p, q: l.q };
+    });
+    return o;
+  }
+
+  /** 固定点反復：電圧 → 特性 → 出力 → 潮流計算 → … 。更新は減衰係数 alpha で混ぜる。
+      opt.init: 反復の初期値（{id:{p,q}}）。省略時は「制御が働く前」の出力から始める */
+  function solve(m, taps, opt = {}) {
+    taps = taps || F.currentTaps(m);
+    const po = Object.assign({}, DEF_OPT, m.pcsOpt || {}, opt);
+    const alpha = clamp(+po.alpha || 0.5, 0.01, 1), maxIter = Math.max(1, Math.round(po.maxIter)), tol = po.tol;
+    const act = activeDevs(m);
+    if (!act.length) { const pf = F.powerFlow(m, taps); pf.pcs = { active: [], converged: true, iter: 0, hist: [], out: {}, info: {}, alpha, status: 'none' }; return pf; }
+    const out = {}, start = noControlOut(m);
+    act.forEach(d => { const i0 = opt.init && opt.init[d.id]; out[d.id] = i0 ? { p: i0.p, q: i0.q } : start[d.id]; });
+    const hist = [];
+    let pf, info = {}, converged = false, it;
+    for (it = 1; it <= maxIter; it++) {
+      pf = F.powerFlow(m, taps, { pcsOut: out });
+      let md = 0;
+      const row = { iter: it, v: {}, p: {}, q: {}, diff: 0 };
+      act.forEach(d => {
+        const v = pf.Vll[d.node] / m.Vbase, t = target(d, m, v), o = out[d.id], S = Math.max(+d.pcs.S, 1e-6);
+        info[d.id] = t;
+        row.v[d.id] = v; row.p[d.id] = o.p; row.q[d.id] = o.q;
+        md = Math.max(md, Math.abs(t.p - o.p) / S, Math.abs(t.q - o.q) / S);
+      });
+      row.diff = md; hist.push(row);
+      if (md < tol) { converged = true; break; }
+      act.forEach(d => { const t = info[d.id], o = out[d.id]; out[d.id] = { p: o.p + alpha * (t.p - o.p), q: o.q + alpha * (t.q - o.q) }; });
+    }
+    if (!converged) {
+      pf = F.powerFlow(m, taps, { pcsOut: out });
+      act.forEach(d => { info[d.id] = target(d, m, pf.Vll[d.node] / m.Vbase); });
+    }
+    pf.pcs = { active: act.map(d => d.id), converged, iter: Math.min(it, maxIter), hist, out: clone(out), info, alpha, status: converged ? 'converged' : 'oscillation' };
+    return pf;
+  }
+
+  /** 入れ子：外側＝タップ整定（FeederCalc.settle）、内側＝タップ状態ごとの PCS の固定点反復。
+      タップが 1段動くたびに、直前の PCS 出力から反復を始める（ウォームスタート）。 */
+  function settle(m, start, opt = {}) {
+    let warm = opt.init || null, inner = 0, calls = 0;
+    const flow = (mm, taps) => { const pf = solve(mm, taps, Object.assign({}, opt, { init: warm })); if (pf.pcs.active.length) warm = pf.pcs.out; inner += pf.pcs.iter; calls++; return pf; };
+    const r = F.settle(m, start, Object.assign({}, opt, { flow }));
+    r.pcsInner = inner; r.pcsCalls = calls;
+    return r;
+  }
+
+  /* ---------- ループゲイン ---------- */
+  function pathRX(m, node) {
+    let R = 0, X = 0;
+    for (let k = 1; k <= node && k <= m.sections.length; k++) { const s = m.sections[k - 1]; R += s.len * s.r; X += s.len * s.x; }
+    return { R, X };
+  }
+  /** 非負行列の最大固有値（べき乗法） */
+  function spectralRadius(G) {
+    const n = G.length; if (!n) return 0;
+    let x = new Array(n).fill(1), lam = 0;
+    for (let it = 0; it < 300; it++) {
+      const y = G.map(row => row.reduce((a, g, j) => a + g * x[j], 0));
+      const nrm = Math.max(...y.map(Math.abs));
+      if (nrm < 1e-15) return 0;
+      lam = nrm / Math.max(...x.map(Math.abs));
+      x = y.map(v => v / nrm);
+    }
+    return lam;
+  }
+  /** g_i = |dQ/dV|·(X_i/V) + |dP/dV|·(R_i/V)、全体の ρ = 行列 G_ij = (kq_i·X共通ij + kp_i·R共通ij)/V_i の最大固有値 */
+  function gains(m, pf) {
+    const act = activeDevs(m), info = (pf.pcs && pf.pcs.info) || {}, alpha = pf.pcs ? pf.pcs.alpha : (m.pcsOpt || DEF_OPT).alpha;
+    const rows = act.map(d => {
+      const c = d.pcs, t = info[d.id] || target(d, m, pf.Vll[d.node] / m.Vbase), v = t.vpu, S = +c.S;
+      const sq = usesVV(c) ? Math.abs(slopeAt(vvPts(c), v)) : 0, sqMax = usesVV(c) ? maxSlope(vvPts(c)) : 0;
+      const pw = usesVW(c) && t.pAvail > 0 ? t.pAvail : 0;
+      const sp = pw ? Math.abs(slopeAt(vwPts(c), v)) : 0, spMax = pw ? maxSlope(vwPts(c)) : 0;
+      // 容量で頭打ちのときは、電圧が少し変わっても Q は変わらない（実効の傾き 0）。
+      // ただし有効電力優先で Volt-Watt が P を動かすと、上限 √(S²−P²) が動くので Q も動く：dQ/dV = (P/Qmax)·dP/dV
+      const kp = t.clipP ? 0 : sp * pw / m.Vbase;                                            // kW/V
+      const kq = t.clipQ ? (c.priority !== 'Q' && kp > 0 && t.qMax > 1e-6 ? Math.abs(t.p) / t.qMax * kp : 0) : sq * S / m.Vbase;   // kvar/V
+      const kqMax = sqMax * S / m.Vbase, kpMax = spMax * pw / m.Vbase;
+      const { R, X } = pathRX(m, d.node), V = pf.Vll[d.node];
+      const dVdQ = X * 1000 / V, dVdP = R * 1000 / V;                                     // V/kvar, V/kW
+      return { id: d.id, type: d.type, node: d.node, mode: c.mode, kq, kp, kqMax, kpMax, dVdQ, dVdP, g: kq * dVdQ + kp * dVdP, gMax: kqMax * dVdQ + kpMax * dVdP };
+    });
+    const mat = key => rows.map(a => rows.map(b => {
+      const n = Math.min(a.node, b.node), { R, X } = pathRX(m, n), V = pf.Vll[a.node];
+      return ((key === 'max' ? a.kqMax : a.kq) * X + (key === 'max' ? a.kpMax : a.kp) * R) * 1000 / V;
+    }));
+    const rho = spectralRadius(mat('op')), rhoMax = spectralRadius(mat('max'));
+    return { rows, rho, rhoMax, alpha, limit: 2 / alpha - 1 };
+  }
+
+  /* ---------- 効き方の分解・副作用 ---------- */
+  function secFlow(pf, k) {
+    const V = pf.V[k], I = pf.Isec[k];
+    return { P: 3 * (V.re * I.re + V.im * I.im) / 1000, Q: 3 * (V.im * I.re - V.re * I.im) / 1000, I: Math.hypot(I.re, I.im) };
+  }
+  /** 接続点までの区間ごとに ΔV ≒ −(R·P + X·Q)/V を P の寄与と Q の寄与に分ける（上昇が正） */
+  function breakdown(m, pf, node) {
+    const rows = [];
+    for (let k = 1; k <= node; k++) {
+      const s = m.sections[k - 1], R = s.len * s.r, X = s.len * s.x, f = secFlow(pf, k), V = pf.Vll[k];
+      rows.push({ k, R, X, P: f.P, Q: f.Q, I: f.I, dvP: -R * f.P * 1000 / V, dvQ: -X * f.Q * 1000 / V });
+    }
+    const { R, X } = pathRX(m, node), V = pf.Vll[node];
+    return { rows, R, X, dVdQ: X * 1000 / V, dVdP: R * 1000 / V, sumP: rows.reduce((a, r) => a + r.dvP, 0), sumQ: rows.reduce((a, r) => a + r.dvQ, 0) };
+  }
+  function flowStats(m, pf) {
+    let iMax = 0, kMax = 0;
+    for (let k = 1; k <= m.sections.length; k++) { const i = Math.hypot(pf.Isec[k].re, pf.Isec[k].im); if (i > iMax) { iMax = i; kMax = k; } }
+    const lf = F.regFlow(m, pf, m.lrt);
+    return { iMax, kMax, loss: pf.lossKW, lrtP: lf.P, lrtQ: lf.Q, lrtI: lf.I, I: pf.Isec.slice(1, m.sections.length + 1).map(i => Math.hypot(i.re, i.im)) };
+  }
+  /** 副作用：同じタップで「制御が働く前（Q=0）」と比べる */
+  function sideEffects(m, pf, taps) {
+    const pf0 = F.powerFlow(m, taps || pf.taps, { pcsOut: noControlOut(m) });
+    const a = flowStats(m, pf0), b = flowStats(m, pf);
+    const qSum = Object.values((pf.pcs && pf.pcs.out) || {}).reduce((s, o) => s + o.q, 0);
+    return { before: a, after: b, pf0, qSum };
+  }
+
+  /* ---------- 比較 ---------- */
+  function sumOut(m, pf, filter) {
+    let curt = 0, absorb = 0, supply = 0;
+    activeDevs(m).filter(filter || (() => true)).forEach(d => {
+      const t = pf.pcs.info[d.id], o = pf.pcs.out[d.id];
+      if (t && t.pAvail > 0) curt += Math.max(0, t.pAvail - o.p);
+      if (o.q < 0) absorb += -o.q; else supply += o.q;
+    });
+    return { curt, absorb, supply };
+  }
+  /** 電圧上昇の抑制：タップを「太陽光 tapPv%・制御なし」で整定した位置に固定し（太陽光が出る前に整定したまま、の想定）、
+      太陽光を pvScale% に上げて、全太陽光の PCS を A→B→C→E と切り替える。比較の A は力率 1.0 で計算する */
+  function stepCompare(m, opt = {}) {
+    const base = ensurePcs(clone(m));
+    base.devices.forEach(d => { if (d.type === 'pv') { d.pf = 1; d.pcs.mode = 'A'; } });
+    base.pvScale = opt.tapPv ?? 0;
+    const tapsFix = opt.taps || settle(base, F.currentTaps(m)).taps;
+    base.pvScale = opt.pvScale ?? 100;
+    const pvNodes = [...new Set(base.devices.filter(d => d.type === 'pv').map(d => d.node))];
+    const rows = (opt.modes || ['A', 'B', 'C', 'E']).map(mode => {
+      const m2 = clone(base);
+      m2.devices.forEach(d => { if (d.type === 'pv') d.pcs.mode = mode; });
+      const pf = solve(m2, tapsFix, opt);
+      const s = F.summarize(m2, pf), so = sumOut(m2, pf, d => d.type === 'pv');
+      return { mode, pf, maxV: s.max, iMax: s.iMax, vPcs: Math.max(...pvNodes.map(k => pf.Vll[k])), loss: pf.lossKW, curt: so.curt, absorb: so.absorb, converged: pf.pcs.converged, iter: pf.pcs.iter, lrtQ: F.regFlow(m2, pf, m2.lrt).Q };
+    });
+    rows.forEach(r => { r.dLoss = r.loss - rows[0].loss; });
+    // 参考：モード E のまま太陽光の出力を変える（無効電力で足りるうちは抑制なし）
+    // 定格の倍率 mult は「太陽光を増設した場合」（定格 kW と PCS 容量 S を同じ倍率にする）
+    // sRatio を指定した行は、PCS 容量 S = 定格 P × sRatio（容量に余裕がない場合）
+    const sweep = (opt.sweep || [[40, 1], [60, 1], [80, 1], [100, 1], [100, 2], [80, 1, 1], [100, 1, 1]]).map(([pv, mult, sRatio]) => {
+      const m2 = clone(base); m2.pvScale = pv;
+      m2.devices.forEach(d => { if (d.type === 'pv') { d.pcs.mode = 'E'; d.p *= mult; d.pcs.S = sRatio ? d.p * sRatio : d.pcs.S * mult; } });
+      // 収束しないときは、この表に限り α を半分ずつ下げて解き直す（使った α を表示する）
+      let alphaUsed = +(m2.pcsOpt || DEF_OPT).alpha, pf = solve(m2, tapsFix, opt), firstOk = pf.pcs.converged;
+      while (!pf.pcs.converged && alphaUsed > 0.02) { alphaUsed /= 2; pf = solve(m2, tapsFix, Object.assign({}, opt, { alpha: alphaUsed, maxIter: 1000 })); }
+      const so = sumOut(m2, pf, d => d.type === 'pv');
+      const mA = clone(m2); mA.devices.forEach(d => { if (d.type === 'pv') d.pcs.mode = 'A'; });
+      const pvN = [...new Set(m2.devices.filter(d => d.type === 'pv').map(d => d.node))];
+      const pf0 = F.powerFlow(mA, tapsFix);
+      return { pv, mult, sRatio, kW: m2.devices.filter(d => d.type === 'pv').reduce((a, d) => a + availP(d, m2), 0), maxV: F.summarize(m2, pf).max, maxV0: F.summarize(mA, pf0).max, vPcs: Math.max(...pvN.map(k => pf.Vll[k])), vPcs0: Math.max(...pvN.map(k => pf0.Vll[k])), absorb: so.absorb, curt: so.curt, converged: pf.pcs.converged, firstOk, alphaUsed, iter: pf.pcs.iter };
+    });
+    return { rows, sweep, taps: tapsFix, pvScale: base.pvScale, tapPv: opt.tapPv ?? 0 };
+  }
+  /** 電圧低下を支える：太陽光 0%・DC 接続でタップを整定し、その位置のまま負荷を ×factor にする（タップが追いつく前の重負荷）。
+      蓄電池・夜間の太陽光のうち、接続点の電圧がいちばん低い PCS を、P=0 のまま Volt-VAR にする */
+  function supportCompare(m, opt = {}) {
+    const b = ensurePcs(clone(m)), factor = opt.factor ?? 1.5;
+    b.devices.forEach(d => {
+      if (d.type === 'dc') d.tripped = false;
+      if (d.pcs) d.pcs.mode = 'A';
+      if (d.type === 'bess') { d.p = 0; d.q = 0; }
+    });
+    b.pvScale = 0;
+    const taps = opt.taps || settle(b, F.currentTaps(m)).taps;
+    b.devices.forEach(d => { if (d.type === 'load') { d.p *= factor; d.q *= factor; } });
+    const pfA = solve(b, taps);
+    const cands = b.devices.filter(d => d.pcs && d.node >= 0 && d.node <= b.sections.length);
+    if (!cands.length) return null;
+    let unit = cands.reduce((a, d) => pfA.Vll[d.node] < pfA.Vll[a.node] ? d : a);
+    if (opt.unitId) unit = cands.find(d => d.id === opt.unitId) || unit;
+    unit.pcs.qAtZeroP = true;
+    const bc = clone(b), u = bc.devices.find(d => d.id === unit.id);
+    u.pcs.mode = 'C';
+    const pfC = solve(bc, taps, opt);
+    const k = unit.node, { R, X } = pathRX(m, k), Z = Math.hypot(R, X), V = pfA.Vll[k];
+    const q = pfC.pcs.out[unit.id].q, dV = pfC.Vll[k] - pfA.Vll[k];
+    const sA = F.summarize(b, pfA), sC = F.summarize(bc, pfC);
+    return {
+      unit: { id: unit.id, type: unit.type, node: k, S: unit.pcs.S }, taps, factor, pfA, pfC, q, dV, perKvar: q ? dV / q : 0,
+      R, X, xr: R ? X / R : Infinity, dVdQ: X * 1000 / V, dVdP: R * 1000 / V, minA: sA.min, minC: sC.min, iMinA: sA.iMin, iMinC: sC.iMin, lossA: pfA.lossKW, lossC: pfC.lossKW,
+      vA: pfA.Vll[k], vC: pfC.Vll[k], inDb: pfA.Vll[k] / m.Vbase >= vvPts(unit.pcs)[1][0], pEquiv: R ? dV / (R * 1000 / V) : 0, trXR: 10, svrUp: m.svrs.some(s => s.node < k), converged: pfC.pcs.converged
+    };
+  }
+
+  /* ---------- 確認用テスト ---------- */
+  function runTests() {
+    const res = [];
+    const T = (name, pass, detail) => res.push({ name, pass: !!pass, detail });
+    const f1 = v => v.toFixed(1), f2 = v => v.toFixed(2), f3 = v => v.toFixed(3);
+    const pcsOf = (type, o) => Object.assign(defaultPcs({ type, p: 1000, rated: 1000 }), o);
+    /** 1区間・LRT 手動中立・SVR なしの小さなモデル */
+    const one = (sec, devs) => { const m = F.defaultModel(); m.sections = sec; m.svrs = []; m.lrt.mode = 'manual'; m.lrt.tap = 0; m.devices = devs; m.pcsOpt = Object.assign({}, DEF_OPT); return m; };
+
+    // P1. Volt-VAR の特性
+    {
+      const c = pcsOf('pv', {}), pts = vvPts(c), out = []; let ok = true;
+      pts.forEach(([v, q], i) => { const y = voltVar(c, v); if (Math.abs(y - q) > 1e-12) ok = false; out.push(`V${i + 1}=${v} → Q=${f3(y)}（期待 ${q}）`); });
+      for (let i = 1; i < pts.length; i++) {
+        const [x0, y0] = pts[i - 1], [x1, y1] = pts[i];
+        for (const w of [0.25, 0.5, 0.75]) { const v = x0 + (x1 - x0) * w, y = voltVar(c, v), e = y0 + (y1 - y0) * w; if (Math.abs(y - e) > 1e-12) ok = false; }
+      }
+      const db = [0.99, 0.995, 1.0, 1.005, 1.01].map(v => voltVar(c, v));
+      if (db.some(y => y !== 0)) ok = false;
+      const ends = [voltVar(c, 0.90), voltVar(c, 1.10)];
+      if (ends[0] !== 0.44 || ends[1] !== -0.44) ok = false;
+      T('P1. Volt-VAR：各点でちょうど Q1〜Q4、点の間は直線、不感帯の中はゼロ', ok,
+        out.join(' / ') + `\n点の間（1/4・1/2・3/4）がすべて直線補間と一致\n不感帯 0.99〜1.01pu の Q = ${db.map(f3).join(', ')}\n範囲の外 0.90pu → ${ends[0]}、1.10pu → ${ends[1]}（端の値のまま）`);
+    }
+    // P2. 容量制約
+    {
+      const a = capLimit(900, -1000, 1000, 'P'), exp = Math.sqrt(1000 ** 2 - 900 ** 2);
+      const b = capLimit(900, -600, 1000, 'Q');
+      const ok = Math.abs(a.qMax - exp) < 1e-9 && Math.abs(a.q + exp) < 1e-9 && a.clipQ && !a.clipP && Math.abs(b.p - 800) < 1e-9 && b.clipP && Math.abs(Math.hypot(b.p, b.q) - 1000) < 1e-9;
+      T('P2. 容量制約：S=1,000kVA・P=900kW のとき、有効電力優先の Q 上限 ≒ 436kvar', ok,
+        `有効電力優先：Q の上限 √(1,000²−900²) = ${f2(a.qMax)} kvar → 1,000kvar 吸収の要求は ${f2(-a.q)} kvar に削られる（P は ${a.p} kW のまま）\n（参考）無効電力優先で 600kvar 吸収：P は ${f2(b.p)} kW に削られる（√(1,000²−600²) = 800）`);
+    }
+    // P3. 1区間の電圧上昇と、無効電力の吸収で下がる量
+    {
+      const m = one([{ len: 1, r: 0.8, x: 0.7, amp: 300 }], [{ id: 1, type: 'pv', node: 1, p: 1000, pf: 1, scale: 100 }]);
+      const taps = F.currentTaps(m);
+      const a = F.powerFlow(m, taps, { pcsOut: { 1: { p: 1000, q: 0 } } });
+      const b = F.powerFlow(m, taps, { pcsOut: { 1: { p: 1000, q: -300 } } });
+      const riseA = a.Vll[1] - a.Vll[0], riseB = b.Vll[1] - b.Vll[0], drop = riseA - riseB;
+      const hA = 0.8 * 1e6 / a.Vll[1], hD = 0.7 * 300e3 / b.Vll[1], hB = hA - hD;            // V = 受電端（試験2と同じ）
+      const hA0 = 0.8 * 1e6 / 6600, hD0 = 0.7 * 300e3 / 6600;
+      // 2次の項（直交成分）：|V_s| = |V_r − Z·I| の、I と直角な成分 (X·P − R·Q)/V による補正 −(X·P − R·Q)²/(2V³)
+      const q2 = (P, Q, V) => (0.7 * P - 0.8 * Q) ** 2 / (2 * V ** 3);
+      const hB2 = (0.8 * 1e6 + 0.7 * -300e3) / b.Vll[1] - q2(1e6, -300e3, b.Vll[1]);
+      const e = (x, h) => Math.abs(x - h) / h * 100;
+      const ok = e(riseA, hA) < 1 && e(drop, hD) < 1 && e(riseB, hB2) < 1;
+      T('P3. 1区間（R=0.8Ω, X=0.7Ω）：太陽光 1MW の電圧上昇 ≒ R·P/V、300kvar 吸収で ≒ X·ΔQ/V 下がる（誤差1%以内）', ok,
+        `Q=0：上昇 ${f2(riseA)} V / 手計算 R·P/V（V=受電端 ${f1(a.Vll[1])}V）= ${f2(hA)} V → 誤差 ${f3(e(riseA, hA))} %\n` +
+        `300kvar 吸収：下がった量 ${f2(drop)} V / 手計算 X·ΔQ/V = ${f2(hD)} V → 誤差 ${f3(e(drop, hD))} %\n` +
+        `吸収後の上昇 ${f2(riseB)} V / 1次の近似（上の2つの差）${f2(hB)} V → 差 ${f3(e(riseB, hB))} %（1%を少し超える）\n` +
+        `  2次の項 (X·P−R·Q)²/(2V³) = ${f2(q2(1e6, -300e3, b.Vll[1]))} V を入れた手計算 ${f2(hB2)} V → 誤差 ${f3(e(riseB, hB2))} %（判定はこちら）\n` +
+        `（参考）V に 6,600V を使うと 上昇 ${f1(hA0)} V・低下 ${f1(hD0)} V・残り ${f1(hA0 - hD0)} V`);
+    }
+    // P4. Volt-VAR の向き・不感帯
+    {
+      const sec = Array.from({ length: 4 }, () => ({ len: 1, r: 0.12, x: 0.30, amp: 300 }));
+      const mk = (tap, loadKW) => {
+        const m = one(sec.map(s => ({ ...s })), [{ id: 1, type: 'bess', node: 4, p: 0, q: 0, rated: 500, pcs: pcsOf('bess', { S: 500, mode: 'C' }) }]);
+        if (loadKW) m.devices.push({ id: 2, type: 'load', node: 4, p: loadKW, q: loadKW * 0.33 });
+        m.lrt.tap = tap; return m;
+      };
+      const hi = solve(mk(4, 0)), lo = solve(mk(0, 3000)), mid = mk(0, 0), dbr = solve(mid);
+      const midA = clone(mid); midA.devices[0].pcs.mode = 'A';
+      const pA = F.powerFlow(midA);
+      const qHi = hi.pcs.out[1].q, qLo = lo.pcs.out[1].q, qDb = dbr.pcs.out[1].q;
+      const dev = Math.max(...dbr.Vll.map((v, k) => Math.abs(v - pA.Vll[k])));
+      const ok = qHi < 0 && qLo > 0 && Math.abs(qDb) < 1e-9 && dev < 1e-6 && hi.pcs.converged && lo.pcs.converged;
+      T('P4. Volt-VAR：電圧が高いと吸収、低いと供給、不感帯の中では制御なしと同じ', ok,
+        `高い（LRT +4・無負荷）：${f3(hi.Vll[4] / 6600)} pu → Q = ${f1(qHi)} kvar（吸収）、${hi.pcs.iter} 回で収束\n` +
+        `低い（末端 3MW）：${f3(lo.Vll[4] / 6600)} pu → Q = ${f1(qLo)} kvar（供給）、${lo.pcs.iter} 回で収束\n` +
+        `不感帯（無負荷・中立）：${f3(dbr.Vll[4] / 6600)} pu → Q = ${f3(qDb)} kvar、制御なしとの電圧の差 最大 ${dev.toExponential(1)} V`);
+    }
+    // P5. Volt-Watt で有効電力が下がり、電圧も下がる
+    {
+      const sec = Array.from({ length: 4 }, () => ({ len: 1, r: 0.3, x: 0.30, amp: 600 }));
+      const mk = mode => { const m = one(sec.map(s => ({ ...s })), [{ id: 1, type: 'pv', node: 4, p: 1500, pf: 1, scale: 100, pcs: pcsOf('pv', { S: 2000, mode }) }]); m.lrt.tap = 2; return m; };
+      const ma = mk('A'), mc = mk('C'), me = mk('E');
+      const pa = F.powerFlow(ma), pc = solve(mc), pe = solve(me);
+      const tc = pc.pcs.info[1], te = pe.pcs.info[1];
+      const ge = gains(me, pe).rows[0];
+      const ok = te.p < tc.pAvail - 1 && pe.Vll[4] < pc.Vll[4] && pc.Vll[4] < pa.Vll[4] && pe.pcs.converged && pc.pcs.converged;
+      T('P5. Volt-Watt が働くと有効電力が下がり、電圧がさらに下がる', ok,
+        `太陽光 1,500kW（S=2,000kVA）末端・LRT +2\n制御なし：${f1(pa.Vll[4])} V（${f3(pa.Vll[4] / 6600)} pu）\nVolt-VAR：${f1(pc.Vll[4])} V（${f3(pc.Vll[4] / 6600)} pu）、Q ${f1(pc.pcs.out[1].q)} kvar、P ${f1(tc.p)} kW\n` +
+        `Volt-VAR＋Volt-Watt：${f1(pe.Vll[4])} V（${f3(pe.Vll[4] / 6600)} pu）、Q ${f1(pe.pcs.out[1].q)} kvar、P ${f1(te.p)} kW（${f1(te.pAvail - te.p)} kW 抑制）、${pe.pcs.iter} 回で${pe.pcs.converged ? '収束' : '収束せず'}（g = ${f2(ge.g)}）`);
+    }
+    // P6. A→B→C→E の順に最大電圧が下がる（または同じ）
+    {
+      const m = ensurePcs(F.defaultModel());
+      const r = stepCompare(m, { pvScale: 100, tapPv: 0 });
+      let ok = r.rows.every(x => x.converged);
+      for (let i = 1; i < r.rows.length; i++) if (r.rows[i].maxV > r.rows[i - 1].maxV + 1e-6) ok = false;
+      const r2 = stepCompare(m, { pvScale: 100, tapPv: 100 });
+      T('P6. 制御 A→B→C→E の順に、最大電圧が下がる（または同じ）', ok,
+        `初期設定・太陽光 0% で整定したタップのまま（LRT ${r.taps.lrt} / SVR ${r.taps.svr.join(',')}）、太陽光を 100% に上げた状態\n` +
+        r.rows.map(x => `${x.mode}：最大 ${f1(x.maxV)} V（節点${x.iMax}）、吸収 ${f1(x.absorb)} kvar、抑制 ${f1(x.curt)} kW、損失 ${f1(x.loss)} kW、${x.iter} 回で${x.converged ? '収束' : '未収束'}`).join('\n') +
+        `\n（参考・判定外）太陽光 100% で整定したタップ（LRT ${r2.taps.lrt} / SVR ${r2.taps.svr.join(',')}）では、電圧が不感帯の中に収まり C・E は何もしない。B は常に吸収するので C より低くなる：\n` +
+        r2.rows.map(x => `${x.mode}：最大 ${f1(x.maxV)} V、吸収 ${f1(x.absorb)} kvar、損失 ${f1(x.loss)} kW`).join(' / '));
+    }
+    // P7. ゲイン：小さいと収束、大きい（g>1）と収束せず警告
+    {
+      const sec = Array.from({ length: 12 }, () => ({ len: 0.725, r: 0.12, x: 0.30, amp: 600 }));
+      const mk = (vv, alpha) => {
+        const m = one(sec.map(s => ({ ...s })), [{ id: 1, type: 'pv', node: 12, p: 1000, pf: 1, scale: 50, pcs: pcsOf('pv', { S: 1000, mode: 'C', vv }) }]);
+        m.lrt.tap = 1; m.pcsOpt.alpha = alpha; return m;
+      };
+      const mild = mk([[0.96, 0.44], [0.99, 0], [1.01, 0], [1.04, -0.44]], 0.5);
+      const steep = [[0.99, 0.6], [0.997, 0], [1.003, 0], [1.01, -0.6]];
+      const a = solve(mild), ga = gains(mild, a);
+      const sMod = mk(steep, 1), b = solve(sMod), gb = gains(sMod, b);
+      const sMod2 = mk(steep, 0.5), c2 = solve(sMod2), gc = gains(sMod2, c2);
+      const warnB = gb.rhoMax > 1;
+      const ok = a.pcs.converged && ga.rows[0].g < 1 && ga.rho < 1 && !b.pcs.converged && gb.rows[0].gMax > 1 && warnB;
+      T('P7. ゲインが小さい設定では収束、大きい設定（g>1）では収束せず警告が出る', ok,
+        `緩い特性（初期値・α=0.5）：g = ${f3(ga.rows[0].g)}（傾き ${f2(ga.rows[0].kq)} kvar/V × 感度 ${f3(ga.rows[0].dVdQ)} V/kvar）→ ${a.pcs.converged ? a.pcs.iter + ' 回で収束' : '未収束'}\n` +
+        `急な特性（±0.6pu を 0.007pu で変える・α=1）：最大の傾きでの g = ${f2(gb.rows[0].gMax)} > 1 → ${b.pcs.converged ? '収束' : b.pcs.iter + ' 回で収束せず'}、警告 ${warnB ? 'あり' : 'なし'}\n` +
+        `同じ特性で α=0.5：減衰ありの収束の目安 g < 2/α−1 = ${f1(gc.limit)} → ${c2.pcs.converged ? c2.pcs.iter + ' 回で収束' : '収束せず'}（g = ${f2(gc.rows[0].gMax)}）`);
+    }
+    // P8. 無効電力の吸収で線路電流・損失が増える（変電所から無効電力が供給される）
+    {
+      const m = one([{ len: 1, r: 0.8, x: 0.7, amp: 300 }], [{ id: 1, type: 'pv', node: 1, p: 1000, pf: 1, scale: 100 }]);
+      const t = F.currentTaps(m);
+      const a = flowStats(m, F.powerFlow(m, t, { pcsOut: { 1: { p: 1000, q: 0 } } })), b = flowStats(m, F.powerFlow(m, t, { pcsOut: { 1: { p: 1000, q: -300 } } }));
+      const ok = b.iMax > a.iMax && b.loss > a.loss && b.lrtQ > a.lrtQ + 290;
+      T('P8. 無効電力を吸収すると、線路電流と損失が増える', ok,
+        `Q=0 → 300kvar 吸収：電流 ${f1(a.iMax)} → ${f1(b.iMax)} A、損失 ${f2(a.loss)} → ${f2(b.loss)} kW、変電所から見た Q ${f1(a.lrtQ)} → ${f1(b.lrtQ)} kvar（上流から供給）`);
+    }
+    // P9. 蓄電池の PCS は P=0 でも容量内で Q を出せる
+    {
+      const sec = Array.from({ length: 4 }, () => ({ len: 1, r: 0.12, x: 0.30, amp: 300 }));
+      const mk = (z, S) => { const m = one(sec.map(s => ({ ...s })), [{ id: 1, type: 'bess', node: 4, p: 0, q: 0, rated: 500, pcs: pcsOf('bess', { S, mode: 'C', qAtZeroP: z }) }]); m.lrt.tap = 4; return m; };
+      const a = solve(mk(true, 500)), b = solve(mk(false, 500)), c = solve(mk(true, 100));
+      const qa = a.pcs.out[1].q, qb = b.pcs.out[1].q, qc = c.pcs.out[1].q;
+      const ok = qa < -1 && Math.abs(qa) <= 500 + 1e-9 && Math.abs(qb) < 1e-9 && Math.abs(qc) <= 100 + 1e-6 && qc < -1 && a.pcs.out[1].p === 0;
+      T('P9. 蓄電池の PCS は P=0 でも、容量の範囲内で Q を出せる（STATCOM 的な動作）', ok,
+        `P=0・電圧 ${f3(a.Vll[4] / 6600)} pu：「P=0でもQを出す」入 → Q ${f1(qa)} kvar（S=500）／ 切 → Q ${f1(qb)} kvar\nS=100kVA にすると Q ${f1(qc)} kvar（容量の範囲内）`);
+    }
+    // P10. 入れ子（PCS 内側・タップ外側）で全体が整定する
+    {
+      const m = ensurePcs(F.defaultModel()); m.pvScale = 100;
+      m.devices.forEach(d => { if (d.type === 'pv') d.pcs.mode = 'E'; });
+      const r = settle(m);
+      const ok = r.status === 'settled' && r.pf.pcs.converged && r.regs.every(g => g.inBand);
+      T('P10. PCS の反復（内側）とタップ整定（外側）の入れ子で、全体が整定する', ok,
+        `初期設定・太陽光 100%・全太陽光 E：${r.status === 'settled' ? '整定' : r.status}（タップ ${r.moves.length} 手、PCS の反復 合計 ${r.pcsInner} 回／潮流計算の呼び出し ${r.pcsCalls} 回）\n` + r.regs.map(g => `${g.name} tap${g.tap >= 0 ? '+' : ''}${g.tap} Vc=${f1(g.vc)}V ${g.inBand ? '○' : '×'}`).join(' / '));
+    }
+    // P11. 電圧低下を支える（重負荷で無効電力を供給 → 電圧が上がる。効きは ≒ X合計÷V）
+    {
+      const m = ensurePcs(F.defaultModel());
+      const r = supportCompare(m, { factor: 1.5 });
+      const err = Math.abs(r.perKvar - r.dVdQ) / r.dVdQ * 100;
+      const ok = r.converged && r.q > 1 && r.dV > 0 && err < 10 && r.xr < r.trXR;
+      T('P11.（追加）電圧低下を支える：P=0 の PCS が無効電力を供給して電圧が上がる。1kvar の効き ≒ X合計÷V', ok,
+        `${r.unit.type === 'bess' ? '蓄電池' : '太陽光（夜間）'} #${r.unit.id}・節点${r.unit.node}：${f3(r.vA / 6600)} → ${f3(r.vC / 6600)} pu、Q 供給 ${f1(r.q)} kvar、改善 ${f1(r.dV)} V\n` +
+        `1kvar あたり ${f3(r.perKvar)} V（式 X合計÷V = ${f3(r.dVdQ)} V、差 ${f1(err)} %${r.svrUp ? '。上流の SVR の昇圧の分、式より少し大きい' : ''}）\n` +
+        `1kvar の効き ÷ 1kW の効き = X/R = ${f2(r.xr)}（送電線の目安 X/R ≒ ${r.trXR} より小さい）`);
+    }
+    return res;
+  }
+
+  return { MODES, DEF_OPT, defaultPcs, ensurePcs, isActive, activeDevs, usesVV, usesVW, voltVar, voltWatt, vvPts, vwPts, slopeAt, capLimit, availP, target, noControlOut, heldOut, solve, settle, gains, pathRX, breakdown, flowStats, sideEffects, stepCompare, supportCompare, runTests };
+})();
+
+/* =====================================================================
    UI 部
    ===================================================================== */
 (() => {
   const $ = s => document.querySelector(s);
-  const F = FeederCalc;
-  const state = { model: F.defaultModel(), cur: null, base: null, unit: 'v', event: null, freeze: false };
+  const F = FeederCalc, P = PcsCalc;
+  const state = { model: P.ensurePcs(F.defaultModel()), cur: null, base: null, unit: 'v', event: null, freeze: false, pcsSel: null, pcsView: null, pcsCmp: null };
   const M = () => state.model;
 
   const fmt = (v, d = 0) => Number(v).toLocaleString('ja-JP', { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -966,11 +1464,11 @@ const FeederCalc = (() => {
   function compute() {
     const m = M();
     if (state.freeze) {
-      const pf = F.powerFlow(m, startTaps());
+      const pf = P.solve(m, startTaps());
       const regs = F.regOrder(m).map(o => { const vc = F.controlVoltage(m, pf, o.reg); return { name: o.reg.name, kind: o.kind, i: o.i, mode: o.reg.mode, tap: o.kind === 'lrt' ? pf.taps.lrt : pf.taps.svr[o.i], vc, target: o.reg.target, db: o.reg.db, inBand: Math.abs(vc - o.reg.target) <= o.reg.db, limit: false }; });
-      return { pf, taps: pf.taps, status: 'frozen', moves: [], cycle: [], regs, limited: [] };
+      return { pf, taps: pf.taps, status: pf.pcs.converged ? 'frozen' : 'pcsHunting', moves: [], cycle: [], regs, limited: [] };
     }
-    return F.settle(m, startTaps());
+    return P.settle(m, startTaps());
   }
   function writeBack(taps) {
     const m = M();
@@ -984,7 +1482,9 @@ const FeederCalc = (() => {
     const r = compute();
     if (!state.freeze) writeBack(r.taps);
     state.cur = r;
-    renderAlerts(); renderTiles(); renderProfile(); renderNodeTable(); renderRegStatus(); renderHowto();
+    // PCS の表示用：整定後のタップで「制御が働く前」から反復し直す（反復の履歴を見せるため。結果は整定結果と許容誤差内で同じ）
+    state.pcsView = P.activeDevs(M()).length ? P.solve(M(), r.taps) : r.pf;
+    renderAlerts(); renderTiles(); renderProfile(); renderNodeTable(); renderRegStatus(); renderHowto(); renderPcs();
     if (opt.ldc !== false) { clearTimeout(ldcTimer); ldcTimer = setTimeout(renderLdc, 120); }
   }
 
@@ -992,6 +1492,7 @@ const FeederCalc = (() => {
   function renderAlerts() {
     const r = state.cur, a = [];
     if (r.status === 'hunting') a.push(`<div class="alert warn"><b>ハンチングの可能性：</b>タップが行き来して整定しません（関係機器: ${r.cycle.map(esc).join('・')}）。不感帯が 1段の電圧変化の半分より狭くないか、多段の目標・LDC 設定が干渉していないか確認してください。表示は最後の状態です。</div>`);
+    if (r.status === 'pcsHunting') a.push(`<div class="alert warn"><b>PCS の制御が収束しません（ハンチングの警告）：</b>電圧と PCS の出力が行き来して、${r.pf.pcs.iter} 回の反復で止まりませんでした。タップの整定はそこで止めています。特性の傾きを緩める、減衰係数を小さくする、などを試してください（「6. PCS」のループゲインを参照）。表示は最後の状態です。</div>`);
     if (r.status === 'maxiter') a.push(`<div class="alert warn">タップの整定計算が上限回数に達しました。</div>`);
     if (r.limited.length) a.push(`<div class="alert warn"><b>タップ限界：</b>${r.limited.map(esc).join('・')} が端のタップに達し、目標±不感帯に入れません。</div>`);
     if (!r.pf.converged) a.push(`<div class="alert bad"><b>潮流計算が収束しません。</b>負荷が過大な可能性があります。</div>`);
@@ -1002,7 +1503,7 @@ const FeederCalc = (() => {
     const pct = v => fmt(v / m.Vbase * 100, 1) + '%';
     const bad = v => v < m.limits.lo || v > m.limits.hi;
     const lf = F.regFlow(m, pf, m.lrt);
-    const st = { settled: ['整定', ''], hunting: ['ハンチングの可能性', 'warn'], maxiter: ['上限到達', 'warn'], frozen: ['タップ固定', ''] }[r.status];
+    const st = { settled: ['整定', ''], hunting: ['ハンチングの可能性', 'warn'], maxiter: ['上限到達', 'warn'], frozen: ['タップ固定', ''], pcsHunting: ['PCS が収束しない', 'warn'] }[r.status];
     const taps = [`LRT ${sgn(pf.taps.lrt)}`].concat(m.svrs.map((v, i) => `${v.name} ${sgn(pf.taps.svr[i])}`)).join(' / ');
     const t = [
       ['末端電圧', fmt(s.end) + ' V', pct(s.end) + `（節点${m.sections.length}）`, bad(s.end) ? 'bad' : ''],
@@ -1014,6 +1515,11 @@ const FeederCalc = (() => {
       ['タップ位置', taps, '', ''],
       ['整定状態', st[0], r.status === 'frozen' ? '' : r.moves.length ? `直前の計算で ${r.moves.length}手 動作` : '直前の計算でタップ動作なし', st[1]]
     ];
+    const act = P.activeDevs(m);
+    if (act.length && pf.pcs) {
+      const qs = Object.values(pf.pcs.out).reduce((a, o) => a + o.q, 0);
+      t.push(['PCS 制御', `${act.length} 台`, `Q 合計 ${qs >= 0 ? '供給' : '吸収'} ${fmt(Math.abs(qs))} kvar${r.pcsInner !== undefined ? `・反復 計${r.pcsInner}回` : ''}`, pf.pcs.converged ? '' : 'warn']);
+    }
     $('#tiles').innerHTML = t.map(x => `<div class="tile ${x[3]}"><div class="k">${x[0]}</div><div class="v" style="${x[0] === 'タップ位置' || x[0] === '整定状態' ? 'font-size:14px' : ''}">${x[1]}</div><div class="s">${x[2]}</div></div>`).join('');
   }
 
@@ -1024,7 +1530,7 @@ const FeederCalc = (() => {
     $('#howDb').innerHTML = ` 今の LRT：1段 ≒ ${fmt(m.Vbase)} × ${L.step}% = <b>${fmt(step, 1)} V</b>、帯の幅 = 2 × ${fmt(L.db)} = <b>${fmt(2 * L.db)} V</b> → ${2 * L.db > step ? '<span class="pass">帯のほうが広いので整定できる</span>' : '<span class="fail">帯のほうが狭いのでハンチングしやすい</span>'}。`;
     const tapStr = t => [`LRT ${sgn(t.lrt)}`].concat(m.svrs.map((s, i) => `${s.name} ${sgn(t.svr[i])}`)).join(' / ');
     const neutral = { lrt: L.mode === 'auto' ? 0 : L.tap, svr: m.svrs.map(s => s.mode === 'auto' ? 0 : s.tap) };
-    const rn = F.settle(m, neutral);
+    const rn = P.settle(m, neutral);
     const same = rn.taps.lrt === r.taps.lrt && rn.taps.svr.every((t, i) => t === r.taps.svr[i]);
     $('#howOrder').innerHTML = state.freeze ? '' : ` 今の状態：<b>${tapStr(r.taps)}</b>。同じ条件を「全台中立」から計算し直すと <b>${tapStr(rn.taps)}</b>${same ? '（同じ）' : ` <b class="fail">（違う。どちらも帯の中で、止まれる位置が複数ある例）</b>`}。`;
     const fl = F.regFlow(m, pf, L), vs = pf.Vll[0];
@@ -1078,12 +1584,12 @@ const FeederCalc = (() => {
     });
   }
   function renderNodeTable() {
-    const m = M(), pf = state.cur.pf, { P, Q } = F.nodeLoads(m);
+    const m = M(), pf = state.cur.pf, { P: Pn, Q } = F.nodeLoads(m, pf.pcs && pf.pcs.out);
     const rows = pf.Vll.map((v, k) => {
       const bad = v < m.limits.lo || v > m.limits.hi;
       const svr = m.svrs.filter(s => s.node === k).map(s => s.name).join('・');
       const I = k > 0 ? Math.hypot(pf.Isec[k].re, pf.Isec[k].im) : null;
-      return `<tr><td>${k}</td><td>${fmt(pf.x[k], 2)}</td><td class="${bad ? 'bad' : ''}">${fmt(v)}</td><td>${fmt(v / m.Vbase * 100, 2)}</td><td>${fmt(P[k])}</td><td>${fmt(Q[k])}</td><td>${I === null ? '—' : fmt(I)}</td><td>${svr ? svr + '→' : ''}</td></tr>`;
+      return `<tr><td>${k}</td><td>${fmt(pf.x[k], 2)}</td><td class="${bad ? 'bad' : ''}">${fmt(v)}</td><td>${fmt(v / m.Vbase * 100, 2)}</td><td>${fmt(Pn[k])}</td><td>${fmt(Q[k])}</td><td>${I === null ? '—' : fmt(I)}</td><td>${svr ? svr + '→' : ''}</td></tr>`;
     }).join('');
     $('#nodeTable').innerHTML = `<table><thead><tr><th>節点</th><th>距離 km</th><th>電圧 V</th><th>%</th><th>正味P kW</th><th>正味Q kvar</th><th>上流区間 A</th><th>SVR</th></tr></thead><tbody>${rows}</tbody></table><div class="note">正味P・Q は消費が正（太陽光・放電は負）。</div>`;
   }
@@ -1105,7 +1611,7 @@ const FeederCalc = (() => {
     box.appendChild(slider(`太陽光 出力（全台共通の％、定格合計 ${fmt(pvTotal)} kW）`, 0, 100, 1, m.pvScale, v => `${v}%（${fmt(pvTotal * v / 100)} kW）`, v => { m.pvScale = v; recompute(); }));
     m.devices.filter(d => d.type === 'bess').forEach(d => {
       box.appendChild(slider(`蓄電池 #${d.id}（節点${d.node}）有効電力 P：放電＋／充電−`, -d.rated, d.rated, 10, d.p, v => `${v > 0 ? '放電 ' : v < 0 ? '充電 ' : ''}${fmt(Math.abs(v))} kW`, v => { d.p = v; recompute(); syncDevInputs(); }));
-      box.appendChild(slider(`蓄電池 #${d.id}（節点${d.node}）無効電力 Q：注入（進み）＋／吸収−`, -d.rated, d.rated, 10, d.q, v => `${fmt(v)} kvar`, v => { d.q = v; recompute(); syncDevInputs(); }));
+      box.appendChild(slider(`蓄電池 #${d.id}（節点${d.node}）無効電力 Q：供給＋／吸収−${P.isActive(d) ? '（PCS 制御中は使いません）' : ''}`, -d.rated, d.rated, 10, d.q, v => `${fmt(v)} kvar`, v => { d.q = v; recompute(); syncDevInputs(); }));
     });
     if (!m.devices.some(d => d.type === 'bess')) box.insertAdjacentHTML('beforeend', '<div class="note">蓄電池がありません（「負荷・DER」から追加できます）。</div>');
   }
@@ -1144,10 +1650,19 @@ const FeederCalc = (() => {
       dcs.forEach(d => d.tripped = trip);
       label = trip ? `データセンター 離脱（${fmt(dcs.reduce((a, d) => a + d.p, 0))} kW）` : 'データセンター 復帰';
     }
-    const imm = F.powerFlow(m, tb);
-    const set = F.settle(m, tb);
+    let imm, pcsPf = null, set;
+    if (P.activeDevs(m).length) {
+      // PCS 制御あり：①PCS の出力も直前のまま（制御が働く前）→ ②タップ固定で PCS が収束（働いたあと）→ ③タップ整定後
+      const held = P.heldOut(m, before.pf.pcs);
+      imm = F.powerFlow(m, tb, { pcsOut: held });
+      pcsPf = P.solve(m, tb, { init: held });
+      set = P.settle(m, tb, { init: pcsPf.pcs.out });
+    } else {
+      imm = F.powerFlow(m, tb);
+      set = F.settle(m, tb);
+    }
     writeBack(set.taps);
-    state.event = { label, before: before.pf, imm, set: set.pf, setRes: set, nSec: m.sections.length };
+    state.event = { label, before: before.pf, imm, pcs: pcsPf, set: set.pf, setRes: set, nSec: m.sections.length };
     state.base = snapshot(before);
     renderSliders(); renderDevices(); recompute(); renderEvent();
   }
@@ -1159,7 +1674,12 @@ const FeederCalc = (() => {
     const ev = state.event, m = M();
     if (!ev || ev.nSec !== m.sections.length) return;
     const conv = convFn(), xs = ev.before.x;
-    const series = [
+    const series = ev.pcs ? [
+      { name: '変化前', color: 'var(--ghost)', width: 2, pts: profilePts(ev.before, conv) },
+      { name: 'PCS の制御が働く前（タップ・PCS 出力とも直前のまま）', color: 'var(--s2)', dash: '6 4', width: 2, pts: profilePts(ev.imm, conv) },
+      { name: 'PCS の制御が働いたあと（タップ固定）', color: 'var(--s3)', dash: '2 3', width: 2.5, pts: profilePts(ev.pcs, conv) },
+      { name: 'タップ整定後', color: 'var(--s1)', width: 2.5, pts: profilePts(ev.set, conv) }
+    ] : [
       { name: '変化前', color: 'var(--ghost)', width: 2, pts: profilePts(ev.before, conv) },
       { name: '変化直後（タップが動く前）', color: 'var(--s2)', dash: '6 4', width: 2, pts: profilePts(ev.imm, conv) },
       { name: '整定後（タップが動いたあと）', color: 'var(--s1)', width: 2.5, pts: profilePts(ev.set, conv) }
@@ -1170,21 +1690,23 @@ const FeederCalc = (() => {
     const kI = amax(dI), kS = amax(dS);
     const tapStr = pf => [`LRT ${sgn(pf.taps.lrt)}`].concat(m.svrs.map((s, i) => `${s.name} ${sgn(pf.taps.svr[i])}`)).join(' / ');
     const bad = v => v < m.limits.lo || v > m.limits.hi;
-    const rows = ev.before.Vll.map((v, k) => `<tr class="${k === kI || k === kS ? 'max' : ''}"><td>${k}${k === kI ? ' ◆直後最大' : ''}${k === kS ? ' ●整定後最大' : ''}</td><td class="${bad(v) ? 'bad' : ''}">${fmt(v)}</td><td class="${bad(ev.imm.Vll[k]) ? 'bad' : ''}">${fmt(ev.imm.Vll[k])}</td><td class="${bad(ev.set.Vll[k]) ? 'bad' : ''}">${fmt(ev.set.Vll[k])}</td><td>${sgnV(dI[k])}</td><td>${sgnV(dS[k])}</td></tr>`).join('');
-    const st = ev.setRes.status === 'hunting' ? `<span class="fail">ハンチングの可能性（${ev.setRes.cycle.join('・')}）</span>` : `${ev.setRes.moves.length}手で整定`;
+    const rows = ev.before.Vll.map((v, k) => `<tr class="${k === kI || k === kS ? 'max' : ''}"><td>${k}${k === kI ? ' ◆直後最大' : ''}${k === kS ? ' ●整定後最大' : ''}</td><td class="${bad(v) ? 'bad' : ''}">${fmt(v)}</td><td class="${bad(ev.imm.Vll[k]) ? 'bad' : ''}">${fmt(ev.imm.Vll[k])}</td>${ev.pcs ? `<td class="${bad(ev.pcs.Vll[k]) ? 'bad' : ''}">${fmt(ev.pcs.Vll[k])}</td>` : ''}<td class="${bad(ev.set.Vll[k]) ? 'bad' : ''}">${fmt(ev.set.Vll[k])}</td><td>${sgnV(dI[k])}</td><td>${sgnV(dS[k])}</td></tr>`).join('');
+    const st = ev.setRes.status === 'hunting' ? `<span class="fail">ハンチングの可能性（${ev.setRes.cycle.join('・')}）</span>` : ev.setRes.status === 'pcsHunting' ? '<span class="fail">PCS の制御が収束しない</span>' : `${ev.setRes.moves.length}手で整定`;
+    const dP = ev.pcs ? ev.pcs.Vll.map((v, k) => v - ev.before.Vll[k]) : null, kP = dP ? amax(dP) : 0;
+    const pcsLine = ev.pcs ? `<br>PCS の制御が働いたあと（タップ固定）：<b>節点${kP}</b> ${sgnV(dP[kP])} V（PCS の反復 ${ev.pcs.pcs.iter} 回${ev.pcs.pcs.converged ? 'で収束' : '・<span class="fail">収束せず</span>'}）` : '';
     $('#evBody').innerHTML = `
       <div class="alert warn" style="background:var(--surface-2);border-color:var(--border)"><b>${esc(ev.label)}</b><br>
       タップ：変化前 ${tapStr(ev.before)} → 整定後 ${tapStr(ev.set)}（${st}）<br>
-      最大の変化：直後 <b>節点${kI}</b> ${sgnV(dI[kI])} V ／ 整定後 <b>節点${kS}</b> ${sgnV(dS[kS])} V</div>
+      最大の変化：${ev.pcs ? 'PCS の制御が働く前' : '直後'} <b>節点${kI}</b> ${sgnV(dI[kI])} V ／ 整定後 <b>節点${kS}</b> ${sgnV(dS[kS])} V${pcsLine}</div>
       <div class="legend">${legendHTML(series.slice().reverse())}</div>
       <div class="chart" id="evChart"></div>
-      <div class="tbl" style="max-height:340px;overflow:auto"><table><thead><tr><th>節点</th><th>変化前 V</th><th>直後 V</th><th>整定後 V</th><th>ΔV 直後</th><th>ΔV 整定後</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+      <div class="tbl" style="max-height:340px;overflow:auto"><table><thead><tr><th>節点</th><th>変化前 V</th><th>${ev.pcs ? 'PCS制御前 V' : '直後 V'}</th>${ev.pcs ? '<th>PCS制御後 V</th>' : ''}<th>整定後 V</th><th>ΔV 直後</th><th>ΔV 整定後</th></tr></thead><tbody>${rows}</tbody></table></div>`;
     lineChart($('#evChart'), {
       aria: '変化の3段表示', xDomain: [0, xs[N]], xLabel: '変電所からの距離 (km)', yLabel: state.unit === 'pct' ? '電圧 (%)' : '線間電圧 (V)',
       xFmt: v => fmt(v, v % 1 ? 1 : 0), yFmt: yFmtFn(), band: [conv(m.limits.lo), conv(m.limits.hi)], series,
       vlines: vlinesFor(ev.set), snap: xs,
       dots: ev.set.Vll.map((v, k) => ({ x: xs[k], y: conv(v), bad: bad(v), color: 'var(--s1)' })),
-      tip: k => `<b>節点 ${k}</b>（${fmt(xs[k], 2)} km）<br>変化前 ${fmt(ev.before.Vll[k])} V<br>直後 ${fmt(ev.imm.Vll[k])} V（${sgnV(dI[k])}）<br>整定後 ${fmt(ev.set.Vll[k])} V（${sgnV(dS[k])}）`
+      tip: k => `<b>節点 ${k}</b>（${fmt(xs[k], 2)} km）<br>変化前 ${fmt(ev.before.Vll[k])} V<br>${ev.pcs ? 'PCS 制御の前' : '直後'} ${fmt(ev.imm.Vll[k])} V（${sgnV(dI[k])}）` + (ev.pcs ? `<br>PCS 制御の後 ${fmt(ev.pcs.Vll[k])} V（${sgnV(dP[k])}）` : '') + `<br>整定後 ${fmt(ev.set.Vll[k])} V（${sgnV(dS[k])}）`
     });
   }
 
@@ -1529,11 +2051,35 @@ const FeederCalc = (() => {
       const del = document.createElement('button'); del.type = 'button'; del.className = 'sm danger'; del.textContent = '削除';
       del.onclick = () => { m.devices.splice(m.devices.indexOf(d), 1); renderDevices(); renderSliders(); recompute(); };
       row.appendChild(del);
+      if (d.pcs) row.appendChild(pcsEditor(d));
       box.appendChild(row);
     });
-    if (m.pvScale !== undefined) box.insertAdjacentHTML('beforeend', `<div class="note" style="margin-top:6px">太陽光の実出力 = 定格 × 共通の出力％（現在 ${m.pvScale}%）。力率が 1 未満のときは無効電力を吸収します。</div>`);
+    if (m.pvScale !== undefined) box.insertAdjacentHTML('beforeend', `<div class="note" style="margin-top:6px">太陽光の実出力 = 定格 × 共通の出力％（現在 ${m.pvScale}%）。力率が 1 未満のときは無効電力を吸収します。PCS のモードが B〜E のときは、力率（太陽光）・Q（蓄電池）の入力の代わりに PCS の制御で P・Q が決まります。</div>`);
     $('#newDevNode').innerHTML = nodeOptions(Math.round(m.sections.length / 2));
     updateDcBtn();
+    renderPcsTop();
+  }
+  function modeSelect(d, onChange) {
+    const s = document.createElement('select'); s.setAttribute('aria-label', 'PCS の制御モード');
+    s.innerHTML = Object.entries(P.MODES).map(([k, v]) => `<option value="${k}" ${d.pcs.mode === k ? 'selected' : ''}>${esc(v)}</option>`).join('');
+    s.onchange = () => { d.pcs.mode = s.value; onChange(); };
+    return s;
+  }
+  function pcsEditor(d) {
+    const c = d.pcs, det = document.createElement('details'); det.className = 'pcs';
+    det.innerHTML = `<summary>PCS 設定（${esc(P.MODES[c.mode])}、S ${fmt(c.S)} kVA）<span class="dummy">実機の整定は要確認</span></summary>`;
+    const f = document.createElement('div'); f.className = 'fields'; f.style.margin = '6px 0';
+    const ml = document.createElement('label'); ml.textContent = '制御モード';
+    ml.appendChild(modeSelect(d, () => { renderDevices(); renderSliders(); recompute(); }));
+    const pl = document.createElement('label'); pl.textContent = '容量の優先';
+    const ps = document.createElement('select'); ps.innerHTML = `<option value="P" ${c.priority === 'P' ? 'selected' : ''}>有効電力優先</option><option value="Q" ${c.priority === 'Q' ? 'selected' : ''}>無効電力優先</option>`;
+    ps.onchange = () => { c.priority = ps.value; recompute(); }; pl.appendChild(ps);
+    f.append(ml, numField('定格容量 S (kVA)', c, 'S', { step: 10, min: 0 }), pl, numField('B：力率（吸収）', c, 'pfB', { step: 0.01, min: 0.01, max: 1 }), chkField('P=0 でも Q を出す', c, 'qAtZeroP'));
+    c.vv.forEach((p, i) => f.append(numField(`Volt-VAR V${i + 1} (pu)`, p, 0, { step: 0.005 }), numField(`Q${i + 1} (S基準 pu, ＋供給)`, p, 1, { step: 0.01 })));
+    f.append(numField('Volt-Watt Vw1 (pu)', c.vw, 'v1', { step: 0.005 }), numField('Volt-Watt Vw2 (pu)', c.vw, 'v2', { step: 0.005 }), numField('Vw2 での下限 (%)', c.vw, 'pMin', { step: 5, min: 0 }));
+    det.appendChild(f);
+    det.insertAdjacentHTML('beforeend', '<div class="note">有効電力 P は、太陽光は出力スライダー（定格×％）、蓄電池は充放電 kW を使います。Volt-VAR の初期値は V1=0.96pu で +0.44（供給）、0.99〜1.01pu が不感帯、1.04pu で −0.44（吸収）。Volt-Watt は Vw1 まで 100%、Vw2 で下限。</div>');
+    return det;
   }
   function syncDevInputs() {
     M().devices.forEach(d => ['p', 'q'].forEach(k => { const el = document.querySelector(`input[data-dev="${d.id}:${k}"]`); if (el && document.activeElement !== el) el.value = d[k]; }));
@@ -1542,6 +2088,7 @@ const FeederCalc = (() => {
     const m = M(), t = $('#newDevType').value, node = +$('#newDevNode').value, id = m.nextId++;
     const d = { load: { p: 150, q: 50 }, pv: { p: 300, pf: 1.0 }, bess: { p: 0, q: 0, rated: 500 }, dc: { p: 2000, q: 400, tripped: false } }[t];
     m.devices.push(Object.assign({ id, type: t, node }, d));
+    P.ensurePcs(m);
     renderDevices(); renderSliders(); recompute();
   };
 
@@ -1569,23 +2116,336 @@ const FeederCalc = (() => {
   }
   $('#addSec').onclick = () => { const m = M(), last = m.sections[m.sections.length - 1] || { len: 0.7, r: 0.12, x: 0.3, amp: 300 }; m.sections.push({ ...last }); structureChanged(); };
   $('#delSec').onclick = () => { const m = M(); if (m.sections.length <= 1) return; m.sections.pop(); structureChanged(); };
-  $('#resetAll').onclick = () => { state.model = F.defaultModel(); state.freeze = false; state.demoSaved = null; $('#ldcDemoBox').innerHTML = ''; $('#ldcDemoBack').hidden = true; $('#freeze').checked = false; structureChanged(); };
+  $('#resetAll').onclick = () => { state.model = P.ensurePcs(F.defaultModel()); state.freeze = false; state.pcsCmp = null; $('#pcsCmp').innerHTML = ''; state.demoSaved = null; $('#ldcDemoBox').innerHTML = ''; $('#ldcDemoBack').hidden = true; $('#freeze').checked = false; structureChanged(); };
 
   /* ---------- テスト ---------- */
   function showTests() {
-    const res = F.runTests();
+    const res = F.runTests().concat(P.runTests());
     const np = res.filter(r => r.pass).length;
     $('#testOut').innerHTML = `<p><b>${np} / ${res.length} 件 合格</b></p><ul class="tests">` + res.map(r => `<li><span class="${r.pass ? 'pass' : 'fail'}">${r.pass ? '✔ 合格' : '✘ 不合格'}</span> ${esc(r.name)}<div class="d">${esc(r.detail)}</div></li>`).join('') + '</ul>';
     return res;
   }
   $('#runTests').onclick = showTests;
 
+  /* ---------- 6. PCS の無効電力制御 ---------- */
+  const pcsDevs = () => M().devices.filter(d => d.pcs && (d.type === 'pv' || d.type === 'bess'));
+  const devName = d => `${typeLabel[d.type]} #${d.id}（節点${d.node}）`;
+  const qWord = (q, d = 0) => Math.abs(q) < 0.05 ? '0 kvar' : `${q > 0 ? '供給' : '吸収'} ${fmt(Math.abs(q), d)} kvar`;
+  function selDev() {
+    const list = pcsDevs();
+    let d = list.find(x => x.id === state.pcsSel);
+    if (!d) d = list.find(x => P.isActive(x)) || list.slice().sort((a, b) => b.node - a.node)[0];
+    if (d) state.pcsSel = d.id;
+    return d;
+  }
+  function renderPcsTop() {
+    const box = $('#pcsTop'), m = M(); if (!box) return;
+    box.innerHTML = '';
+    const list = pcsDevs(), d = selDev();
+    if (!d) { box.innerHTML = '太陽光・蓄電池がありません（「負荷・DER」から追加できます）。'; return; }
+    const l1 = document.createElement('label'); l1.textContent = '機器 ';
+    const s = document.createElement('select'); s.setAttribute('aria-label', 'PCS を見る機器');
+    s.innerHTML = list.map(x => `<option value="${x.id}" ${x.id === d.id ? 'selected' : ''}>${esc(devName(x))}${P.isActive(x) ? ' ・' + x.pcs.mode : ''}</option>`).join('');
+    s.onchange = () => { state.pcsSel = +s.value; renderPcsTop(); renderPcs(); };
+    l1.appendChild(s);
+    const l2 = document.createElement('label'); l2.textContent = 'モード ';
+    l2.appendChild(modeSelect(d, () => { renderDevices(); renderSliders(); recompute(); }));
+    const all = document.createElement('label'); all.textContent = '全太陽光をまとめて ';
+    const as = document.createElement('select'); as.setAttribute('aria-label', '全太陽光のモード');
+    as.innerHTML = '<option value="">（変えない）</option>' + Object.entries(P.MODES).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('');
+    as.onchange = () => { if (!as.value) return; m.devices.forEach(x => { if (x.type === 'pv' && x.pcs) x.pcs.mode = as.value; }); renderDevices(); renderSliders(); recompute(); };
+    all.appendChild(as);
+    const f = document.createElement('span'); f.className = 'fields'; f.style.cssText = 'display:inline-grid;grid-template-columns:repeat(2,minmax(110px,1fr));min-width:240px';
+    f.append(numField('減衰係数 α（0〜1）', m.pcsOpt, 'alpha', { step: 0.05, min: 0.01, max: 1 }), numField('反復の上限（回）', m.pcsOpt, 'maxIter', { step: 10, min: 1 }));
+    box.append(l1, l2, all, f);
+  }
+
+  /** 汎用の XY 図（SVG）：特性カーブ・PQ 図用 */
+  function xyChart(host, o) {
+    const W = Math.max(260, Math.round(host.clientWidth || 400)), H = o.height || (W < 420 ? 240 : 260);
+    const ml = 50, mr = 12, mt = 16, mb = 34;
+    let pw = W - ml - mr, ph = H - mt - mb;
+    let [x0, x1] = o.xDomain, [y0, y1] = o.yDomain;
+    if (o.equal) {   // 縦横を同じ縮尺に（半円が楕円にならないように）
+      const s = Math.min(pw / (x1 - x0), ph / (y1 - y0));
+      const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, hx = pw / s / 2, hy = ph / s / 2;
+      x0 = cx - hx; x1 = cx + hx; y0 = cy - hy; y1 = cy + hy;
+    }
+    const X = v => ml + (v - x0) / (x1 - x0) * pw, Y = v => mt + (1 - (v - y0) / (y1 - y0)) * ph;
+    const cl = (v, a, b) => Math.max(a, Math.min(b, v));
+    const g = [];
+    (o.ybands || []).forEach(b => { const ya = Y(cl(b.y1, y0, y1)), yb = Y(cl(b.y0, y0, y1)); g.push(`<rect x="${ml}" y="${ya}" width="${pw}" height="${Math.max(0, yb - ya)}" fill="${b.fill}"/>`); if (b.label) g.push(`<text x="${ml + 4}" y="${b.top ? ya + 12 : yb - 4}" style="fill:${b.color || 'var(--text-2)'};font-weight:600">${esc(b.label)}</text>`); });
+    (o.xbands || []).forEach(b => { const xa = X(cl(b.x0, x0, x1)), xb = X(cl(b.x1, x0, x1)); g.push(`<rect x="${xa}" y="${mt}" width="${Math.max(0, xb - xa)}" height="${ph}" fill="${b.fill}"/>`); if (b.label) g.push(`<text x="${(xa + xb) / 2}" y="${mt + ph - 6}" text-anchor="middle" style="fill:var(--text-2)">${esc(b.label)}</text>`); });
+    niceTicks(y0, y1, ph < 180 ? 4 : 6).forEach(t => { if (t < y0 || t > y1) return; g.push(`<line x1="${ml}" x2="${ml + pw}" y1="${Y(t)}" y2="${Y(t)}" stroke="var(--grid)"/><text x="${ml - 6}" y="${Y(t) + 4}" text-anchor="end">${o.yFmt(t)}</text>`); });
+    niceTicks(x0, x1, pw < 300 ? 4 : 6).forEach(t => { if (t < x0 || t > x1) return; g.push(`<line x1="${X(t)}" x2="${X(t)}" y1="${mt + ph}" y2="${mt + ph + 4}" stroke="var(--muted)"/><text x="${X(t)}" y="${mt + ph + 16}" text-anchor="middle">${o.xFmt(t)}</text>`); });
+    g.push(`<line x1="${ml}" x2="${ml + pw}" y1="${mt + ph}" y2="${mt + ph}" stroke="var(--muted)"/>`);
+    if (y0 < 0 && y1 > 0) g.push(`<line x1="${ml}" x2="${ml + pw}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--muted)"/>`);
+    if (o.yAxisAtZero && x0 < 0 && x1 > 0) g.push(`<line x1="${X(0)}" x2="${X(0)}" y1="${mt}" y2="${mt + ph}" stroke="var(--muted)"/>`);
+    (o.vlines || []).forEach(v => { if (v.x < x0 || v.x > x1) return; g.push(`<line x1="${X(v.x)}" x2="${X(v.x)}" y1="${v.ya !== undefined ? Y(v.ya) : mt}" y2="${v.yb !== undefined ? Y(v.yb) : mt + ph}" stroke="${v.color || 'var(--text-2)'}" stroke-width="${v.width || 1}" stroke-dasharray="${v.dash || ''}"/>`); if (v.label) g.push(`<text x="${X(v.x) + 4}" y="${mt + 10}" style="fill:${v.color || 'var(--text-2)'}">${esc(v.label)}</text>`); });
+    (o.hlines || []).forEach(h => { if (h.y < y0 || h.y > y1) return; g.push(`<line x1="${ml}" x2="${ml + pw}" y1="${Y(h.y)}" y2="${Y(h.y)}" stroke="${h.color}" stroke-dasharray="${h.dash || ''}"/>`); if (h.label) g.push(`<text x="${ml + pw - 2}" y="${Y(h.y) - 3}" text-anchor="end" style="fill:${h.color}">${esc(h.label)}</text>`); });
+    (o.lines || []).forEach(s => { const pts = s.pts.filter(p => isFinite(p[0]) && isFinite(p[1])); if (!pts.length) return; g.push(`<path d="${pts.map((p, i) => (i ? 'L' : 'M') + X(p[0]).toFixed(1) + ' ' + Y(p[1]).toFixed(1)).join('')}" fill="${s.fill || 'none'}" stroke="${s.color}" stroke-width="${s.width || 2}" stroke-dasharray="${s.dash || ''}" opacity="${s.opacity ?? 1}" stroke-linejoin="round"/>`); });
+    (o.marks || []).forEach(p => {
+      g.push(p.hollow ? `<circle cx="${X(p.x)}" cy="${Y(p.y)}" r="${p.r || 6}" fill="none" stroke="${p.color}" stroke-width="2" stroke-dasharray="3 2"/>` : `<circle cx="${X(p.x)}" cy="${Y(p.y)}" r="${p.r || 7}" fill="${p.color}" stroke="var(--surface)" stroke-width="2"/>`);
+      if (p.label) { const right = X(p.x) < ml + pw * 0.6; g.push(`<text x="${X(p.x) + (right ? 11 : -11)}" y="${Y(p.y) + (p.dy || -9)}" text-anchor="${right ? 'start' : 'end'}" style="fill:var(--text);font-weight:700">${esc(p.label)}</text>`); }
+    });
+    g.push(`<text x="${ml + pw}" y="${H - 4}" text-anchor="end">${esc(o.xLabel)}</text><text x="4" y="11">${esc(o.yLabel)}</text>`);
+    host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(o.aria || '')}">${g.join('')}</svg>`;
+  }
+  /** 符号つきの積み上げ棒（区間ごとの P の寄与と Q の寄与） */
+  function stackBars(host, o) {
+    const W = Math.max(260, Math.round(host.clientWidth || 400)), H = W < 420 ? 220 : 240;
+    const ml = 50, mr = 10, mt = 14, mb = 30, pw = W - ml - mr, ph = H - mt - mb;
+    let lo = 0, hi = 0;
+    o.items.forEach(it => { let p = 0, n = 0; it.parts.forEach(v => v >= 0 ? p += v : n += v); hi = Math.max(hi, p); lo = Math.min(lo, n); });
+    const pad = (hi - lo) * 0.1 || 1; hi += pad; lo -= lo < 0 ? pad : 0;
+    const Y = v => mt + (1 - (v - lo) / (hi - lo)) * ph, n = o.items.length, bw = pw / n, barW = Math.max(6, Math.min(34, bw * 0.6));
+    const g = [];
+    niceTicks(lo, hi, 5).forEach(t => { if (t < lo || t > hi) return; g.push(`<line x1="${ml}" x2="${ml + pw}" y1="${Y(t)}" y2="${Y(t)}" stroke="var(--grid)"/><text x="${ml - 6}" y="${Y(t) + 4}" text-anchor="end">${o.yFmt(t)}</text>`); });
+    o.items.forEach((it, i) => {
+      const cx = ml + bw * (i + 0.5); let up = 0, dn = 0;
+      it.parts.forEach((v, j) => {
+        const a = v >= 0 ? up : dn, b = a + v; if (v >= 0) up = b; else dn = b;
+        const ya = Y(Math.max(a, b)), yb = Y(Math.min(a, b));
+        g.push(`<rect x="${cx - barW / 2}" y="${ya}" width="${barW}" height="${Math.max(0, yb - ya)}" fill="${o.colors[j]}" stroke="var(--surface)" stroke-width="1"><title>${esc(it.title[j])}</title></rect>`);
+      });
+      if (n <= 16 || i % 2 === 0) g.push(`<text x="${cx}" y="${mt + ph + 14}" text-anchor="middle">${esc(it.x)}</text>`);
+    });
+    g.push(`<line x1="${ml}" x2="${ml + pw}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--muted)"/>`);
+    g.push(`<text x="${ml + pw}" y="${H - 2}" text-anchor="end">${esc(o.xLabel)}</text><text x="4" y="10">${esc(o.yLabel)}</text>`);
+    host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(o.aria)}">${g.join('')}</svg>`;
+  }
+  const box = (k, v, s, cls = '') => `<div class="tile ${cls}"><div class="k">${k}</div><div class="v" style="font-size:16px">${v}</div><div class="s">${s}</div></div>`;
+  const legendBox = items => `<div class="legend">${items.map(([c, t]) => `<span><svg viewBox="0 0 12 12" style="width:12px;height:12px" aria-hidden="true"><rect width="12" height="12" rx="3" fill="${c}"/></svg>${esc(t)}</span>`).join('')}</div>`;
+
+  /** 「何が起きているか」の一言 */
+  function pcsSay(d, t) {
+    const c = d.pcs, v = `電圧 ${t.vpu.toFixed(3)}pu`, S = c.S || 1, parts = [];
+    if (c.mode === 'A') return `${v} → 制御なし（力率 ${d.type === 'pv' ? d.pf : '—'} の入力のまま）`;
+    if (c.mode === 'B') parts.push(`力率 ${c.pfB} 一定で ${qWord(t.q)}`);
+    if (P.usesVV(c)) {
+      const pts = P.vvPts(c);
+      if (Math.abs(t.qWant) < 0.05) parts.push(t.zeroP && !c.qAtZeroP ? 'P=0 のため無効電力は出さない設定' : `不感帯（${pts[1][0]}〜${pts[2][0]}pu）の中なので、無効電力は 0`);
+      else parts.push(`Volt-VAR で ${(Math.abs(t.q) / S).toFixed(2)}pu（${fmt(Math.abs(t.q))} kvar）${t.q > 0 ? '供給' : '吸収'}中`);
+    }
+    if (t.clipQ) parts.push(`容量の上限 √(S²−P²) = ${fmt(t.qMax)} kvar で、要求の ${fmt(Math.abs(t.qWant))} kvar から削られている`);
+    if (P.usesVW(c)) parts.push(t.pAvail > 0 && t.pAvail - t.p > 0.5 ? `Volt-Watt で有効電力を ${fmt(t.pAvail - t.p)} kW 抑制（${fmt(t.p / t.pAvail * 100, 0)}%）` : `Volt-Watt は電圧が ${c.vw.v1}pu 以下なので抑制なし`);
+    if (t.clipP) parts.push(`無効電力優先のため、有効電力が ${fmt(t.p)} kW に削られている`);
+    return `${v} → ` + parts.join('、');
+  }
+
+  function renderPcs() {
+    const body = $('#pcsBody'); if (!body) return;
+    const m = M(), d = selDev(), pf = state.pcsView || state.cur.pf;
+    const al = [];
+    if (!d) { body.innerHTML = ''; $('#pcsAlerts').innerHTML = ''; return; }
+    const act = P.activeDevs(m), gn = act.length ? P.gains(m, pf) : null;
+    if (pf.pcs && !pf.pcs.converged) al.push(`<div class="alert warn"><b>ハンチングの警告：</b>PCS の出力が ${pf.pcs.iter} 回の反復で収束しません（電圧と無効電力が行き来しています）。下の「反復の履歴」を見てください。</div>`);
+    if (gn && gn.rho > 1) al.push(`<div class="alert warn"><b>ループゲイン ρ = ${fmt(gn.rho, 2)} &gt; 1：</b>減衰をかけない反復（遅れのない制御）では振動します。計算は減衰 α=${gn.alpha} で混ぜているので、ρ &lt; ${fmt(gn.limit, 1)} なら収束します。定常状態の簡易モデル。実機の安定性は、応答の遅れや時定数にも左右されます。</div>`);
+    else if (gn && gn.rhoMax > 1) al.push(`<div class="alert warn" style="background:var(--surface-2);border-color:var(--border)">いまの動作点のゲイン ρ = ${fmt(gn.rho, 2)} は 1 未満ですが、特性の最も急な部分では ρ = <b>${fmt(gn.rhoMax, 2)}</b> &gt; 1 です。電圧が傾きのある範囲に入ると振動しうる設定です。</div>`);
+    $('#pcsAlerts').innerHTML = al.join('');
+
+    const c = d.pcs, info = pf.pcs && pf.pcs.info && pf.pcs.info[d.id];
+    const v = pf.Vll[d.node] / m.Vbase;
+    // 制御なし（モード A）の機器は、表示のために「仮にこの特性なら」の値を出さず、実際の出力だけを示す
+    const t = info || (() => { const l = F.deviceLoad(d, m); const pa = P.availP(d, m); return { vpu: v, pAvail: pa, pWant: -l.p, qWant: -l.q, p: -l.p, q: -l.q, qMax: Math.sqrt(Math.max(0, c.S ** 2 - l.p ** 2)), clipQ: false, clipP: false, vwFrac: 1, S: c.S, zeroP: Math.abs(pa) < 1e-9 }; })();
+    const sAct = Math.hypot(t.p, t.q), pfv = sAct > 1e-9 ? Math.abs(t.p) / sAct : 1, amp = sAct * 1000 / (F.SQ3 * pf.Vll[d.node]);
+    const gr = gn && gn.rows.find(r => r.id === d.id);
+    const say = pcsSay(d, t);
+
+    body.innerHTML = `
+      <div class="say"><b>${esc(devName(d))}：</b>${esc(say)}</div>
+      <div class="tiles" style="margin:6px 0">
+        ${box('有効電力 P', fmt(t.p) + ' kW', t.pAvail > 0 && t.pAvail - t.p > 0.5 ? `出せる ${fmt(t.pAvail)} kW から抑制` : d.type === 'bess' ? (t.p > 0 ? '放電' : t.p < 0 ? '充電' : '充放電なし') : '発電')}
+        ${box('無効電力 Q', qWord(t.q), t.q > 0.05 ? '電圧を上げる方向' : t.q < -0.05 ? '電圧を下げる方向' : '', t.clipQ ? 'warn' : '')}
+        ${box('皮相電力 S', fmt(sAct) + ' kVA', `定格 ${fmt(c.S)} kVA`)}
+        ${box('力率', fmt(pfv, 3), '')}
+        ${box('PCS の電流', fmt(amp, 1) + ' A', `接続点 ${fmt(pf.Vll[d.node])} V`)}
+        ${box('容量使用率', fmt(c.S ? sAct / c.S * 100 : 0, 1) + ' %', t.clipQ || t.clipP ? '<b>容量の上限</b>' : '', t.clipQ || t.clipP ? 'warn' : '')}
+        ${box('モード', esc(c.mode), esc(P.MODES[c.mode].replace(/^.：/, '')))}
+        ${box('ループゲイン g', gr ? fmt(gr.g, 2) : '—', gr ? `最も急な部分 ${fmt(gr.gMax, 2)}` : '制御なし', gr && gr.g > 1 ? 'warn' : '')}
+      </div>
+      <div class="pgrid">
+        <div><h3>特性カーブ（V–Q）${P.usesVV(c) ? '' : '<span class="note">　※このモードでは Volt-VAR を使いません（設定の確認用）</span>'}</h3><div class="chart" id="pcsVQ"></div></div>
+        <div><h3>PQ 図（容量 P² + Q² ≦ S²）</h3><div class="chart" id="pcsPQ"></div></div>
+        ${P.usesVW(c) ? '<div><h3>Volt-Watt（V–P）</h3><div class="chart" id="pcsVP"></div></div>' : ''}
+        <div><h3>反復の履歴（${pf.pcs && pf.pcs.active.includes(d.id) ? `${pf.pcs.iter} 回・${pf.pcs.converged ? '収束' : '<span class="fail">収束せず</span>'}・α=${pf.pcs.alpha}` : 'この機器は制御なし'}）</h3><div class="chart" id="pcsHistV"></div><div class="chart" id="pcsHistQ"></div></div>
+      </div>
+      <h3>ループゲイン（定常状態の簡易モデル。実機の安定性は、応答の遅れや時定数にも左右される）</h3>
+      <div id="pcsGain"></div>
+      <h3>効き方の分解：節点${d.node}の電圧変化 ≒ Σ −(R×P ＋ X×Q) ÷ V（上昇が正）</h3>
+      <div id="pcsBreak"></div>
+      <h3>無効電力の副作用（同じタップで、PCS の制御が働く前と比べる）</h3>
+      <div id="pcsSide"></div>`;
+
+    // V–Q
+    const pts = P.vvPts(c), S = c.S || 1;
+    const xa = Math.min(0.92, pts[0][0] - 0.02, v - 0.01), xb = Math.max(1.08, pts[3][0] + 0.02, v + 0.01);
+    const qm = Math.max(0.6, ...pts.map(p => Math.abs(p[1]) * 1.2), Math.abs(t.q / S) * 1.2, Math.abs(t.qWant / S) * 1.1);
+    const marks = [];
+    if (t.clipQ) marks.push({ x: v, y: t.qWant / S, color: 'var(--s2)', hollow: true, label: '要求', dy: 14 });
+    marks.push({ x: v, y: t.q / S, color: 'var(--s2)', r: 8, label: `動作点 ${(t.q / S).toFixed(2)}pu` });
+    xyChart($('#pcsVQ'), {
+      aria: 'Volt-VAR 特性カーブと動作点', xDomain: [xa, xb], yDomain: [-qm, qm], xLabel: '接続点の電圧 (pu)', yLabel: 'Q (S基準 pu)', xFmt: x => x.toFixed(2), yFmt: y => (y > 0 ? '+' : '') + y.toFixed(1),
+      ybands: [{ y0: 0, y1: qm, fill: 'var(--band)', label: '供給（電圧を上げる）', top: true, color: 'var(--s1)' }, { y0: -qm, y1: 0, fill: 'var(--warn-bg)', label: '吸収（電圧を下げる）', color: 'var(--warn)' }],
+      xbands: [{ x0: pts[1][0], x1: pts[2][0], fill: 'var(--surface-2)', label: '不感帯' }],
+      hlines: [{ y: t.qMax / S, color: 'var(--bad)', dash: '4 4', label: `容量の上限 ±${(t.qMax / S).toFixed(2)}` }, { y: -t.qMax / S, color: 'var(--bad)', dash: '4 4' }],
+      vlines: [{ x: v, color: 'var(--s2)', dash: '3 3' }],
+      lines: [{ pts: [[xa, pts[0][1]]].concat(pts, [[xb, pts[3][1]]]), color: 'var(--s1)', width: 2.5, opacity: P.usesVV(c) ? 1 : 0.45 }],
+      marks
+    });
+    // PQ
+    const isB = d.type === 'bess', N = 90, circ = [];
+    for (let i = 0; i <= N; i++) { const a = isB ? -Math.PI + 2 * Math.PI * i / N : -Math.PI / 2 + Math.PI * i / N; circ.push([S * Math.cos(isB ? a : a), S * Math.sin(a)]); }
+    const qLim = Math.sqrt(Math.max(0, S * S - t.p * t.p));
+    const pqMarks = [];
+    if (t.clipQ || t.clipP) pqMarks.push({ x: t.pWant, y: t.qWant, color: 'var(--s2)', hollow: true, label: '要求', dy: 14 });
+    pqMarks.push({ x: t.p, y: t.q, color: 'var(--s2)', r: 8, label: `(${fmt(t.p)}kW, ${t.q >= 0 ? '+' : '−'}${fmt(Math.abs(t.q))}kvar)` });
+    xyChart($('#pcsPQ'), {
+      aria: 'PQ 図', equal: true, xDomain: [isB ? -S * 1.15 : -S * 0.15, S * 1.15], yDomain: [-S * 1.15, S * 1.15], xLabel: 'P (kW)', yLabel: 'Q (kvar) ＋供給／−吸収', xFmt: x => fmt(x), yFmt: y => fmt(y), yAxisAtZero: true,
+      lines: [{ pts: circ.concat(isB ? [] : [[0, S], [0, -S]]), color: 'var(--s1)', width: 2, fill: 'var(--band)' }],
+      vlines: [{ x: t.p, ya: -qLim, yb: qLim, color: 'var(--bad)', width: 3, dash: '' }],
+      marks: pqMarks
+    });
+    // V–P
+    if (P.usesVW(c) && $('#pcsVP')) {
+      const w = P.vwPts(c);
+      xyChart($('#pcsVP'), {
+        aria: 'Volt-Watt 特性と動作点', xDomain: [xa, xb], yDomain: [0, 110], xLabel: '接続点の電圧 (pu)', yLabel: '出せる P (%)', xFmt: x => x.toFixed(2), yFmt: y => fmt(y) + '%',
+        xbands: [{ x0: w[0][0], x1: xb, fill: 'var(--warn-bg)', label: '有効電力を絞る' }],
+        lines: [{ pts: [[xa, 100], [w[0][0], 100], [w[1][0], w[1][1] * 100], [xb, w[1][1] * 100]], color: 'var(--s3)', width: 2.5 }],
+        vlines: [{ x: v, color: 'var(--s2)', dash: '3 3' }],
+        marks: [{ x: v, y: t.pAvail > 0 ? t.p / t.pAvail * 100 : 100, color: 'var(--s2)', r: 8, label: t.pAvail > 0 ? `${fmt(t.p / t.pAvail * 100, 0)}%` : 'P=0' }]
+      });
+    }
+    // 履歴
+    const hist = pf.pcs && pf.pcs.active.includes(d.id) ? pf.pcs.hist : [];
+    const xInt = x => Number.isInteger(x) ? fmt(x) : '';
+    if (hist.length === 1) {
+      $('#pcsHistV').innerHTML = `<div class="note">1 回目で収束しました（制御が働く前の出力が、そのまま答え：接続点 ${hist[0].v[d.id].toFixed(4)} pu、Q ${qWord(hist[0].q[d.id], 1)}）。電圧が不感帯から出るように太陽光や負荷を動かすと、反復の様子が見えます。</div>`; $('#pcsHistQ').innerHTML = '';
+    } else if (hist.length) {
+      const it = hist.map(h => h.iter);
+      lineChart($('#pcsHistV'), { aria: '反復ごとの接続点の電圧', height: 170, xDomain: [1, Math.max(2, it[it.length - 1])], xLabel: '反復の回数', yLabel: '接続点の電圧 (pu)', xFmt: xInt, yFmt: y => y.toFixed(3), snap: it,
+        series: [{ name: 'V', color: 'var(--s1)', width: 2, pts: hist.map(h => [h.iter, h.v[d.id]]) }], tip: k => `${hist[k].iter} 回目：${hist[k].v[d.id].toFixed(4)} pu<br>Q ${qWord(hist[k].q[d.id], 1)}<br>差 ${hist[k].diff.toExponential(1)}` });
+      lineChart($('#pcsHistQ'), { aria: '反復ごとの無効電力', height: 170, xDomain: [1, Math.max(2, it[it.length - 1])], xLabel: '反復の回数', yLabel: 'Q (kvar) ＋供給／−吸収', xFmt: xInt, yFmt: y => fmt(y), snap: it,
+        series: [{ name: 'Q', color: 'var(--s2)', width: 2, pts: hist.map(h => [h.iter, h.q[d.id]]) }], tip: k => `${hist[k].iter} 回目：Q ${qWord(hist[k].q[d.id], 1)}<br>P ${fmt(hist[k].p[d.id], 1)} kW` });
+    } else { $('#pcsHistV').innerHTML = '<div class="note">モードを B〜E にすると、反復ごとの電圧と Q の動きが表示されます。</div>'; $('#pcsHistQ').innerHTML = ''; }
+
+    // ゲイン表
+    if (gn) {
+      const rows = gn.rows.map(r => `<tr class="${r.id === d.id ? 'max' : ''}"><td>${esc(typeLabel[r.type])} #${r.id}</td><td>${r.node}</td><td>${r.mode}</td><td>${fmt(r.kq, 2)}</td><td>${fmt(r.kp, 2)}</td><td>${fmt(r.dVdQ, 3)}</td><td>${fmt(r.dVdP, 3)}</td><td class="${r.g > 1 ? 'bad' : ''}">${fmt(r.g, 2)}</td><td class="${r.gMax > 1 ? 'bad' : ''}">${fmt(r.gMax, 2)}</td></tr>`).join('');
+      $('#pcsGain').innerHTML = `<div class="tbl"><table><thead><tr><th>機器</th><th>節点</th><th>モード</th><th>dQ/dV kvar/V</th><th>dP/dV kW/V</th><th>dV/dQ V/kvar</th><th>dV/dP V/kW</th><th>g（動作点）</th><th>g（最も急な部分）</th></tr></thead><tbody>${rows}</tbody></table></div>
+        <div class="note">全体のゲイン（PCS 同士が互いの電圧を動かす分を含む）：動作点 <b>ρ = ${fmt(gn.rho, 2)}</b>、最も急な部分 <b>ρ = ${fmt(gn.rhoMax, 2)}</b>。
+        減衰なし（α=1）なら ρ &lt; 1 で収束、いまの減衰 α=${gn.alpha} なら ρ &lt; ${fmt(gn.limit, 1)} が目安 → ${gn.rho < gn.limit ? '<span class="pass">計算は収束する範囲</span>' : '<span class="fail">計算も振動しやすい</span>'}。
+        dQ/dV = |ΔQ[pu] ÷ ΔV[pu]| × S ÷ ${fmt(m.Vbase)}V。不感帯・端の外・容量で頭打ちのときは 0。</div>`;
+    } else $('#pcsGain').innerHTML = '<div class="note">制御している PCS（モード B〜E）がありません。</div>';
+
+    // 分解
+    if (d.node > 0) {
+      const b = P.breakdown(m, pf, d.node);
+      const myQ = pf.pcs && pf.pcs.out[d.id] ? pf.pcs.out[d.id].q : t.q;
+      stackBars($('#pcsBreakChart') || (() => { $('#pcsBreak').innerHTML = '<div class="chart" id="pcsBreakChart"></div>'; return $('#pcsBreakChart'); })(), {
+        aria: '区間ごとの電圧変化の分解', xLabel: '区間', yLabel: '電圧変化 (V)', yFmt: y => fmt(y), colors: ['var(--s2)', 'var(--s1)'],
+        items: b.rows.map(r => ({ x: String(r.k), parts: [r.dvP, r.dvQ], title: [`区間${r.k} P の寄与 ${sgnV(r.dvP)} V（P ${fmt(r.P)} kW × R ${fmt(r.R, 3)}Ω）`, `区間${r.k} Q の寄与 ${sgnV(r.dvQ)} V（Q ${fmt(r.Q)} kvar × X ${fmt(r.X, 3)}Ω）`] }))
+      });
+      $('#pcsBreak').insertAdjacentHTML('afterbegin', legendBox([['var(--s2)', 'P（有効電力）の寄与'], ['var(--s1)', 'Q（無効電力）の寄与']]));
+      $('#pcsBreak').insertAdjacentHTML('beforeend', `<div class="note">合計：P の寄与 <b>${sgnV(b.sumP)} V</b>、Q の寄与 <b>${sgnV(b.sumQ)} V</b>（区間を流れる P・Q は下流向きが正。逆潮流の区間は P の寄与が上昇になる）。${m.svrs.some(s => s.node < d.node) ? 'SVR のタップによる段差は含みません。' : ''}<br>
+        感度（節点${d.node}、R合計 ${fmt(b.R, 3)}Ω・X合計 ${fmt(b.X, 3)}Ω）：無効電力 <b>1kvar あたり ${fmt(b.dVdQ, 3)} V</b>、有効電力 1kW あたり ${fmt(b.dVdP, 3)} V（比 X/R = ${fmt(b.X / (b.R || 1e-9), 2)}）。
+        この PCS の Q（${qWord(myQ)}）による電圧変化 ≒ ${sgnV(b.dVdQ * myQ)} V。</div>`);
+    } else $('#pcsBreak').innerHTML = '<div class="note">節点0（母線）は線路を通らないので分解はありません。</div>';
+
+    // 副作用
+    if (act.length) {
+      const se = P.sideEffects(m, pf, pf.taps), a = se.before, b = se.after;
+      const r = (k, x, y, d0 = 0, unit = '') => `<tr><td>${k}</td><td>${fmt(x, d0)}${unit}</td><td>${fmt(y, d0)}${unit}</td><td>${sgnV(y - x, d0)}${unit}</td></tr>`;
+      $('#pcsSide').innerHTML = `<div class="tbl"><table><thead><tr><th>項目</th><th>制御が働く前</th><th>制御あり</th><th>差</th></tr></thead><tbody>
+        ${r(`線路電流の最大（区間${b.kMax}）`, a.iMax, b.iMax, 1, ' A')}
+        ${r(`区間1（変電所の出口）の電流`, a.I[0], b.I[0], 1, ' A')}
+        ${d.node > 0 ? r(`区間${d.node}（この PCS の手前）の電流`, a.I[d.node - 1], b.I[d.node - 1], 1, ' A') : ''}
+        ${r('線路損失', a.loss, b.loss, 2, ' kW')}
+        ${r('変電所（LRT 二次側）から送る P', a.lrtP, b.lrtP, 0, ' kW')}
+        ${r('変電所（LRT 二次側）から送る Q', a.lrtQ, b.lrtQ, 0, ' kvar')}
+        </tbody></table></div>
+        <div class="note">PCS の Q 合計：${qWord(se.qSum)}。PCS が吸収した無効電力は、上流（変電所）から供給されます（Q が正＝変電所から線路へ送る向き）。その分、線路の電流と損失が増えます。</div>`;
+    } else $('#pcsSide').innerHTML = '<div class="note">制御している PCS（モード B〜E）がありません。</div>';
+  }
+
+  /* 比較 */
+  const MODE_COLOR = { A: 'var(--ghost)', B: 'var(--s2)', C: 'var(--s3)', D: 'var(--hcline)', E: 'var(--s1)' };
+  function runStep() {
+    const pv = Math.max(0, Math.min(100, +$('#pcsCmpPv').value || 100));
+    const tp = Math.max(0, Math.min(100, +$('#pcsCmpTapPv').value || 0));
+    state.pcsCmp = { kind: 'step', r: P.stepCompare(M(), { pvScale: pv, tapPv: tp }), nSec: M().sections.length };
+    renderPcsCmp();
+  }
+  function runSupport() {
+    const f = Math.max(1, +$('#pcsCmpLoad').value || 1.5);
+    const r = P.supportCompare(M(), { factor: f });
+    state.pcsCmp = r ? { kind: 'support', r, nSec: M().sections.length } : null;
+    if (!r) $('#pcsCmp').innerHTML = '<div class="note">蓄電池・太陽光がありません。</div>'; else renderPcsCmp();
+  }
+  $('#pcsStep').onclick = runStep;
+  $('#pcsSupport').onclick = runSupport;
+  function renderPcsCmp() {
+    const cmp = state.pcsCmp, m = M();
+    if (!cmp || cmp.nSec !== m.sections.length) return;
+    const conv = convFn(), xs = F.nodeX(m), N = xs.length - 1, out = $('#pcsCmp'), r = cmp.r;
+    const tapStr = t => [`LRT ${sgn(t.lrt)}`].concat(m.svrs.map((s, i) => `${s.name} ${sgn(t.svr[i])}`)).join(' / ');
+    const chart = (series, dots) => lineChart($('#pcsCmpChart'), {
+      aria: 'PCS の比較', xDomain: [0, xs[N]], xLabel: '変電所からの距離 (km)', yLabel: state.unit === 'pct' ? '電圧 (%)' : '線間電圧 (V)', xFmt: x => fmt(x, x % 1 ? 1 : 0), yFmt: yFmtFn(),
+      band: [conv(m.limits.lo), conv(m.limits.hi)], series, snap: xs, vlines: vlinesFor(series.pf || dots.pf), dots: dots.list,
+      tip: k => `<b>節点 ${k}</b><br>` + series.map(s => `${esc(s.name)}：${fmt(s.raw[k])} V`).join('<br>')
+    });
+    if (cmp.kind === 'step') {
+      const series = r.rows.map(x => ({ name: P.MODES[x.mode], color: MODE_COLOR[x.mode], width: x.mode === 'E' ? 2.5 : 2, dash: x.mode === 'A' ? '5 4' : '', pts: profilePts(x.pf, conv), raw: x.pf.Vll }));
+      const last = r.rows[r.rows.length - 1];
+      const rows = r.rows.map((x, i) => `<tr><td>${esc(P.MODES[x.mode])}</td><td>${fmt(x.vPcs)}</td><td class="${x.maxV > m.limits.hi ? 'bad' : ''}">${fmt(x.maxV)}（節点${x.iMax}）</td><td>${i ? sgnV(x.maxV - r.rows[i - 1].maxV) : '—'}</td><td>${fmt(x.curt)}</td><td>${fmt(x.absorb)}</td><td>${fmt(x.loss, 1)}（${sgnV(x.dLoss, 1)}）</td><td>${fmt(x.lrtQ)}</td><td>${x.converged ? x.iter + ' 回' : '<span class="fail">収束せず</span>'}</td></tr>`).join('');
+      const sw = r.sweep.map(x => `<tr><td>${x.pv}%${x.mult !== 1 ? `（定格 ${x.mult} 倍に増設）` : ''}${x.sRatio ? '（PCS 容量 S＝定格 P、余裕なし）' : ''}</td><td>${fmt(x.kW)}</td><td>${fmt(x.vPcs0)}</td><td>${fmt(x.vPcs)}（${(x.vPcs / m.Vbase).toFixed(3)}pu）</td><td>${fmt(x.absorb)}</td><td class="${x.curt > 0.5 ? 'bad' : ''}">${fmt(x.curt)}</td><td>${!x.converged ? '<span class="fail">収束せず</span>' : x.firstOk ? '' : `<span class="fail">α=${M().pcsOpt.alpha} では振動</span> → α=${fmt(x.alphaUsed, 3)} で ${x.iter} 回`}</td></tr>`).join('');
+      const osc = r.sweep.some(x => !x.firstOk);
+      const firstCurt = r.sweep.find(x => x.curt > 0.5);
+      out.innerHTML = `<div class="say">タップは太陽光 ${r.tapPv}%・制御なしで整定した位置に固定（${tapStr(r.taps)}）。そのまま太陽光を ${r.pvScale}% に上げ、全太陽光の PCS を A→B→C→E の順に切り替えた結果（A は力率 1.0）。</div>
+        <div class="legend">${legendHTML(series.slice().reverse())}</div><div class="chart" id="pcsCmpChart"></div>
+        <div class="tbl"><table><thead><tr><th>制御</th><th>PCS 接続点の最大 V</th><th>最大電圧 V</th><th>前の段階との差</th><th>抑制した P kW</th><th>吸収した Q kvar</th><th>損失 kW（A との差）</th><th>変電所から送る Q kvar</th><th>反復</th></tr></thead><tbody>${rows}</tbody></table></div>
+        <h3>モード E のまま、太陽光を増やしていくと（同じタップ）</h3>
+        <div class="tbl"><table><thead><tr><th>太陽光</th><th>出せる P kW</th><th>制御なしの PCS 接続点 最大 V</th><th>E の PCS 接続点 最大 V</th><th>吸収した Q kvar</th><th>抑制した P kW</th><th></th></tr></thead><tbody>${sw}</tbody></table></div>
+        <div class="note">無効電力の吸収（Volt-VAR）で電圧が Vw1（${M().devices.find(d => d.type === 'pv' && d.pcs)?.pcs.vw.v1 ?? 1.03}pu）以下に収まるうちは、発電量を減らさずに済みます（抑制 0 kW）。${firstCurt ? `「${firstCurt.pv}%${firstCurt.mult !== 1 ? `・定格 ${firstCurt.mult} 倍` : ''}${firstCurt.sRatio ? '・容量の余裕なし' : ''}」では無効電力が足りず（容量の上限 √(S²−P²) に当たる）、Volt-Watt の有効電力の抑制が働きます。PCS 容量に余裕（S＞P）があるほど、発電量を減らさずに済みます。` : 'この範囲では、有効電力の抑制は働きませんでした。'}${osc ? '<br><b>振動について：</b>有効電力優先で Volt-Watt が P を下げると、Q の上限 √(S²−P²) が広がって吸収が一気に増えます。そのためループゲインがとても大きくなり、今の減衰係数では反復が振動しました（実機なら応答の遅れの設計が必要になる例）。この表に限り、α を下げて定常の値を求めています。' : ''}<br>一方、吸収した無効電力は変電所から送られるので、損失は増えます。最後の段階 ${last.mode} の損失は A より ${sgnV(last.dLoss, 1)} kW。<br>
+        注意：B（力率一定）は電圧に関係なく常に吸収します。電圧が不感帯の中なら C・E は何もしないので、B のほうが電圧は低く、損失は大きくなります（タップを整定したときの太陽光を 100% にすると確かめられます）。</div>`;
+      chart(series, { pf: last.pf, list: last.pf.Vll.map((v, k) => ({ x: xs[k], y: conv(v), bad: v < m.limits.lo || v > m.limits.hi, color: 'var(--s1)' })) });
+    } else {
+      const series = [
+        { name: '制御なし（A）', color: 'var(--ghost)', dash: '5 4', width: 2, pts: profilePts(r.pfA, conv), raw: r.pfA.Vll },
+        { name: `${typeLabel[r.unit.type]} #${r.unit.id} が Volt-VAR（P=0）`, color: 'var(--s1)', width: 2.5, pts: profilePts(r.pfC, conv), raw: r.pfC.Vll }
+      ];
+      out.innerHTML = `<div class="say">太陽光 0%・DC 接続で整定したタップ（${tapStr(r.taps)}）のまま、負荷を ${r.factor} 倍にした直後（タップが追いつく前）。接続点の電圧がいちばん低い ${esc(typeLabel[r.unit.type])} #${r.unit.id}（節点${r.unit.node}、S=${fmt(r.unit.S)} kVA）が、P=0 のまま Volt-VAR で無効電力を供給します。</div>
+        ${r.inDb ? `<div class="alert warn">接続点の電圧 ${(r.vA / m.Vbase).toFixed(3)}pu が不感帯の下端以上なので、Volt-VAR は動きません。負荷の倍率を上げてください。</div>` : ''}
+        <div class="legend">${legendHTML(series.slice().reverse())}</div><div class="chart" id="pcsCmpChart"></div>
+        <div class="tbl"><table><thead><tr><th>項目</th><th>制御なし</th><th>Volt-VAR</th><th>改善</th></tr></thead><tbody>
+          <tr><td>接続点（節点${r.unit.node}）の電圧</td><td>${fmt(r.vA)} V（${(r.vA / m.Vbase).toFixed(3)}pu）</td><td>${fmt(r.vC)} V（${(r.vC / m.Vbase).toFixed(3)}pu）</td><td>${sgnV(r.dV)} V</td></tr>
+          <tr><td>最低電圧</td><td class="${r.minA < m.limits.lo ? 'bad' : ''}">${fmt(r.minA)} V（節点${r.iMinA}）</td><td class="${r.minC < m.limits.lo ? 'bad' : ''}">${fmt(r.minC)} V（節点${r.iMinC}）</td><td>${sgnV(r.minC - r.minA)} V</td></tr>
+          <tr><td>無効電力</td><td>0 kvar</td><td>${qWord(r.q)}</td><td></td></tr>
+          <tr><td>線路損失</td><td>${fmt(r.lossA, 1)} kW</td><td>${fmt(r.lossC, 1)} kW</td><td>${sgnV(r.lossC - r.lossA, 1)} kW</td></tr>
+        </tbody></table></div>
+        <div class="note">
+          1kvar あたりの改善：<b>${fmt(r.perKvar, 3)} V/kvar</b>（式 X合計÷V = ${fmt(r.dVdQ, 3)} V/kvar${r.svrUp ? '。上流の SVR の昇圧の分、式より少し大きい' : ''}）。有効電力なら 1kW あたり ${fmt(r.dVdP, 3)} V/kW。<br>
+          接続点までの線路は R = ${fmt(r.R, 3)}Ω、X = ${fmt(r.X, 3)}Ω。同じ改善を有効電力（放電）で得るなら 約 ${fmt(r.pEquiv)} kW です。</div>
+        <div class="tbl"><table><thead><tr><th>線路</th><th>X/R</th><th>1kvar の効き ÷ 1kW の効き</th></tr></thead><tbody>
+          <tr><td>この配電線（接続点まで）</td><td>${fmt(r.xr, 2)}</td><td><b>${fmt(r.xr, 1)} 倍</b></td></tr>
+          <tr><td>送電線の目安</td><td>≒ ${r.trXR}</td><td>約 ${r.trXR} 倍</td></tr>
+          <tr><td>細い電線の配電線の例</td><td>≒ 1</td><td>約 1 倍（有効電力と同じ程度）</td></tr>
+        </tbody></table></div>
+        <div class="note"><b>配電線は抵抗が大きいため、無効電力の効きは送電線ほど大きくありません。</b>電圧は (R×P ＋ X×Q)÷V で変わるので、X/R が小さいほど、無効電力 1kvar は有効電力 1kW と比べて効きにくくなります。
+          この線路の初期値（R 0.12・X 0.30 Ω/km、ダミー）は X/R が大きめです。細い電線ほど R が大きく、効きはさらに小さくなります。X/R の値は送電線・電線の種類で幅があります<span class="dummy">要確認</span></div>`;
+      chart(series, { pf: r.pfC, list: r.pfC.Vll.map((v, k) => ({ x: xs[k], y: conv(v), bad: v < m.limits.lo || v > m.limits.hi, color: 'var(--s1)' })) });
+    }
+  }
+
   /* ---------- 起動 ---------- */
   function renderAll() { $('#ldcOffTarget').value = M().lrt.targetOff; if (state.hc && state.hc.nSec !== M().sections.length) { state.hc = null; state.hcOverlay = null; } renderHcFields(); renderHc(); renderSystem(); renderRegs(); renderDevices(); renderSliders(); recompute(); renderEvent(); }
   renderAll();
   state.base = null;
   let rz = 0;
-  window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { renderProfile(); renderEvent(); renderLdc(); renderHc(); }, 150); });
+  window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { renderProfile(); renderEvent(); renderLdc(); renderHc(); renderPcs(); renderPcsCmp(); }, 150); });
+  if (/[?&]demo=pcs(&|$)/.test(location.search)) { M().devices.forEach(d => { if (d.type === 'pv') d.pcs.mode = 'E'; }); M().pvScale = 100; renderDevices(); renderSliders(); recompute(); $('#pcsStep').click(); }
+  if (/[?&]demo=pcsup/.test(location.search)) { M().devices.forEach(d => { if (d.pcs) d.pcs.mode = 'C'; }); renderDevices(); renderSliders(); recompute(); $('#evBtns [data-ev="pvUp"]').click(); $('#pcsSupport').click(); }
   if (/[?&]demo=dc/.test(location.search)) { $('#evDc').click(); }
   if (/[?&]demo=ldc/.test(location.search)) { $('#ldcDemo').click(); }
   if (/[?&]demo=hc/.test(location.search)) { runHc(); }
