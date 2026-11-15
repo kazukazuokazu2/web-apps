@@ -1,12 +1,20 @@
 {
   "note": "ニュースの見出しを自動で取得する注目銘柄の一覧です。symbol はアプリと同じコード、queries は Google ニュースで検索する語（どれかを含む記事を探す）、label は表示名です。MARKET は指数（^N225 など）をまとめた「市場ニュース」です。ここに足すと、GitHub Actions が次の実行で見出しを取得します。",
   "targets": [
-    { "symbol": "MARKET", "label": "市場ニュース", "queries": ["日経平均", "米国株", "株式市場"] },
+    { "symbol": "MARKET", "label": "市場ニュース", "queries": ["日経平均", "米国株", "株式市場", "ナスダック", "S&P500", "ドル円"] },
     { "symbol": "7203", "label": "トヨタ自動車", "queries": ["トヨタ自動車"] },
     { "symbol": "6758", "label": "ソニーグループ", "queries": ["ソニーグループ"] },
     { "symbol": "9984", "label": "ソフトバンクグループ", "queries": ["ソフトバンクグループ"] },
     { "symbol": "AAPL", "label": "Apple", "queries": ["アップル", "Apple"] },
     { "symbol": "NVDA", "label": "NVIDIA", "queries": ["エヌビディア", "NVIDIA"] },
-    { "symbol": "MSFT", "label": "Microsoft", "queries": ["マイクロソフト", "Microsoft"] }
+    { "symbol": "MSFT", "label": "Microsoft", "queries": ["マイクロソフト", "Microsoft"] },
+    { "symbol": "TSLA", "label": "テスラ", "queries": ["テスラ", "Tesla"] },
+    { "symbol": "SOXL", "label": "SOXL（半導体株3倍ETF）", "queries": ["SOXL"] },
+    { "symbol": "DAL", "label": "デルタ航空", "queries": ["デルタ航空", "Delta Air Lines"] },
+    { "symbol": "GEV", "label": "GEベルノバ", "queries": ["GEベルノバ", "GE Vernova"] },
+    { "symbol": "OKLO", "label": "オクロ", "queries": ["Oklo", "オクロ"] },
+    { "symbol": "SPCX", "label": "スペースX", "queries": ["スペースX", "SpaceX"] },
+    { "symbol": "CRWD", "label": "クラウドストライク", "queries": ["クラウドストライク", "CrowdStrike"] },
+    { "symbol": "PANW", "label": "パロアルトネットワークス", "queries": ["パロアルトネットワークス", "Palo Alto Networks"] }
   ]
 }
