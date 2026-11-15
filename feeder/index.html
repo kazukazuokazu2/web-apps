@@ -299,9 +299,10 @@ SVR（節点5 の下流）: 下流での最大降下 215 V、最大上昇 111 V
     <div class="row note">
       <label>太陽光の出力 <input type="number" id="pcsCmpPv" value="100" min="0" max="100" step="5"> ％</label>
       <label>タップを整定したときの太陽光 <input type="number" id="pcsCmpTapPv" value="0" min="0" max="100" step="10"> ％</label>
+      <label>比較で使う Vw1 <input type="number" id="pcsCmpVw1" min="0.9" max="1.1" step="0.005" placeholder="各機器の設定"> pu</label>
       <label>重負荷の倍率 <input type="number" id="pcsCmpLoad" value="1.5" min="1" step="0.1"> 倍</label>
     </div>
-    <div class="btns"><button type="button" id="pcsStep">電圧上昇の抑制を、順に見る</button><button type="button" id="pcsSupport">電圧低下を支える</button></div>
+    <div class="btns"><button type="button" id="pcsStep">電圧上昇の抑制を、順に見る</button><button type="button" id="pcsStepVw">Vw1 を 1.015pu に下げて見る（抑制が働く）</button><button type="button" id="pcsSupport">電圧低下を支える</button></div>
     <div id="pcsCmp"><div class="note">「順に見る」：太陽光の出力を上げ、タップを制御なしで整定した位置に固定して、全太陽光の PCS を A→B→C→E と切り替えます。「支える」：負荷を重くし（太陽光 0%・DC 接続）、蓄電池（なければ夜間の太陽光）を P=0 のまま Volt-VAR にします。どちらも現在の状態は変えません。</div></div>
     <details style="margin-top:8px"><summary class="note" style="cursor:pointer">用語・式（進み・遅れ、ループゲイン）</summary>
       <ul class="assume note">
@@ -1102,9 +1103,20 @@ const PcsCalc = (() => {
   }
   /** 電圧上昇の抑制：タップを「太陽光 tapPv%・制御なし」で整定した位置に固定し（太陽光が出る前に整定したまま、の想定）、
       太陽光を pvScale% に上げて、全太陽光の PCS を A→B→C→E と切り替える。比較の A は力率 1.0 で計算する */
+  /** 比較用：収束しないときは α を半分ずつ下げて解き直す（使った α を返す） */
+  function solveRobust(m2, taps, opt) {
+    let alphaUsed = +(opt.alpha ?? (m2.pcsOpt || DEF_OPT).alpha), pf = solve(m2, taps, opt);
+    const firstOk = pf.pcs.converged;
+    while (!pf.pcs.converged && alphaUsed > 0.02) { alphaUsed /= 2; pf = solve(m2, taps, Object.assign({}, opt, { alpha: alphaUsed, maxIter: 1000 })); }
+    return { pf, firstOk, alphaUsed };
+  }
+  /** opt.vw1（任意）: 比較に限り、全太陽光の Volt-Watt の Vw1 をこの値にする（Vw2 は Vw1 との差を保って一緒に動かす） */
   function stepCompare(m, opt = {}) {
     const base = ensurePcs(clone(m));
     base.devices.forEach(d => { if (d.type === 'pv') { d.pf = 1; d.pcs.mode = 'A'; } });
+    const vw1 = opt.vw1 === undefined || opt.vw1 === null || opt.vw1 === '' ? null : +opt.vw1;
+    if (vw1 !== null && isFinite(vw1)) base.devices.forEach(d => { if (d.type === 'pv') { const gap = Math.max(0, d.pcs.vw.v2 - d.pcs.vw.v1); d.pcs.vw.v1 = vw1; d.pcs.vw.v2 = vw1 + gap; } });
+    const firstPv = base.devices.find(d => d.type === 'pv');
     base.pvScale = opt.tapPv ?? 0;
     const tapsFix = opt.taps || settle(base, F.currentTaps(m)).taps;
     base.pvScale = opt.pvScale ?? 100;
@@ -1112,9 +1124,9 @@ const PcsCalc = (() => {
     const rows = (opt.modes || ['A', 'B', 'C', 'E']).map(mode => {
       const m2 = clone(base);
       m2.devices.forEach(d => { if (d.type === 'pv') d.pcs.mode = mode; });
-      const pf = solve(m2, tapsFix, opt);
+      const { pf, firstOk, alphaUsed } = solveRobust(m2, tapsFix, opt);
       const s = F.summarize(m2, pf), so = sumOut(m2, pf, d => d.type === 'pv');
-      return { mode, pf, maxV: s.max, iMax: s.iMax, vPcs: Math.max(...pvNodes.map(k => pf.Vll[k])), loss: pf.lossKW, curt: so.curt, absorb: so.absorb, converged: pf.pcs.converged, iter: pf.pcs.iter, lrtQ: F.regFlow(m2, pf, m2.lrt).Q };
+      return { mode, pf, maxV: s.max, iMax: s.iMax, vPcs: Math.max(...pvNodes.map(k => pf.Vll[k])), loss: pf.lossKW, curt: so.curt, absorb: so.absorb, converged: pf.pcs.converged, firstOk, alphaUsed, iter: pf.pcs.iter, lrtQ: F.regFlow(m2, pf, m2.lrt).Q };
     });
     rows.forEach(r => { r.dLoss = r.loss - rows[0].loss; });
     // 参考：モード E のまま太陽光の出力を変える（無効電力で足りるうちは抑制なし）
@@ -1123,16 +1135,14 @@ const PcsCalc = (() => {
     const sweep = (opt.sweep || [[40, 1], [60, 1], [80, 1], [100, 1], [100, 2], [80, 1, 1], [100, 1, 1]]).map(([pv, mult, sRatio]) => {
       const m2 = clone(base); m2.pvScale = pv;
       m2.devices.forEach(d => { if (d.type === 'pv') { d.pcs.mode = 'E'; d.p *= mult; d.pcs.S = sRatio ? d.p * sRatio : d.pcs.S * mult; } });
-      // 収束しないときは、この表に限り α を半分ずつ下げて解き直す（使った α を表示する）
-      let alphaUsed = +(m2.pcsOpt || DEF_OPT).alpha, pf = solve(m2, tapsFix, opt), firstOk = pf.pcs.converged;
-      while (!pf.pcs.converged && alphaUsed > 0.02) { alphaUsed /= 2; pf = solve(m2, tapsFix, Object.assign({}, opt, { alpha: alphaUsed, maxIter: 1000 })); }
+      const { pf, firstOk, alphaUsed } = solveRobust(m2, tapsFix, opt);
       const so = sumOut(m2, pf, d => d.type === 'pv');
       const mA = clone(m2); mA.devices.forEach(d => { if (d.type === 'pv') d.pcs.mode = 'A'; });
       const pvN = [...new Set(m2.devices.filter(d => d.type === 'pv').map(d => d.node))];
       const pf0 = F.powerFlow(mA, tapsFix);
       return { pv, mult, sRatio, kW: m2.devices.filter(d => d.type === 'pv').reduce((a, d) => a + availP(d, m2), 0), maxV: F.summarize(m2, pf).max, maxV0: F.summarize(mA, pf0).max, vPcs: Math.max(...pvN.map(k => pf.Vll[k])), vPcs0: Math.max(...pvN.map(k => pf0.Vll[k])), absorb: so.absorb, curt: so.curt, converged: pf.pcs.converged, firstOk, alphaUsed, iter: pf.pcs.iter };
     });
-    return { rows, sweep, taps: tapsFix, pvScale: base.pvScale, tapPv: opt.tapPv ?? 0 };
+    return { rows, sweep, taps: tapsFix, pvScale: base.pvScale, tapPv: opt.tapPv ?? 0, vw1Override: vw1 !== null && isFinite(vw1), vw1: firstPv ? firstPv.pcs.vw.v1 : null, vw2: firstPv ? firstPv.pcs.vw.v2 : null };
   }
   /** 電圧低下を支える：太陽光 0%・DC 接続でタップを整定し、その位置のまま負荷を ×factor にする（タップが追いつく前の重負荷）。
       蓄電池・夜間の太陽光のうち、接続点の電圧がいちばん低い PCS を、P=0 のまま Volt-VAR にする */
@@ -1320,6 +1330,19 @@ const PcsCalc = (() => {
         `${r.unit.type === 'bess' ? '蓄電池' : '太陽光（夜間）'} #${r.unit.id}・節点${r.unit.node}：${f3(r.vA / 6600)} → ${f3(r.vC / 6600)} pu、Q 供給 ${f1(r.q)} kvar、改善 ${f1(r.dV)} V\n` +
         `1kvar あたり ${f3(r.perKvar)} V（式 X合計÷V = ${f3(r.dVdQ)} V、差 ${f1(err)} %${r.svrUp ? '。上流の SVR の昇圧の分、式より少し大きい' : ''}）\n` +
         `1kvar の効き ÷ 1kW の効き = X/R = ${f2(r.xr)}（送電線の目安 X/R ≒ ${r.trXR} より小さい）`);
+    }
+    // P12. Vw1 を下げると、E で有効電力の抑制が働き、C より電圧が下がる
+    {
+      const m = ensurePcs(F.defaultModel());
+      const line = v => {
+        const r = stepCompare(m, { pvScale: 100, tapPv: 0, vw1: v }), c = r.rows.find(x => x.mode === 'C'), e = r.rows.find(x => x.mode === 'E');
+        return { v, r, c, e };
+      };
+      const all = [1.03, 1.02, 1.015, 1.01].map(line), t = all.find(x => x.v === 1.01);
+      const ok = all[0].e.curt < 0.5 && t.e.curt > 1 && t.e.vPcs < t.c.vPcs - 1 && t.e.converged && t.c.converged;
+      T('P12.（追加）比較で Vw1 を下げると、E で有効電力の抑制が働き、C より PCS 接続点の電圧が下がる', ok,
+        `初期設定・太陽光 0% で整定したタップのまま 100% に上げた状態（Vw2 は Vw1 + 0.02）\n` +
+        all.map(x => `Vw1=${x.v}：C ${f1(x.c.vPcs)} V／E ${f1(x.e.vPcs)} V（${f3(x.e.vPcs / 6600)} pu）、E の抑制 ${f1(x.e.curt)} kW・吸収 ${f1(x.e.absorb)} kvar・損失 ${f1(x.e.loss)} kW（${x.e.firstOk ? x.e.iter + ' 回で収束' : `α=${x.e.alphaUsed.toFixed(3)} で収束`}）`).join('\n'));
     }
     return res;
   }
@@ -2374,9 +2397,11 @@ const PcsCalc = (() => {
   function runStep() {
     const pv = Math.max(0, Math.min(100, +$('#pcsCmpPv').value || 100));
     const tp = Math.max(0, Math.min(100, +$('#pcsCmpTapPv').value || 0));
-    state.pcsCmp = { kind: 'step', r: P.stepCompare(M(), { pvScale: pv, tapPv: tp }), nSec: M().sections.length };
+    const vwIn = $('#pcsCmpVw1').value.trim(), vw1 = vwIn === '' || !isFinite(+vwIn) ? null : Math.max(0.9, Math.min(1.1, +vwIn));
+    state.pcsCmp = { kind: 'step', r: P.stepCompare(M(), { pvScale: pv, tapPv: tp, vw1 }), nSec: M().sections.length };
     renderPcsCmp();
   }
+  $('#pcsStepVw').onclick = () => { $('#pcsCmpVw1').value = '1.015'; runStep(); };
   function runSupport() {
     const f = Math.max(1, +$('#pcsCmpLoad').value || 1.5);
     const r = P.supportCompare(M(), { factor: f });
@@ -2404,17 +2429,22 @@ const PcsCalc = (() => {
       const rowC = r.rows.find(x => x.mode === 'C'), rowE = r.rows.find(x => x.mode === 'E');
       const sameCE = rowC && rowE && rowC.pf.Vll.every((v, k) => Math.abs(v - rowE.pf.Vll[k]) < 0.5);
       const last = r.rows[r.rows.length - 1];
-      const rows = r.rows.map((x, i) => `<tr><td>${esc(P.MODES[x.mode])}</td><td>${fmt(x.vPcs)}</td><td class="${x.maxV > m.limits.hi ? 'bad' : ''}">${fmt(x.maxV)}（節点${x.iMax}）</td><td>${i ? sgnV(x.maxV - r.rows[i - 1].maxV) : '—'}</td><td>${fmt(x.curt)}</td><td>${fmt(x.absorb)}</td><td>${fmt(x.loss, 1)}（${sgnV(x.dLoss, 1)}）</td><td>${fmt(x.lrtQ)}</td><td>${x.converged ? x.iter + ' 回' : '<span class="fail">収束せず</span>'}</td></tr>`).join('');
+      const rows = r.rows.map((x, i) => `<tr><td>${esc(P.MODES[x.mode])}</td><td>${fmt(x.vPcs)}</td><td class="${x.maxV > m.limits.hi ? 'bad' : ''}">${fmt(x.maxV)}（節点${x.iMax}）</td><td>${i ? sgnV(x.maxV - r.rows[i - 1].maxV) : '—'}</td><td>${fmt(x.curt)}</td><td>${fmt(x.absorb)}</td><td>${fmt(x.loss, 1)}（${sgnV(x.dLoss, 1)}）</td><td>${fmt(x.lrtQ)}</td><td>${!x.converged ? '<span class="fail">収束せず</span>' : x.firstOk ? x.iter + ' 回' : `<span class="fail">α=${M().pcsOpt.alpha} では振動</span> → α=${fmt(x.alphaUsed, 3)} で ${x.iter} 回`}</td></tr>`).join('');
+      const vwTxt = `Vw1 = ${r.vw1}pu・Vw2 = ${fmt(r.vw2, 3)}pu${r.vw1Override ? '（比較で上書き）' : ''}`;
+      const ceNote = !sameCE && rowC && rowE && rowE.curt > 0.5
+        ? `<div class="note"><b>C と E の違い：</b>E では電圧が Vw1（${r.vw1}pu）を超えたところで Volt-Watt が働き、有効電力を <b>${fmt(rowE.curt)} kW</b> 抑制しました。PCS 接続点の最大電圧は C より <b>${sgnV(rowE.vPcs - rowC.vPcs)} V</b>。有効電力が減った分だけ電圧が下がり、必要な無効電力の吸収は ${fmt(rowC.absorb)} → ${fmt(rowE.absorb)} kvar に、損失は ${fmt(rowC.loss, 1)} → ${fmt(rowE.loss, 1)} kW に減ります。そのかわり発電量が減ります。</div>`
+        : '';
       const sw = r.sweep.map(x => `<tr><td>${x.pv}%${x.mult !== 1 ? `（定格 ${x.mult} 倍に増設）` : ''}${x.sRatio ? '（PCS 容量 S＝定格 P、余裕なし）' : ''}</td><td>${fmt(x.kW)}</td><td>${fmt(x.vPcs0)}</td><td>${fmt(x.vPcs)}（${(x.vPcs / m.Vbase).toFixed(3)}pu）</td><td>${fmt(x.absorb)}</td><td class="${x.curt > 0.5 ? 'bad' : ''}">${fmt(x.curt)}</td><td>${!x.converged ? '<span class="fail">収束せず</span>' : x.firstOk ? '' : `<span class="fail">α=${M().pcsOpt.alpha} では振動</span> → α=${fmt(x.alphaUsed, 3)} で ${x.iter} 回`}</td></tr>`).join('');
-      const osc = r.sweep.some(x => !x.firstOk);
+      const osc = r.sweep.some(x => !x.firstOk) || r.rows.some(x => !x.firstOk);
       const firstCurt = r.sweep.find(x => x.curt > 0.5);
-      out.innerHTML = `<div class="say">タップは太陽光 ${r.tapPv}%・制御なしで整定した位置に固定（${tapStr(r.taps)}）。そのまま太陽光を ${r.pvScale}% に上げ、全太陽光の PCS を A→B→C→E の順に切り替えた結果（A は力率 1.0）。</div>
+      out.innerHTML = `<div class="say">タップは太陽光 ${r.tapPv}%・制御なしで整定した位置に固定（${tapStr(r.taps)}）。そのまま太陽光を ${r.pvScale}% に上げ、全太陽光の PCS を A→B→C→E の順に切り替えた結果（A は力率 1.0、${vwTxt}）。</div>
         <div class="legend">${legendHTML(r.rows.map(x => series.find(s => s.name === P.MODES[x.mode])))}</div><div class="chart" id="pcsCmpChart"></div>
-        ${sameCE ? '<div class="note">C（点線）と E（太い実線）は、この条件では同じ結果なので線が重なっています。電圧が Vw1 を超えないため、Volt-Watt の抑制が働いていません。</div>' : ''}
+        ${sameCE ? `<div class="note">C（点線）と E（太い実線）は、この条件では同じ結果なので線が重なっています。電圧が Vw1（${r.vw1}pu）を超えないため、Volt-Watt の抑制が働いていません。「Vw1 を 1.015pu に下げて見る」で、抑制が働く様子を見られます。</div>` : ''}
+        ${ceNote}
         <div class="tbl"><table><thead><tr><th>制御</th><th>PCS 接続点の最大 V</th><th>最大電圧 V</th><th>前の段階との差</th><th>抑制した P kW</th><th>吸収した Q kvar</th><th>損失 kW（A との差）</th><th>変電所から送る Q kvar</th><th>反復</th></tr></thead><tbody>${rows}</tbody></table></div>
         <h3>モード E のまま、太陽光を増やしていくと（同じタップ）</h3>
         <div class="tbl"><table><thead><tr><th>太陽光</th><th>出せる P kW</th><th>制御なしの PCS 接続点 最大 V</th><th>E の PCS 接続点 最大 V</th><th>吸収した Q kvar</th><th>抑制した P kW</th><th></th></tr></thead><tbody>${sw}</tbody></table></div>
-        <div class="note">無効電力の吸収（Volt-VAR）で電圧が Vw1（${M().devices.find(d => d.type === 'pv' && d.pcs)?.pcs.vw.v1 ?? 1.03}pu）以下に収まるうちは、発電量を減らさずに済みます（抑制 0 kW）。${firstCurt ? `「${firstCurt.pv}%${firstCurt.mult !== 1 ? `・定格 ${firstCurt.mult} 倍` : ''}${firstCurt.sRatio ? '・容量の余裕なし' : ''}」では無効電力が足りず（容量の上限 √(S²−P²) に当たる）、Volt-Watt の有効電力の抑制が働きます。PCS 容量に余裕（S＞P）があるほど、発電量を減らさずに済みます。` : 'この範囲では、有効電力の抑制は働きませんでした。'}${osc ? '<br><b>振動について：</b>有効電力優先で Volt-Watt が P を下げると、Q の上限 √(S²−P²) が広がって吸収が一気に増えます。そのためループゲインがとても大きくなり、今の減衰係数では反復が振動しました（実機なら応答の遅れの設計が必要になる例）。この表に限り、α を下げて定常の値を求めています。' : ''}<br>一方、吸収した無効電力は変電所から送られるので、損失は増えます。最後の段階 ${last.mode} の損失は A より ${sgnV(last.dLoss, 1)} kW。<br>
+        <div class="note">無効電力の吸収（Volt-VAR）で電圧が Vw1（${r.vw1}pu）以下に収まるうちは、発電量を減らさずに済みます（抑制 0 kW）。${firstCurt ? `「${firstCurt.pv}%${firstCurt.mult !== 1 ? `・定格 ${firstCurt.mult} 倍` : ''}${firstCurt.sRatio ? '・容量の余裕なし' : ''}」では、無効電力の吸収だけでは電圧を Vw1 以下に下げきれず${firstCurt.sRatio ? '（容量の上限 √(S²−P²) に当たって Q を出せない）' : ''}、Volt-Watt の有効電力の抑制が働きます。${r.vw1Override ? 'Vw1 を低くするほど、無効電力で足りる範囲が狭くなり、抑制が早く働きます。' : 'PCS 容量に余裕（S＞P）があるほど、発電量を減らさずに済みます。'}` : 'この範囲では、有効電力の抑制は働きませんでした。'}${osc ? '<br><b>振動について：</b>有効電力優先で Volt-Watt が P を下げると、Q の上限 √(S²−P²) が広がって吸収が一気に増えます。そのためループゲインがとても大きくなり、今の減衰係数では反復が振動しました（実機なら応答の遅れの設計が必要になる例）。比較に限り、α を下げて定常の値を求めています（表の右端に使った α を表示）。' : ''}<br>一方、吸収した無効電力は変電所から送られるので、損失は増えます。最後の段階 ${last.mode} の損失は A より ${sgnV(last.dLoss, 1)} kW。<br>
         注意：B（力率一定）は電圧に関係なく常に吸収します。電圧が不感帯の中なら C・E は何もしないので、B のほうが電圧は低く、損失は大きくなります（タップを整定したときの太陽光を 100% にすると確かめられます）。</div>`;
       chart(series, { pf: last.pf, list: last.pf.Vll.map((v, k) => ({ x: xs[k], y: conv(v), bad: v < m.limits.lo || v > m.limits.hi, color: 'var(--s1)' })) });
     } else {
@@ -2452,6 +2482,7 @@ const PcsCalc = (() => {
   let rz = 0;
   window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { renderProfile(); renderEvent(); renderLdc(); renderHc(); renderPcs(); renderPcsCmp(); }, 150); });
   if (/[?&]demo=pcs(&|$)/.test(location.search)) { M().devices.forEach(d => { if (d.type === 'pv') d.pcs.mode = 'E'; }); M().pvScale = 100; renderDevices(); renderSliders(); recompute(); $('#pcsStep').click(); }
+  if (/[?&]demo=pcsvw(&|$)/.test(location.search)) { $('#pcsStepVw').click(); }
   if (/[?&]demo=pcsup/.test(location.search)) { M().devices.forEach(d => { if (d.pcs) d.pcs.mode = 'C'; }); renderDevices(); renderSliders(); recompute(); $('#evBtns [data-ev="pvUp"]').click(); $('#pcsSupport').click(); }
   if (/[?&]demo=dc/.test(location.search)) { $('#evDc').click(); }
   if (/[?&]demo=ldc/.test(location.search)) { $('#ldcDemo').click(); }
