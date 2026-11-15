@@ -604,7 +604,8 @@ function fillRowNews(box, s) {
     p.innerHTML = `Googleニュースで探す：${newsLink(s.symbol, s.name)}`;
     box.append(p);
   } else if (!items) {
-    box.append(el('p', 'note', 'この銘柄の見出しはまだ取得していません。リポジトリの data/news-targets.json に追加すると、次の自動取得から表示されます。'));
+    box.append(el('p', 'note', 'この銘柄の見出しは、まだありません。取得の対象（data/news-targets.json）に追加したばかりなら、数分後に表示されます。' +
+      'まだ追加していない場合は、data/news-targets.json に追加すると、次の自動取得から表示されます。'));
     const p = el('p', 'note');
     p.innerHTML = `Googleニュースで探す：${newsLink(s.symbol, s.name)}`;
     box.append(p);
