@@ -1,0 +1,57 @@
+name: ニュースの見出しを更新
+
+on:
+  schedule:
+    # 時刻は UTC。GitHub の混み具合で数分〜十数分遅れることがある
+    - cron: '0 */3 * * 1-5'   # 平日：3時間おき（日本時間 0・3・6・9・12・15・18・21時。東証・米国市場の取引時間を含む）
+    - cron: '0 0,12 * * 0,6'  # 休日：1日2回（日本時間 9時・21時）
+  workflow_dispatch:   # GitHub の Actions の画面から、手動でも実行できる
+  push:
+    branches: [main]
+    paths:             # 対象の銘柄や取得の仕組みを変えたときは、すぐに取得し直す
+      - data/news-targets.json
+      - scripts/fetch_news.py
+      - .github/workflows/news.yml
+
+permissions:
+  contents: write   # data/news.json をコミットするため
+
+concurrency:
+  group: news
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # 標準ライブラリだけを使うので、pip install は不要
+      - name: テスト（失敗したら取得しない）
+        run: python -m unittest discover -s tests -v
+
+      - name: 見出しを取得
+        id: fetch
+        # 銘柄ごとの失敗は、ログに「ニュース取得失敗」の警告（銘柄・理由・URL）として出る
+        run: python scripts/fetch_news.py
+
+      - name: 変更があればコミット
+        # 全銘柄が失敗したときも、失敗の印を残すためにコミットする（ジョブは失敗として表示される）
+        if: success() || steps.fetch.outcome == 'failure'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          [ -f data/news.json ] || { echo "news.json がありません"; exit 0; }
+          git add data/news.json
+          if git diff --cached --quiet; then
+            echo "変更なし"
+            exit 0
+          fi
+          git commit -m "ニュースの見出しを更新"
+          git pull --rebase
+          git push

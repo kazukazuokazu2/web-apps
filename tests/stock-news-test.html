@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>stock.html のテスト</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 16px; background: #fff; color: #111; }
+  pre { white-space: pre-wrap; font-size: 13px; }
+  .pass { color: #128a4a; } .fail { color: #d23c3c; font-weight: 600; }
+  iframe { width: 100%; height: 480px; border: 1px solid #ccc; }
+</style>
+</head>
+<body>
+<h1>stock.html のテスト</h1>
+<p>リポジトリのルートをローカルサーバーで配信して開く（例: http://localhost:8765/tests/stock-news-test.html）。
+  テスト中は、このページと同じ保存領域（localStorage）を使うが、終わったら元に戻す。</p>
+<pre id="result">実行中…</pre>
+<iframe id="frame" title="テスト対象"></iframe>
+<script>
+'use strict';
+const KEYS = ['stock-watchlist-v1', 'stock-news-v1'];
+const HOUR = 3600e3;
+const iso = msAgo => new Date(Date.now() - msAgo).toISOString().replace(/\.\d+Z$/, '+00:00');
+
+const QUOTES = {
+  updatedAt: iso(HOUR), source: 'test',
+  quotes: Object.fromEntries(['^N225', '^NDX', '^GSPC', 'USDJPY', '7203', '6758', '9984', 'AAPL', 'NVDA', 'MSFT']
+    .map((s, i) => [s, { price: 100 + i, prevClose: 99 + i, monthAgo: 90, yearStart: 80, date: '2026-11-13' }])),
+  errors: {},
+};
+const item = (title, h, source, link) => ({ title, source, published: iso(h * HOUR), link: link || `https://news.example/${encodeURIComponent(title)}` });
+function makeNews(updatedMsAgo) {
+  return {
+    updatedAt: iso(updatedMsAgo), source: 'test',
+    news: {
+      MARKET: { label: '市場ニュース', items: [item('日経平均が反発', 2, '通信社A')] },
+      NVDA: { label: 'NVIDIA', items: [
+        item('エヌビディアのCEOが講演', 1, '新聞A'),
+        item('<script>window.__xss = 1<\/script>エヌビディアの新製品', 3, '新聞B'),
+        item('<img src=x onerror="window.__xss = 2">画像タグ入りの見出し', 4, '<b>媒体</b>'),
+        item('エヌビディア株が上昇', 5, '新聞C'),
+        item('エヌビディア、データセンター向けが好調', 6, '新聞D'),
+        item('エヌビディアの6件目の見出し', 7, '新聞E'),
+        item('リンクが危険な見出し', 8, '新聞F', 'javascript:window.__xss=3'),
+      ] },
+      '7203': { label: 'トヨタ自動車', items: [item('トヨタ自動車、決算を発表', 0.5, '新聞A')] },
+      AAPL: { label: 'Apple', items: [item('アップルの前回の見出し', 30, '新聞A')] },
+    },
+    errors: { AAPL: { message: 'OSError: HTTP Error 503', since: iso(2 * HOUR) } },
+  };
+}
+
+const results = [];
+function check(name, ok, detail = '') { results.push({ name, ok: !!ok, detail }); }
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function until(fn, ms = 4000) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < ms) { try { const v = fn(); if (v) return v; } catch (e) {} await sleep(20); }
+  return null;
+}
+
+let source;
+// stock.html を、fetch を差し替えたうえで iframe に読み込む
+async function boot(routes, { keepStorage = false } = {}) {
+  if (!keepStorage) KEYS.forEach(k => localStorage.removeItem(k));
+  const stub = `<script>
+    window.__errors = []; window.__fetchLog = []; window.__alerted = false;
+    addEventListener('error', e => __errors.push(String(e.message)));
+    addEventListener('unhandledrejection', e => __errors.push(String(e.reason)));
+    window.alert = () => { window.__alerted = true; };
+    const ROUTES = ${JSON.stringify(routes).replace(/</g, '\\u003c')};
+    window.fetch = async (url, opts = {}) => {
+      __fetchLog.push({ url: String(url), method: opts.method || 'GET', body: opts.body ?? null });
+      const r = ROUTES[String(url)];
+      return r ? new Response(JSON.stringify(r), { status: 200, headers: { 'Content-Type': 'application/json' } })
+               : new Response('not found', { status: 404 });
+    };
+  <\/script>`;
+  const frame = document.getElementById('frame');
+  const loaded = new Promise(r => frame.onload = r);
+  frame.srcdoc = source.replace(/<head>/i, () => '<head>' + stub);
+  await loaded;
+  const w = frame.contentWindow, d = frame.contentDocument;
+  await until(() => d.querySelector('#tbody tr[data-symbol]') && d.getElementById('updated').textContent !== '—');
+  await sleep(50);
+  return { w, d };
+}
+const rowOf = (d, sym) => d.querySelector(`#tbody tr[data-symbol="${sym}"]`);
+const symbols = d => [...d.querySelectorAll('#tbody tr[data-symbol]')].map(tr => tr.dataset.symbol);
+const click = (w, el) => el.dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+
+async function testWithNews() {
+  const { w, d } = await boot({ 'data/quotes.json': QUOTES, 'data/news.json': makeNews(HOUR) });
+
+  // 第1段階：ニュースのリンク
+  const nv = rowOf(d, 'NVDA').querySelector('a[aria-label*="ニュース"]');
+  const u = new URL(nv.href);
+  check('ニュースのリンク：Googleニュース検索・新しいタブ・noopener',
+    u.origin + u.pathname === 'https://news.google.com/search' && u.searchParams.get('q') === 'エヌビディア OR NVIDIA'
+    && u.searchParams.get('hl') === 'ja' && u.searchParams.get('gl') === 'JP' && u.searchParams.get('ceid') === 'JP:ja'
+    && nv.target === '_blank' && nv.rel === 'noopener', nv.href);
+  check('全銘柄にニュースのリンクがある', symbols(d).every(s => rowOf(d, s).querySelector('a[aria-label*="ニュース"]')));
+  const mk = d.querySelector('#marketNewsLink a');
+  check('指数は「市場ニュース」のリンクにまとまる', mk && mk.textContent.includes('市場ニュース') && new URL(mk.href).searchParams.get('q').includes('日経平均'));
+
+  // 行をタップすると見出しが開く
+  click(w, rowOf(d, 'NVDA').querySelector('td.num'));
+  const box = await until(() => d.querySelector('tr.news-row[data-news-for="NVDA"]'));
+  const lis = box ? [...box.querySelectorAll('.headlines li')] : [];
+  check('行をタップすると見出しを最大5件表示', lis.length === 5, `${lis.length} 件`);
+  check('「◯時間前」と媒体名が付く', lis[0]?.querySelector('.meta')?.textContent.includes('1時間前') && lis[0].textContent.includes('新聞A'), lis[0]?.textContent);
+  const a0 = lis[0]?.querySelector('a');
+  check('見出しは新しいタブで開くリンク', a0 && a0.target === '_blank' && a0.rel === 'noopener' && a0.href.startsWith('https://'));
+  check('キーワードを含む見出しに「注目」バッジ', lis[0]?.querySelector('.hot')?.textContent === '注目');
+  check('キーワードを含まない見出しにはバッジがない', !lis[3]?.querySelector('.hot'), lis[3]?.textContent);
+
+  // 見出しに <script> などが入っていても、実行されない
+  const scriptLi = lis.find(li => li.textContent.includes('<script>'));
+  check('<script> 入りの見出しは文字として表示', scriptLi && !box.querySelector('script, img'), scriptLi?.textContent);
+  check('見出しの中のスクリプトは実行されない', w.__xss === undefined && !w.__alerted, String(w.__xss));
+  check('媒体名の HTML も文字として表示', box.textContent.includes('<b>媒体</b>') && !box.querySelector('b'));
+
+  // もう一度タップすると閉じる。ボタンを押しても開かない
+  click(w, rowOf(d, 'NVDA').querySelector('td.num'));
+  check('もう一度タップすると閉じる', !d.querySelector('tr.news-row'));
+  click(w, rowOf(d, 'NVDA').querySelector('a.chart-link'));
+  check('リンクを押しても行は開かない', !d.querySelector('tr.news-row'));
+
+  // 取得失敗の印
+  click(w, rowOf(d, 'AAPL').querySelector('td.num'));
+  const ab = await until(() => d.querySelector('tr.news-row[data-news-for="AAPL"]'));
+  check('取得失敗の銘柄は、前回の見出しと失敗の印を表示', ab?.querySelector('.warn')?.textContent.includes('失敗') && ab.textContent.includes('アップルの前回の見出し'));
+
+  // 検索名の編集
+  click(w, rowOf(d, '7203').querySelector('td.num'));
+  click(w, await until(() => d.querySelector('tr.news-row [data-act="sn-edit"]')));
+  const input = await until(() => d.querySelector('tr.news-row [data-role="sn-input"]'));
+  input.value = 'トヨタ OR TOYOTA';
+  click(w, d.querySelector('tr.news-row [data-act="sn-save"]'));
+  const tq = new URL(rowOf(d, '7203').querySelector('a[aria-label*="ニュース"]').href).searchParams.get('q');
+  check('画面から検索名を変更できる', tq === 'トヨタ OR TOYOTA', tq);
+
+  // 保有のチェック
+  const hold = rowOf(d, 'NVDA').querySelector('input[data-act="hold"]');
+  hold.checked = true;
+  hold.dispatchEvent(new w.Event('change', { bubbles: true }));
+
+  // ニュースタブ
+  click(w, d.querySelector('#tabs button[data-tab="news"]'));
+  check('ニュースタブに切り替わる', !d.getElementById('viewNews').hidden && d.getElementById('viewList').hidden);
+  const allLis = () => [...d.querySelectorAll('#newsAll .headlines li')];
+  const times = allLis().map(li => li.querySelector('.meta span')?.textContent);
+  check('全銘柄の見出しを新しい順に混ぜて表示', allLis().length === 10 && times[0] === '30分前' && allLis()[0].textContent.includes('トヨタ'), times.join(' / '));
+  check('ニュースタブに取得日時を表示（新しいので警告なし）', d.getElementById('newsStatus').textContent.includes('更新')
+    && ![...d.querySelectorAll('#newsStatus .warn')].some(e => e.textContent.includes('24時間')));
+  const sel = d.getElementById('newsFilter');
+  sel.value = '7203'; sel.dispatchEvent(new w.Event('change', { bubbles: true }));
+  check('銘柄で絞り込める', allLis().length === 1 && allLis()[0].textContent.includes('トヨタ'));
+  sel.value = 'all'; sel.dispatchEvent(new w.Event('change', { bubbles: true }));
+  const ho = d.getElementById('holdOnly');
+  ho.checked = true; ho.dispatchEvent(new w.Event('change', { bubbles: true }));
+  check('「保有のみ」で保有の銘柄だけになる', allLis().length === 7 && allLis().every(li => li.querySelector('.sym-tag').textContent === 'NVIDIA'), `${allLis().length} 件`);
+  ho.checked = false; ho.dispatchEvent(new w.Event('change', { bubbles: true }));
+
+  // キーワードの追加・削除
+  check('注意書き（重要度の判定ではない）を表示', d.getElementById('viewNews').textContent.includes('重要度を判定したものではありません'));
+  check('注意書き（正確さ・投資の助言）を表示', d.body.textContent.includes('内容の正確さは確認していません') && d.body.textContent.includes('投資の助言ではありません'));
+  const kwInput = d.getElementById('kwInput');
+  kwInput.value = '新製品';
+  d.getElementById('kwForm').dispatchEvent(new w.Event('submit', { bubbles: true, cancelable: true }));
+  const sliHot = () => allLis().find(li => li.textContent.includes('新製品'))?.querySelector('.hot');
+  check('キーワードを画面から追加できる', sliHot());
+  click(w, d.querySelector('#kwChips button[data-kw="新製品"]'));
+  check('キーワードを画面から削除できる', !sliHot());
+
+  // 保有の印はこのブラウザだけ
+  const saved = JSON.parse(localStorage.getItem('stock-news-v1'));
+  check('保有の印は localStorage（stock-news-v1）に保存', saved.holdings.includes('NVDA'));
+  check('保有の印は通信で送られない（GET で data/*.json を読むだけ）',
+    w.__fetchLog.every(f => f.method === 'GET' && f.body == null && /^data\/(quotes|news)\.json$/.test(f.url)), JSON.stringify(w.__fetchLog));
+  const wl = JSON.parse(localStorage.getItem('stock-watchlist-v1') || 'null');
+  check('既存の保存データの形は変わらない', !wl || (Object.keys(wl).sort().join() === 'currency,sort,watchlist'), JSON.stringify(wl && Object.keys(wl)));
+  check('エラーが出ない（ニュースあり）', w.__errors.length === 0, w.__errors.join(' | '));
+
+  // 再読み込みしても保有・タブ・検索名が残る
+  const r = await boot({ 'data/quotes.json': QUOTES, 'data/news.json': makeNews(HOUR) }, { keepStorage: true });
+  check('再読み込み後も保有・タブ・検索名が残る', r.d.getElementById('viewList').hidden
+    && rowOf(r.d, 'NVDA').querySelector('input[data-act="hold"]').checked
+    && new URL(rowOf(r.d, '7203').querySelector('a[aria-label*="ニュース"]').href).searchParams.get('q') === 'トヨタ OR TOYOTA');
+}
+
+async function testStale() {
+  const { w, d } = await boot({ 'data/quotes.json': QUOTES, 'data/news.json': makeNews(30 * HOUR) });
+  check('24時間より古い news.json は警告', [...d.querySelectorAll('#newsStatus .warn')].some(e => e.textContent.includes('24時間以上')));
+  check('取得失敗の銘柄をニュースタブで知らせる', d.getElementById('newsStatus').textContent.includes('取得に失敗した銘柄：Apple'));
+  check('エラーが出ない（古いデータ）', w.__errors.length === 0, w.__errors.join(' | '));
+}
+
+async function testNoNews() {
+  const { w, d } = await boot({ 'data/quotes.json': QUOTES });   // news.json がない
+  check('news.json がなくても一覧は表示される', symbols(d).length === 6);
+  check('news.json がなくてもニュースのリンクはある', rowOf(d, 'NVDA').querySelector('a[aria-label*="ニュース"]'));
+  click(w, rowOf(d, 'NVDA').querySelector('td.num'));
+  const box = await until(() => d.querySelector('tr.news-row'));
+  check('行を開くと、理由の説明とリンクを表示', box && box.textContent.includes('読めませんでした') && box.querySelector('a[href^="https://news.google.com/search"]'), box?.textContent);
+  click(w, d.querySelector('#tabs button[data-tab="news"]'));
+  check('ニュースタブは、理由の説明とリンクの一覧に切り替わる', d.querySelector('#newsStatus .warn')?.textContent.includes('data/news.json')
+    && d.querySelectorAll('#newsAll a[href^="https://news.google.com/search"]').length === 7 && d.getElementById('newsFilters').hidden);
+  check('エラーが出ない（news.json なし）', w.__errors.length === 0, w.__errors.join(' | '));
+}
+
+// 既存の機能が壊れていないか
+async function testExisting() {
+  const { w, d } = await boot({ 'data/quotes.json': QUOTES, 'data/news.json': makeNews(HOUR) });
+  check('既存：標準の6銘柄と指数カード4枚', symbols(d).join() === '7203,6758,9984,AAPL,NVDA,MSFT' && d.querySelectorAll('#indices .card').length === 4);
+  check('既存：価格と前日比を表示', rowOf(d, 'AAPL').querySelectorAll('td.num')[0].textContent.includes('107'));
+  check('既存：株価の取得日時を表示', d.getElementById('updated').textContent.includes('取得'));
+  const ch = rowOf(d, '7203').querySelector('a[aria-label*="チャート"]');
+  check('既存：チャートのリンク', ch.href === 'https://finance.yahoo.co.jp/quote/7203.T' && ch.target === '_blank' && ch.rel === 'noopener');
+
+  // 追加（ニュース検索名つき）
+  d.getElementById('inSymbol').value = 'crwd';
+  d.getElementById('inName').value = 'クラウドストライク';
+  d.getElementById('inCompany').value = 'クラウドストライク, CrowdStrike';
+  d.getElementById('addForm').dispatchEvent(new w.Event('submit', { bubbles: true, cancelable: true }));
+  await until(() => rowOf(d, 'CRWD'));
+  check('既存：銘柄を追加できる', symbols(d).at(-1) === 'CRWD');
+  check('追加時の会社名がニュースの検索名になる',
+    new URL(rowOf(d, 'CRWD').querySelector('a[aria-label*="ニュース"]').href).searchParams.get('q') === 'クラウドストライク OR CrowdStrike');
+  d.getElementById('inSymbol').value = 'AAPL';
+  d.getElementById('addForm').dispatchEvent(new w.Event('submit', { bubbles: true, cancelable: true }));
+  check('既存：重複はエラー', !d.getElementById('addError').hidden && d.getElementById('addError').textContent.includes('すでに'));
+
+  // 並べ替え
+  click(w, rowOf(d, '6758').querySelector('[data-act="up"]'));
+  check('既存：▲で上へ移動', symbols(d)[0] === '6758');
+  click(w, rowOf(d, '6758').querySelector('[data-act="down"]'));
+  check('既存：▼で下へ移動', symbols(d)[0] === '7203');
+  click(w, rowOf(d, '6758').querySelector('td.num'));   // 見出しを開いた状態でも並べ替えが動く
+  click(w, rowOf(d, '7203').querySelector('[data-act="down"]'));
+  check('見出しを開いたままでも▼が動く', symbols(d).slice(0, 2).join() === '6758,7203' && d.querySelector('tr.news-row[data-news-for="6758"]'));
+  click(w, d.querySelector('th[data-key="price"]'));
+  check('既存：列の見出しで並べ替え（現在値の降順）', symbols(d)[0] === 'MSFT' && !d.getElementById('btnManual').hidden, symbols(d).join());
+  click(w, d.getElementById('btnManual'));
+  check('既存：手動の並び順に戻す', symbols(d).slice(0, 2).join() === '6758,7203');
+
+  // 削除
+  click(w, rowOf(d, 'CRWD').querySelector('[data-act="del"]'));
+  check('既存：削除の確認が出る', rowOf(d, 'CRWD').querySelector('[data-act="del-yes"]'));
+  click(w, rowOf(d, 'CRWD').querySelector('[data-act="del-yes"]'));
+  check('既存：削除できる', !rowOf(d, 'CRWD'));
+
+  // 通貨
+  click(w, d.querySelector('#currencySeg button[data-cur="USD"]'));
+  check('既存：通貨をドルに切り替え', rowOf(d, '7203').querySelectorAll('td.num')[0].textContent.includes('$'));
+  check('エラーが出ない（既存の操作）', w.__errors.length === 0, w.__errors.join(' | '));
+
+  // 保存
+  const r = await boot({ 'data/quotes.json': QUOTES }, { keepStorage: true });
+  check('既存：並び順と通貨が保存される', symbols(r.d).slice(0, 2).join() === '6758,7203'
+    && r.d.querySelector('#currencySeg button[data-cur="USD"]').getAttribute('aria-pressed') === 'true');
+}
+
+(async () => {
+  const backup = KEYS.map(k => localStorage.getItem(k));
+  try {
+    source = await (await fetch('../stock.html', { cache: 'no-cache' })).text();
+    for (const t of [testWithNews, testStale, testNoNews, testExisting]) {
+      try { await t(); } catch (e) { check(`${t.name} の実行`, false, e.stack || String(e)); }
+    }
+  } catch (e) {
+    check('stock.html の読み込み', false, String(e));
+  } finally {
+    KEYS.forEach((k, i) => backup[i] == null ? localStorage.removeItem(k) : localStorage.setItem(k, backup[i]));
+  }
+  const failed = results.filter(r => !r.ok);
+  const pre = document.getElementById('result');
+  pre.replaceChildren(...results.map(r => {
+    const s = document.createElement('div');
+    s.className = r.ok ? 'pass' : 'fail';
+    s.textContent = `${r.ok ? 'PASS' : 'FAIL'}  ${r.name}${!r.ok && r.detail ? `\n      → ${r.detail}` : ''}`;
+    return s;
+  }));
+  const summary = document.createElement('div');
+  summary.id = 'summary';
+  summary.textContent = `\n合計 ${results.length} 件：成功 ${results.length - failed.length} 件、失敗 ${failed.length} 件`;
+  pre.append(summary);
+  document.title = failed.length ? `FAIL ${failed.length}/${results.length}` : `PASS ${results.length}/${results.length}`;
+  document.body.dataset.done = '1';
+})();
+</script>
+</body>
+</html>

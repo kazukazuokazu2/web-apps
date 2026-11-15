@@ -39,6 +39,7 @@
   }
 
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   body {
     margin: 0;
     background: var(--bg);
@@ -97,6 +98,7 @@
   .add-form input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
   #inSymbol { width: 9em; }
   #inName { flex: 1 1 10em; min-width: 0; }
+  #inCompany { flex: 1 1 16em; min-width: 0; }
   .error { flex-basis: 100%; color: var(--danger); font-size: 13px; margin: 0; }
 
   .toolbar {
@@ -141,6 +143,41 @@
   .empty { padding: 32px 16px; text-align: center; color: var(--muted); }
   .missing { margin: 0; padding: 10px 16px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; }
 
+  /* ===== ニュース ===== */
+  :root { --warn: #9a6700; --warn-bg: #fff4d6; --hot: #b4235a; --hot-bg: #fde7ef; }
+  @media (prefers-color-scheme: dark) { :root { --warn: #e3b341; --warn-bg: #3a2f12; --hot: #f37aa6; --hot-bg: #3d1a28; } }
+  .tabs { display: flex; gap: 4px; margin-bottom: 12px; border-bottom: 1px solid var(--border); }
+  .tabs button { border: none; border-bottom: 2px solid transparent; border-radius: 0; background: none; padding: 8px 14px; color: var(--muted); }
+  .tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+  .disclaimer { margin: 0 0 16px; color: var(--muted); font-size: 12px; }
+  .section-head { display: flex; justify-content: space-between; align-items: baseline; margin: 0 0 8px; color: var(--muted); font-size: 13px; }
+  .hold { display: inline-flex; align-items: center; gap: 2px; margin-left: 8px; font-size: 12px; color: var(--muted); cursor: pointer; white-space: nowrap; }
+  .hold input { margin: 0; }
+  tr[data-symbol] { cursor: pointer; }
+  tr.open td { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+  tr.news-row > td { white-space: normal; padding: 4px 16px 14px; border-top: none; background: color-mix(in srgb, var(--accent) 6%, transparent); cursor: default; }
+  .headlines { list-style: none; margin: 0; padding: 0; }
+  .headlines li { padding: 6px 0; border-top: 1px solid var(--border); }
+  .headlines li:first-child { border-top: none; }
+  .headlines a { color: var(--text); text-decoration: none; }
+  .headlines a:hover, .headlines a:focus-visible { text-decoration: underline; color: var(--accent); }
+  .meta { display: block; color: var(--muted); font-size: 12px; margin-top: 1px; }
+  .meta > * + *::before { content: "・"; }
+  .hot { display: inline-block; font-size: 11px; font-weight: 600; color: var(--hot); background: var(--hot-bg); border-radius: 4px; padding: 0 5px; margin-right: 6px; vertical-align: 1px; }
+  .sym-tag { display: inline-block; font-size: 11px; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; margin-right: 6px; vertical-align: 1px; }
+  .note { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
+  .warn { color: var(--warn); background: var(--warn-bg); border-radius: 6px; padding: 6px 10px; font-size: 13px; margin: 0 0 10px; }
+  .news-panel { padding: 14px 16px; }
+  .news-panel + .news-panel { border-top: 1px solid var(--border); }
+  .filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-bottom: 10px; }
+  .filters select, .inline-input { font: inherit; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+  .chip { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--border); border-radius: 999px; padding: 1px 4px 1px 10px; font-size: 13px; }
+  .chip button { border: none; background: none; padding: 0 6px; color: var(--muted); }
+  .search-names { margin-top: 8px; font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .search-names button { padding: 1px 8px; font-size: 12px; }
+  .link-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 16px; }
+
   @media (max-width: 560px) {
     .col-chg { display: none; }   /* 狭い画面では前日比（値）を省略し、%のみ表示 */
     th, td { padding: 8px 6px; }
@@ -161,12 +198,21 @@
     </div>
   </header>
 
+  <nav class="tabs" role="tablist" id="tabs">
+    <button role="tab" data-tab="list" aria-selected="true" aria-controls="viewList">一覧</button>
+    <button role="tab" data-tab="news" aria-selected="false" aria-controls="viewNews">ニュース</button>
+  </nav>
+  <p class="disclaimer">ニュースは見出しだけの表示で、内容の正確さは確認していません。投資の助言ではありません。</p>
+
+  <div id="viewList" role="tabpanel">
+  <div class="section-head"><span>指数・為替</span><span id="marketNewsLink"></span></div>
   <section class="indices" id="indices"></section>
 
   <section class="panel">
     <form class="add-form" id="addForm" autocomplete="off">
       <input id="inSymbol" placeholder="コード（例: 7203, AAPL）" aria-label="銘柄コード">
       <input id="inName" placeholder="銘柄名（例: トヨタ自動車）" aria-label="銘柄名">
+      <input id="inCompany" placeholder="ニュース検索名（任意。例: エヌビディア OR NVIDIA）" aria-label="ニュース検索用の会社名">
       <button type="submit" class="primary">追加</button>
       <p class="error" id="addError" hidden></p>
     </form>
@@ -200,6 +246,31 @@
     <div class="empty" id="empty" hidden>銘柄がありません。上のフォームから追加してください。</div>
     <p class="missing" id="missing" hidden></p>
   </section>
+  </div>
+
+  <div id="viewNews" role="tabpanel" hidden>
+    <section class="panel">
+      <div class="news-panel">
+        <div id="newsStatus"></div>
+        <div class="filters" id="newsFilters">
+          <label>銘柄 <select id="newsFilter"></select></label>
+          <label class="hold"><input type="checkbox" id="holdOnly"> 保有のみ</label>
+        </div>
+        <div id="newsAll"></div>
+      </div>
+      <div class="news-panel">
+        <div class="section-head" style="margin:0"><span>「注目」の目印を付けるキーワード</span>
+          <button id="kwReset" type="button">標準に戻す</button></div>
+        <div class="chips" id="kwChips"></div>
+        <form id="kwForm" autocomplete="off" style="display:flex;gap:6px">
+          <input class="inline-input" id="kwInput" placeholder="キーワードを追加" aria-label="追加するキーワード">
+          <button type="submit">追加</button>
+        </form>
+        <p class="note">「注目」は、見出しにキーワードが含まれているかどうかの目印です。記事の重要度を判定したものではありません。</p>
+        <p class="note">「保有」の印、キーワード、検索名の変更は、このブラウザだけに保存されます（サーバーやリポジトリには送られません）。</p>
+      </div>
+    </section>
+  </div>
 </div>
 
 <script>
@@ -342,6 +413,374 @@ function chartLink(symbol, market, name) {
     <path d="M5 2H2v8h8V7M7 2h3v3M10 2 5.5 6.5"/></svg></a>`;
 }
 
+// ===== ニュース：設定 =====
+// 見出しは GitHub Actions（.github/workflows/news.yml）が定期的に取得し、data/news.json に保存している
+// （scripts/fetch_news.py）。取得する銘柄と検索語は data/news-targets.json に書く。
+const NEWS_URL = 'data/news.json';
+const NEWS_STORAGE_KEY = 'stock-news-v1';   // 保有・キーワード・検索名の変更（このブラウザだけに保存）
+const MARKET = 'MARKET';                    // 指数（^N225 など）をまとめた「市場ニュース」
+const MARKET_LABEL = '市場ニュース';
+const NEWS_STALE_MS = 24 * 60 * 60 * 1000;  // これより古い news.json は警告する
+const ROW_HEADLINES = 5;                    // 行を開いたときに表示する件数
+
+// 銘柄ごとのニュース検索名（Googleニュースでどれかを含む記事を探す）。ここにない銘柄は銘柄名で検索する。
+// 画面から変えた検索名は、このブラウザに保存され、こちらより優先される
+const SEARCH_NAMES = {
+  [MARKET]: ['日経平均', '米国株', '株式市場'],
+  '7203': ['トヨタ自動車'],
+  '6758': ['ソニーグループ'],
+  '9984': ['ソフトバンクグループ'],
+  'AAPL': ['アップル', 'Apple'],
+  'NVDA': ['エヌビディア', 'NVIDIA'],
+  'MSFT': ['マイクロソフト', 'Microsoft'],
+  'TSLA': ['テスラ', 'Tesla'],
+};
+
+// 「注目」の目印を付けるキーワード（見出しに含まれていたら付ける。重要度の判定ではない）
+const DEFAULT_KEYWORDS = ['退任', '辞任', '解任', '後任', 'CEO', 'CFO', '社長', '決算', '業績', '下方修正', '上方修正',
+  '不正', '調査', '訴訟', '規制', '買収', '合併', '提携', 'リコール', '供給', '増資', '自社株買い'];
+
+const newsState = {
+  data: null,          // news.json の中身（読めなかったら null）
+  error: null,         // 読めなかった理由
+  holdings: new Set(), // 保有の印を付けた symbol
+  keywords: [...DEFAULT_KEYWORDS],
+  searchNames: {},     // 画面で変えた検索名 symbol -> [語]
+  tab: 'list',
+  openSymbol: null,    // 行を開いている銘柄
+  editSymbol: null,    // 検索名を編集している銘柄
+  filter: 'all',       // ニュースタブの絞り込み（'all' か symbol）
+  holdOnly: false,
+};
+
+function loadNewsPrefs() {
+  try {
+    const p = JSON.parse(localStorage.getItem(NEWS_STORAGE_KEY));
+    if (!p) return;
+    if (Array.isArray(p.holdings)) newsState.holdings = new Set(p.holdings.map(String));
+    if (Array.isArray(p.keywords)) newsState.keywords = p.keywords.map(String).filter(Boolean);
+    if (p.searchNames && typeof p.searchNames === 'object') newsState.searchNames = p.searchNames;
+    if (p.tab === 'news') newsState.tab = 'news';
+    newsState.holdOnly = !!p.holdOnly;
+  } catch (e) { /* 保存領域が使えない環境では標準の設定で動かす */ }
+}
+
+function saveNewsPrefs() {
+  try {
+    localStorage.setItem(NEWS_STORAGE_KEY, JSON.stringify({
+      holdings: [...newsState.holdings], keywords: newsState.keywords,
+      searchNames: newsState.searchNames, tab: newsState.tab, holdOnly: newsState.holdOnly,
+    }));
+  } catch (e) { /* 保存できなくても画面は動かす */ }
+}
+
+// ===== ニュース：検索名とリンク =====
+// 「エヌビディア OR NVIDIA」「エヌビディア, NVIDIA」などの入力を、語の配列にする
+function parseSearchNames(text) {
+  return String(text).split(/\s+OR\s+|[,、，\/]/i).map(s => s.trim()).filter(Boolean).slice(0, 5);
+}
+
+function searchNamesOf(symbol, name) {
+  const own = newsState.searchNames[symbol];
+  if (Array.isArray(own) && own.length) return own;
+  if (SEARCH_NAMES[symbol]) return SEARCH_NAMES[symbol];
+  return [name && name !== symbol ? name : symbol];
+}
+
+function newsSearchUrl(terms) {
+  const q = terms.map(t => /\s/.test(t) ? `"${t}"` : t).join(' OR ');
+  return `https://news.google.com/search?q=${encodeURIComponent(q)}&hl=ja&gl=JP&ceid=JP:ja`;
+}
+
+function newsLink(symbol, name, text = 'ニュース') {
+  return `<a class="chart-link" href="${escapeHtml(newsSearchUrl(searchNamesOf(symbol, name)))}" target="_blank" rel="noopener" draggable="false"
+    aria-label="${escapeHtml(name)}のニュース（Googleニュース・新しいタブで開く）">${escapeHtml(text)}<svg class="ext" viewBox="0 0 12 12" aria-hidden="true">
+    <path d="M5 2H2v8h8V7M7 2h3v3M10 2 5.5 6.5"/></svg></a>`;
+}
+
+// ===== ニュース：見出しの読み込みと表示 =====
+async function fetchNews() {
+  try {
+    const res = await fetch(NEWS_URL, { cache: 'no-cache' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (!data || typeof data.news !== 'object') throw new Error('形式が違います');
+    newsState.data = data;
+    newsState.error = null;
+  } catch (e) {
+    newsState.data = null;
+    newsState.error = location.protocol === 'file:'
+      ? 'ファイルを直接開いているため、見出しのデータ（data/news.json）を読めません。サイト（GitHub Pages など）から開くと表示されます。'
+      : `見出しのデータ（data/news.json）を読めませんでした（${e.message}）。まだ取得されていない可能性があります。`;
+  }
+}
+
+function headlinesOf(symbol) {
+  const items = newsState.data?.news?.[symbol]?.items;
+  return Array.isArray(items) ? items : null;
+}
+
+function matchedKeywords(title) {
+  const t = String(title).toLowerCase();
+  return newsState.keywords.filter(k => t.includes(k.toLowerCase()));
+}
+
+function timeAgo(iso) {
+  const t = Date.parse(iso);
+  if (!t) return '';
+  const min = Math.max(0, Math.floor((Date.now() - t) / 60000));
+  if (min < 60) return `${Math.max(1, min)}分前`;
+  if (min < 60 * 24) return `${Math.floor(min / 60)}時間前`;
+  return `${Math.floor(min / 60 / 24)}日前`;
+}
+
+// 見出しの一覧を作る。見出し・媒体名は textContent で入れるので、HTML として解釈されない
+function headlineList(items, { tagOf } = {}) {
+  const ul = document.createElement('ul');
+  ul.className = 'headlines';
+  for (const it of items) {
+    const li = document.createElement('li');
+    const hits = matchedKeywords(it.title);
+    if (hits.length) {
+      const b = document.createElement('span');
+      b.className = 'hot';
+      b.textContent = '注目';
+      b.title = `キーワード：${hits.join('、')}（重要度の判定ではありません）`;
+      li.append(b);
+    }
+    if (tagOf) {
+      const tag = document.createElement('span');
+      tag.className = 'sym-tag';
+      tag.textContent = tagOf(it);
+      li.append(tag);
+    }
+    const link = String(it.link || '');
+    const a = document.createElement(/^https?:\/\//i.test(link) ? 'a' : 'span');
+    if (a.tagName === 'A') { a.href = link; a.target = '_blank'; a.rel = 'noopener'; }
+    a.textContent = it.title;
+    const meta = document.createElement('span');
+    meta.className = 'meta';
+    for (const text of [timeAgo(it.published), it.source]) {
+      if (!text) continue;
+      const s = document.createElement('span');
+      s.textContent = text;
+      meta.append(s);
+    }
+    li.append(a, meta);
+    ul.append(li);
+  }
+  return ul;
+}
+
+function el(tag, className, text) {
+  const e = document.createElement(tag);
+  if (className) e.className = className;
+  if (text != null) e.textContent = text;
+  return e;
+}
+
+function failureNote(symbol) {
+  const err = newsState.data?.errors?.[symbol];
+  if (!err) return null;
+  const since = Date.parse(err.since);
+  const when = since ? new Date(since).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+  return el('p', 'warn', `前回の取得に失敗しました${when ? `（${when}から）` : ''}。表示は前回までの見出しです。`);
+}
+
+// 行を開いたときの中身
+function fillRowNews(box, s) {
+  box.replaceChildren();
+  const items = headlinesOf(s.symbol);
+  if (!newsState.data) {
+    box.append(el('p', 'note', newsState.error));
+    const p = el('p', 'note');
+    p.innerHTML = `Googleニュースで探す：${newsLink(s.symbol, s.name)}`;
+    box.append(p);
+  } else if (!items) {
+    box.append(el('p', 'note', 'この銘柄の見出しはまだ取得していません。リポジトリの data/news-targets.json に追加すると、次の自動取得から表示されます。'));
+    const p = el('p', 'note');
+    p.innerHTML = `Googleニュースで探す：${newsLink(s.symbol, s.name)}`;
+    box.append(p);
+  } else {
+    const fail = failureNote(s.symbol);
+    if (fail) box.append(fail);
+    if (items.length) box.append(headlineList(items.slice(0, ROW_HEADLINES)));
+    else box.append(el('p', 'note', '直近7日間の見出しはありません。'));
+  }
+
+  // 検索名（リンクの検索語）の表示と編集
+  const sn = el('div', 'search-names');
+  if (newsState.editSymbol === s.symbol) {
+    const input = el('input', 'inline-input');
+    input.value = searchNamesOf(s.symbol, s.name).join(' OR ');
+    input.setAttribute('aria-label', `${s.name}のニュース検索名`);
+    input.dataset.role = 'sn-input';
+    input.size = 28;
+    const ok = el('button', 'primary', '保存'); ok.dataset.act = 'sn-save';
+    const reset = el('button', '', '標準に戻す'); reset.dataset.act = 'sn-reset';
+    const cancel = el('button', '', 'キャンセル'); cancel.dataset.act = 'sn-cancel';
+    sn.append(el('span', '', '検索名：'), input, ok, reset, cancel);
+  } else {
+    const edit = el('button', '', '編集'); edit.dataset.act = 'sn-edit';
+    sn.append(el('span', '', `検索名：${searchNamesOf(s.symbol, s.name).join(' OR ')}`), edit);
+  }
+  box.append(sn);
+  if (newsState.data && items) box.append(el('p', 'note', '見出しの自動取得は data/news-targets.json の検索語を使います（ここでの変更はリンクだけに反映されます）。'));
+}
+
+function onNewsRowClick(e, symbol) {
+  const btn = e.target.closest('button[data-act]');
+  if (!btn) return;
+  const s = state.watchlist.find(x => x.symbol === symbol);
+  if (!s) return;
+  switch (btn.dataset.act) {
+    case 'sn-edit': newsState.editSymbol = symbol; break;
+    case 'sn-cancel': newsState.editSymbol = null; break;
+    case 'sn-reset': delete newsState.searchNames[symbol]; newsState.editSymbol = null; saveNewsPrefs(); break;
+    case 'sn-save': {
+      const terms = parseSearchNames(btn.parentElement.querySelector('[data-role="sn-input"]').value);
+      if (terms.length) newsState.searchNames[symbol] = terms; else delete newsState.searchNames[symbol];
+      newsState.editSymbol = null;
+      saveNewsPrefs();
+      break;
+    }
+    default: return;
+  }
+  renderTable();
+}
+
+function newsUpdatedText() {
+  const t = Date.parse(newsState.data?.updatedAt);
+  if (!t) return null;
+  const s = new Date(t).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return { text: `見出し ${s} 更新`, stale: Date.now() - t > NEWS_STALE_MS };
+}
+
+// ニュースタブ
+function renderNewsTab() {
+  const status = document.getElementById('newsStatus');
+  const all = document.getElementById('newsAll');
+  const filters = document.getElementById('newsFilters');
+  status.replaceChildren();
+  all.replaceChildren();
+
+  const names = {};   // symbol -> 表示名
+  names[MARKET] = MARKET_LABEL;
+  for (const [sym, v] of Object.entries(newsState.data?.news || {})) names[sym] = v?.label || sym;
+  for (const s of state.watchlist) names[s.symbol] = s.name;
+
+  if (!newsState.data) {
+    filters.hidden = true;
+    status.append(el('p', 'warn', newsState.error || '見出しのデータを読み込み中です。'));
+    all.append(el('p', 'note', 'Googleニュースで探す：'));
+    const ul = el('ul', 'link-list');
+    ul.innerHTML = [{ symbol: MARKET, name: MARKET_LABEL }, ...state.watchlist]
+      .map(s => `<li>${escapeHtml(s.name)} ${newsLink(s.symbol, s.name)}</li>`).join('');
+    all.append(ul);
+    return;
+  }
+  filters.hidden = false;
+
+  const up = newsUpdatedText();
+  if (up) status.append(el('p', up.stale ? 'warn' : 'note', up.stale ? `${up.text}（24時間以上更新されていません）` : up.text));
+  const failed = Object.keys(newsState.data.errors || {});
+  if (failed.length) status.append(el('p', 'warn', `取得に失敗した銘柄：${failed.map(s => names[s] || s).join('、')}（前回までの見出しを表示しています）`));
+
+  // 絞り込みの選択肢
+  const sel = document.getElementById('newsFilter');
+  const syms = [MARKET, ...state.watchlist.map(s => s.symbol), ...Object.keys(newsState.data.news)]
+    .filter((s, i, a) => a.indexOf(s) === i && headlinesOf(s));
+  if (newsState.filter !== 'all' && !syms.includes(newsState.filter)) newsState.filter = 'all';
+  sel.replaceChildren(new Option('すべて', 'all'), ...syms.map(s => new Option(names[s] || s, s)));
+  sel.value = newsState.filter;
+  document.getElementById('holdOnly').checked = newsState.holdOnly;
+
+  // 全銘柄の見出しを、新しい順に混ぜる（同じ記事は 1 回だけ）
+  const seen = new Set();
+  const merged = [];
+  for (const sym of syms) {
+    if (newsState.filter !== 'all' && sym !== newsState.filter) continue;
+    if (newsState.holdOnly && !newsState.holdings.has(sym)) continue;
+    for (const it of headlinesOf(sym)) {
+      const key = it.link || it.title;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push({ ...it, _sym: sym });
+    }
+  }
+  merged.sort((a, b) => (Date.parse(b.published) || 0) - (Date.parse(a.published) || 0));
+
+  if (!merged.length) {
+    all.append(el('p', 'note', newsState.holdOnly && !newsState.holdings.size
+      ? '「保有」の印を付けた銘柄がありません。一覧タブの各銘柄の「保有」にチェックを付けてください。'
+      : '表示する見出しがありません。'));
+  } else {
+    all.append(headlineList(merged, { tagOf: it => names[it._sym] || it._sym }));
+  }
+}
+
+function renderKeywords() {
+  const box = document.getElementById('kwChips');
+  box.replaceChildren(...newsState.keywords.map(k => {
+    const chip = el('span', 'chip', k);
+    const x = el('button', '', '×');
+    x.type = 'button';
+    x.dataset.kw = k;
+    x.setAttribute('aria-label', `キーワード「${k}」を削除`);
+    chip.append(x);
+    return chip;
+  }));
+  if (!newsState.keywords.length) box.append(el('span', 'note', 'キーワードがありません。'));
+}
+
+function renderTabs() {
+  document.querySelectorAll('#tabs button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === newsState.tab)));
+  document.getElementById('viewList').hidden = newsState.tab !== 'list';
+  document.getElementById('viewNews').hidden = newsState.tab !== 'news';
+}
+
+function renderNews() {
+  document.getElementById('marketNewsLink').innerHTML = newsLink(MARKET, MARKET_LABEL, MARKET_LABEL);
+  renderTabs();
+  renderNewsTab();
+  renderKeywords();
+}
+
+function setupNews() {
+  document.getElementById('tabs').addEventListener('click', e => {
+    const tab = e.target.closest('button[data-tab]')?.dataset.tab;
+    if (!tab) return;
+    newsState.tab = tab;
+    saveNewsPrefs();
+    renderTabs();
+  });
+  document.getElementById('newsFilter').addEventListener('change', e => { newsState.filter = e.target.value; renderNewsTab(); });
+  document.getElementById('holdOnly').addEventListener('change', e => { newsState.holdOnly = e.target.checked; saveNewsPrefs(); renderNewsTab(); });
+  document.getElementById('kwChips').addEventListener('click', e => {
+    const k = e.target.closest('button[data-kw]')?.dataset.kw;
+    if (k == null) return;
+    newsState.keywords = newsState.keywords.filter(x => x !== k);
+    saveNewsPrefs();
+    renderNews(); renderTable();
+  });
+  document.getElementById('kwForm').addEventListener('submit', e => {
+    e.preventDefault();
+    const input = document.getElementById('kwInput');
+    const k = input.value.trim();
+    if (k && !newsState.keywords.includes(k)) {
+      newsState.keywords.push(k);
+      saveNewsPrefs();
+      renderNews(); renderTable();
+    }
+    input.value = '';
+  });
+  document.getElementById('kwReset').addEventListener('click', () => {
+    newsState.keywords = [...DEFAULT_KEYWORDS];
+    saveNewsPrefs();
+    renderNews(); renderTable();
+  });
+}
+
 // ===== 通貨 =====
 const CURRENCY_OF = { JP: 'JPY', US: 'USD' };   // 市場 → 現地通貨
 function fxRate() { return state.quotes[FX_SYMBOL]?.price ?? null; }
@@ -445,18 +884,26 @@ function renderTable() {
            <button data-act="down" ${!manual || i === list.length - 1 ? 'disabled' : ''} aria-label="下へ">▼</button>
          </span>
          <button class="del" data-act="del" aria-label="削除">×</button>`;
-    return `<tr data-symbol="${escapeHtml(s.symbol)}" draggable="${manual}">
+    const open = newsState.openSymbol === s.symbol;
+    const newsRow = open ? `<tr class="news-row" data-news-for="${escapeHtml(s.symbol)}" draggable="false"><td colspan="9"><div class="news-box"></div></td></tr>` : '';
+    return `<tr data-symbol="${escapeHtml(s.symbol)}" draggable="${manual}" class="${open ? 'open' : ''}" aria-expanded="${open}"
+        title="タップすると、この銘柄の見出しを表示します">
       <td class="handle"><span title="${manual ? 'ドラッグで並べ替え' : '手動の並び順に戻すと並べ替えできます'}">⋮⋮</span></td>
       <td class="sym">${escapeHtml(s.symbol)}<span class="mkt">${s.market}</span></td>
-      <td class="name">${escapeHtml(s.name)}${chartLink(s.symbol, s.market, s.name)}</td>
+      <td class="name">${escapeHtml(s.name)}${chartLink(s.symbol, s.market, s.name)}${newsLink(s.symbol, s.name)}<label class="hold"
+        title="保有の印（このブラウザだけに保存）"><input type="checkbox" data-act="hold" ${newsState.holdings.has(s.symbol) ? 'checked' : ''}
+        aria-label="${escapeHtml(s.name)}を保有として印を付ける">保有</label></td>
       <td class="num">${c ? money(c.price) : '—'}</td>
       <td class="num col-chg ${cls}">${c ? signed(money(Math.abs(c.change)), c.change) : '—'}</td>
       <td class="num">${pctBadge(c?.changePct)}</td>
       <td class="num">${pctBadge(c?.monthPct)}</td>
       <td class="num">${pctBadge(c?.ytdPct)}</td>
       <td class="actions">${actions}</td>
-    </tr>`;
+    </tr>${newsRow}`;
   }).join('');
+  const openTr = tbody.querySelector('tr.news-row');
+  const openStock = openTr && state.watchlist.find(s => s.symbol === openTr.dataset.newsFor);
+  if (openStock) fillRowNews(openTr.querySelector('.news-box'), openStock);
 
   document.getElementById('empty').hidden = list.length > 0;
   document.getElementById('countLabel').textContent = `${list.length} 銘柄`;
@@ -497,7 +944,7 @@ function renderCurrencySeg() {
   document.querySelectorAll('#currencySeg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.cur === state.currency)));
 }
 
-function render() { renderIndices(); renderTable(); renderUpdated(); renderCurrencySeg(); }
+function render() { renderIndices(); renderTable(); renderUpdated(); renderCurrencySeg(); renderNews(); }
 
 // ===== 操作 =====
 async function refresh() {
@@ -505,7 +952,7 @@ async function refresh() {
   btn.disabled = true;
   try {
     const symbols = [...INDICES, ...state.watchlist].map(s => s.symbol).concat(FX_SYMBOL);
-    state.quotes = await fetchQuotes(symbols);
+    [state.quotes] = await Promise.all([fetchQuotes(symbols), fetchNews()]);
   } finally {
     btn.disabled = false;
     render();
@@ -534,11 +981,16 @@ async function addStock(e) {
 
   state.watchlist.push({ symbol, name: name || symbol, market: guessMarket(symbol) });
   save();
+  const companyInput = document.getElementById('inCompany');
+  const terms = parseSearchNames(companyInput.value);
+  if (terms.length) { newsState.searchNames[symbol] = terms; saveNewsPrefs(); }
   Object.assign(state.quotes, await fetchQuotes([symbol]));
   symInput.value = '';
   nameInput.value = '';
+  companyInput.value = '';
   symInput.focus();
   renderTable();
+  renderNewsTab();
 }
 
 function moveStock(symbol, delta) {
@@ -552,8 +1004,18 @@ function moveStock(symbol, delta) {
 }
 
 function onTableClick(e) {
+  const newsTr = e.target.closest('tr.news-row');
+  if (newsTr) return onNewsRowClick(e, newsTr.dataset.newsFor);
   const btn = e.target.closest('button[data-act]');
-  if (!btn) return;
+  if (!btn) {
+    // 行をタップしたら見出しを開く・閉じる（リンク・チェック・ドラッグ用のつまみを押したときは除く）
+    const tr = e.target.closest('tr[data-symbol]');
+    if (!tr || e.target.closest('a, input, label, .handle')) return;
+    newsState.openSymbol = newsState.openSymbol === tr.dataset.symbol ? null : tr.dataset.symbol;
+    newsState.editSymbol = null;
+    renderTable();
+    return;
+  }
   const symbol = btn.closest('tr').dataset.symbol;
   switch (btn.dataset.act) {
     case 'up': moveStock(symbol, -1); break;
@@ -564,8 +1026,11 @@ function onTableClick(e) {
       state.watchlist = state.watchlist.filter(s => s.symbol !== symbol);
       delete state.quotes[symbol];
       state.confirmDelete = null;
+      if (newsState.openSymbol === symbol) newsState.openSymbol = null;
+      if (newsState.holdings.delete(symbol)) saveNewsPrefs();
       save();
       renderTable();
+      renderNewsTab();
       break;
   }
 }
@@ -590,7 +1055,7 @@ function clearDropMarks() {
 
 function setupDragAndDrop(tbody) {
   tbody.addEventListener('dragstart', e => {
-    const tr = e.target.closest('tr');
+    const tr = e.target.closest('tr[data-symbol]');
     if (!tr || state.sort) return e.preventDefault();
     dragSymbol = tr.dataset.symbol;
     tr.classList.add('dragging');
@@ -598,7 +1063,7 @@ function setupDragAndDrop(tbody) {
     e.dataTransfer.setData('text/plain', dragSymbol);
   });
   tbody.addEventListener('dragover', e => {
-    const tr = e.target.closest('tr');
+    const tr = e.target.closest('tr[data-symbol]');
     if (!dragSymbol || !tr) return;
     e.preventDefault();
     clearDropMarks();
@@ -606,7 +1071,7 @@ function setupDragAndDrop(tbody) {
     tr.classList.add(e.clientY < rect.top + rect.height / 2 ? 'drop-before' : 'drop-after');
   });
   tbody.addEventListener('drop', e => {
-    const tr = e.target.closest('tr');
+    const tr = e.target.closest('tr[data-symbol]');
     if (!dragSymbol || !tr) return;
     e.preventDefault();
     const after = tr.classList.contains('drop-after');
@@ -628,6 +1093,9 @@ function setupDragAndDrop(tbody) {
 // ===== 起動 =====
 function init() {
   load();
+  loadNewsPrefs();
+  setupNews();
+  renderNews();   // 見出しの読み込み前に、タブとリンクを表示しておく
   const tbody = document.getElementById('tbody');
   document.getElementById('addForm').addEventListener('submit', addStock);
   document.getElementById('btnRefresh').addEventListener('click', refresh);
@@ -642,6 +1110,20 @@ function init() {
   });
   document.querySelector('thead').addEventListener('click', onHeaderClick);
   tbody.addEventListener('click', onTableClick);
+  tbody.addEventListener('change', e => {   // 保有の印
+    const box = e.target.closest('input[data-act="hold"]');
+    if (!box) return;
+    const symbol = box.closest('tr').dataset.symbol;
+    if (box.checked) newsState.holdings.add(symbol); else newsState.holdings.delete(symbol);
+    saveNewsPrefs();
+    renderNewsTab();
+  });
+  tbody.addEventListener('keydown', e => {   // 検索名の入力欄で Enter を押したら保存
+    if (e.key === 'Enter' && e.target.dataset.role === 'sn-input') {
+      e.preventDefault();
+      e.target.parentElement.querySelector('[data-act="sn-save"]').click();
+    }
+  });
   setupDragAndDrop(tbody);
   refresh();
 }
