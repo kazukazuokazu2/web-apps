@@ -2396,14 +2396,21 @@ const PcsCalc = (() => {
       tip: k => `<b>節点 ${k}</b><br>` + series.map(s => `${esc(s.name)}：${fmt(s.raw[k])} V`).join('<br>')
     });
     if (cmp.kind === 'step') {
-      const series = r.rows.map(x => ({ name: P.MODES[x.mode], color: MODE_COLOR[x.mode], width: x.mode === 'E' ? 2.5 : 2, dash: x.mode === 'A' ? '5 4' : '', pts: profilePts(x.pf, conv), raw: x.pf.Vll }));
+      // 線の形：A＝灰の破線、B＝細い実線、C＝点線（上に描く）、E＝太い実線。C と E が重なっても両方見えるように、E を先に・太く描く
+      const LINE = { A: { width: 2, dash: '5 4' }, B: { width: 2 }, C: { width: 2.5, dash: '2 4' }, D: { width: 2, dash: '8 3' }, E: { width: 5, opacity: 0.55 } };
+      const drawOrder = ['A', 'B', 'D', 'E', 'C'];
+      const series = r.rows.slice().sort((a, b) => drawOrder.indexOf(a.mode) - drawOrder.indexOf(b.mode))
+        .map(x => Object.assign({ name: P.MODES[x.mode], color: MODE_COLOR[x.mode], pts: profilePts(x.pf, conv), raw: x.pf.Vll }, LINE[x.mode]));
+      const rowC = r.rows.find(x => x.mode === 'C'), rowE = r.rows.find(x => x.mode === 'E');
+      const sameCE = rowC && rowE && rowC.pf.Vll.every((v, k) => Math.abs(v - rowE.pf.Vll[k]) < 0.5);
       const last = r.rows[r.rows.length - 1];
       const rows = r.rows.map((x, i) => `<tr><td>${esc(P.MODES[x.mode])}</td><td>${fmt(x.vPcs)}</td><td class="${x.maxV > m.limits.hi ? 'bad' : ''}">${fmt(x.maxV)}（節点${x.iMax}）</td><td>${i ? sgnV(x.maxV - r.rows[i - 1].maxV) : '—'}</td><td>${fmt(x.curt)}</td><td>${fmt(x.absorb)}</td><td>${fmt(x.loss, 1)}（${sgnV(x.dLoss, 1)}）</td><td>${fmt(x.lrtQ)}</td><td>${x.converged ? x.iter + ' 回' : '<span class="fail">収束せず</span>'}</td></tr>`).join('');
       const sw = r.sweep.map(x => `<tr><td>${x.pv}%${x.mult !== 1 ? `（定格 ${x.mult} 倍に増設）` : ''}${x.sRatio ? '（PCS 容量 S＝定格 P、余裕なし）' : ''}</td><td>${fmt(x.kW)}</td><td>${fmt(x.vPcs0)}</td><td>${fmt(x.vPcs)}（${(x.vPcs / m.Vbase).toFixed(3)}pu）</td><td>${fmt(x.absorb)}</td><td class="${x.curt > 0.5 ? 'bad' : ''}">${fmt(x.curt)}</td><td>${!x.converged ? '<span class="fail">収束せず</span>' : x.firstOk ? '' : `<span class="fail">α=${M().pcsOpt.alpha} では振動</span> → α=${fmt(x.alphaUsed, 3)} で ${x.iter} 回`}</td></tr>`).join('');
       const osc = r.sweep.some(x => !x.firstOk);
       const firstCurt = r.sweep.find(x => x.curt > 0.5);
       out.innerHTML = `<div class="say">タップは太陽光 ${r.tapPv}%・制御なしで整定した位置に固定（${tapStr(r.taps)}）。そのまま太陽光を ${r.pvScale}% に上げ、全太陽光の PCS を A→B→C→E の順に切り替えた結果（A は力率 1.0）。</div>
-        <div class="legend">${legendHTML(series.slice().reverse())}</div><div class="chart" id="pcsCmpChart"></div>
+        <div class="legend">${legendHTML(r.rows.map(x => series.find(s => s.name === P.MODES[x.mode])))}</div><div class="chart" id="pcsCmpChart"></div>
+        ${sameCE ? '<div class="note">C（点線）と E（太い実線）は、この条件では同じ結果なので線が重なっています。電圧が Vw1 を超えないため、Volt-Watt の抑制が働いていません。</div>' : ''}
         <div class="tbl"><table><thead><tr><th>制御</th><th>PCS 接続点の最大 V</th><th>最大電圧 V</th><th>前の段階との差</th><th>抑制した P kW</th><th>吸収した Q kvar</th><th>損失 kW（A との差）</th><th>変電所から送る Q kvar</th><th>反復</th></tr></thead><tbody>${rows}</tbody></table></div>
         <h3>モード E のまま、太陽光を増やしていくと（同じタップ）</h3>
         <div class="tbl"><table><thead><tr><th>太陽光</th><th>出せる P kW</th><th>制御なしの PCS 接続点 最大 V</th><th>E の PCS 接続点 最大 V</th><th>吸収した Q kvar</th><th>抑制した P kW</th><th></th></tr></thead><tbody>${sw}</tbody></table></div>
