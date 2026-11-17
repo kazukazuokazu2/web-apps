@@ -146,6 +146,35 @@
   .feedback dt { color: var(--muted); }
   .feedback dd { margin: 0; white-space: pre-wrap; }
   .caution { margin-top: 10px; font-size: 12px; color: var(--muted); }
+  /* 単語を調べる */
+  .lookup { margin-top: 12px; padding: 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); scroll-margin-bottom: 96px; }
+  .lookup h3 { margin: 0 0 8px; color: var(--text); }
+  .lk-row { display: flex; gap: 8px; }
+  .lk-row input[type=search] {
+    flex: 1; min-width: 0; min-height: 44px; padding: 8px 10px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-size: 16px;
+  }
+  .lk-row input[type=search]:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .lk-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
+  .lk-actions label { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; font-size: 13px; color: var(--muted); cursor: pointer; }
+  .lk-actions input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); }
+  .lk-status { font-size: 13px; color: var(--muted); margin-top: 6px; }
+  .lk-status.ng { color: var(--ng); }
+  .lk-status:empty { display: none; }
+  .lk-results { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+  .lk-results:empty { display: none; }
+  .lk-results li { scroll-margin-bottom: 96px; }
+  .lk-item {
+    display: block; min-height: 44px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text); text-decoration: none; overflow-wrap: anywhere;
+  }
+  .lk-item:hover, .lk-item:focus-visible { border-color: var(--accent); outline: none; }
+  .lk-title { display: block; font-weight: 700; color: var(--accent); }
+  .lk-title::after { content: " ↗"; font-weight: 400; font-size: 12px; }
+  .lk-snip { display: block; font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .lk-item.lead .lk-snip { color: var(--text); font-size: 14px; }
+  .lk-note { font-size: 11px; color: var(--muted); margin-top: 6px; }
+
   kbd { font: 12px ui-monospace, monospace; padding: 1px 5px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface-2); }
 
   /* 結果・記録 */
@@ -245,6 +274,21 @@
       <div class="qtext" id="qText"></div>
       <div id="qArea"></div>
       <div id="qFeedback" class="feedback hidden"></div>
+      <div id="lookup" class="lookup hidden">
+        <h3>単語を調べる</h3>
+        <div class="lk-row">
+          <input type="search" id="lkInput" placeholder="分からない単語を貼り付け or 入力" enterkeyhint="search" autocomplete="off" aria-label="調べる単語">
+          <button class="btn" id="lkClear" type="button">クリア</button>
+        </div>
+        <div class="lk-actions">
+          <button class="btn" id="lkWiki" type="button">調べる</button>
+          <button class="btn" id="lkGoogle" type="button">Googleで検索</button>
+          <label><input type="checkbox" id="lkPower" checked>末尾に「電力」を付ける</label>
+        </div>
+        <div id="lkStatus" class="lk-status" role="status" aria-live="polite"></div>
+        <ul id="lkResults" class="lk-results"></ul>
+        <div class="lk-note">「調べる」はWikipedia、「Googleで検索」はGoogleに、入力した単語だけを送ります。単語は保存しません。</div>
+      </div>
       <button class="btn primary block hidden" id="nextBtn" style="margin-top:12px">次へ（Enter）</button>
     </div>
   </section>
@@ -574,6 +618,74 @@ function decodeProgress(text) {
   return { ok: true, progress, log };
 }
 
+/* --- 単語を調べる（Wikipedia 日本語版・Google） --- */
+const WIKI_API = 'https://ja.wikipedia.org/w/api.php';
+const LOOKUP_TIMEOUT_MS = 8000;
+
+function wikiSearchUrl(word) {
+  return WIKI_API + '?action=query&list=search&srsearch=' + encodeURIComponent(word) + '&srlimit=5&format=json&origin=*';
+}
+function wikiExtractUrl(title) {
+  return WIKI_API + '?action=query&prop=extracts&exintro&explaintext&exchars=300&titles=' + encodeURIComponent(title) + '&format=json&origin=*';
+}
+function wikiPageUrl(title) {
+  return 'https://ja.wikipedia.org/wiki/' + encodeURIComponent(String(title).replace(/ /g, '_'));
+}
+function googleSearchUrl(word, addPower) {
+  return 'https://www.google.com/search?q=' + encodeURIComponent(addPower ? word + ' 電力' : word);
+}
+/** HTML の文字列から、タグを除いたテキストを取り出す（スクリプトは実行されない） */
+function htmlToText(html) {
+  const doc = new DOMParser().parseFromString('<body>' + String(html || '') + '</body>', 'text/html');
+  doc.querySelectorAll('script, style').forEach(n => n.remove());
+  return (doc.body.textContent || '').replace(/\s+/g, ' ').trim();
+}
+
+/** fetch して JSON を返す。timeoutMs を過ぎたら中止して例外にする。signal で外から中止もできる */
+async function fetchJson(url, opts) {
+  opts = opts || {};
+  const fetchImpl = opts.fetchImpl || window.fetch.bind(window);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs || LOOKUP_TIMEOUT_MS);
+  const onOuterAbort = () => ctrl.abort();
+  if (opts.signal) {
+    if (opts.signal.aborted) ctrl.abort();
+    else opts.signal.addEventListener('abort', onOuterAbort);
+  }
+  try {
+    const res = await fetchImpl(url, { signal: ctrl.signal });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return await res.json();
+  } finally {
+    clearTimeout(timer);
+    if (opts.signal) opts.signal.removeEventListener('abort', onOuterAbort);
+  }
+}
+
+/**
+ * Wikipedia を検索する。
+ * 戻り値：{ items: [{ title, text, url, lead }] }（0件なら items は空）。通信エラー・タイムアウトは例外。
+ * 先頭の1件は、長めの要約（extract）があればそれを text にする。要約の取得に失敗しても、検索結果は返す。
+ */
+async function wikiLookup(word, opts) {
+  const data = await fetchJson(wikiSearchUrl(word), opts);
+  if (!data || !data.query || !Array.isArray(data.query.search)) throw new Error('予期しない応答');
+  const items = data.query.search.slice(0, 5).map((r, i) => ({
+    title: String(r.title || ''), text: htmlToText(r.snippet), url: wikiPageUrl(r.title || ''), lead: i === 0
+  }));
+  if (items.length) {
+    try {
+      const ex = await fetchJson(wikiExtractUrl(items[0].title), opts);
+      const pages = ex && ex.query && ex.query.pages ? Object.values(ex.query.pages) : [];
+      const extract = pages.length && typeof pages[0].extract === 'string' ? pages[0].extract.trim() : '';
+      if (extract) items[0].text = extract;
+    } catch (e) {
+      if (opts && opts.signal && opts.signal.aborted) throw e;
+    }
+  }
+  return { items };
+}
+
 /* --- 保存（localStorage） --- */
 function memoryStorage() {
   const m = new Map();
@@ -618,7 +730,8 @@ function createStore(storage, prefix) {
 
 window.QuizCore = {
   SAMPLE, dateStr, addDays, daysBetween, schedule, applyAnswer, validateQuestions, shuffle,
-  modeCandidates, selectQuestions, encodeProgress, decodeProgress, memoryStorage, createStore
+  modeCandidates, selectQuestions, encodeProgress, decodeProgress, memoryStorage, createStore,
+  wikiSearchUrl, wikiExtractUrl, wikiPageUrl, googleSearchUrl, htmlToText, fetchJson, wikiLookup
 };
 
 /* =========================================================
@@ -634,6 +747,9 @@ function pct(c, n) { return n ? Math.round(c / n * 100) : 0; }
 const App = {
   store: null, persistent: true, set: null, progress: {}, log: {}, settings: null,
   tab: 'play', playView: 'home', session: null, today: todayStr,
+  // 単語を調べる：テストで差し替えられるように持っておく
+  lookupFetch: null, lookupTimeoutMs: LOOKUP_TIMEOUT_MS, openWindow: (url) => window.open(url, '_blank', 'noopener'),
+  lookupSeq: 0, lookupCtrl: null,
 
   init(store, persistent) {
     this.store = store;
@@ -646,6 +762,7 @@ const App = {
     this.playView = 'home';
     this.tab = 'play';
     if (!this.bound) { this.bind(); this.bound = true; }
+    this.resetLookup();
     this.render();
   },
 
@@ -658,7 +775,14 @@ const App = {
     $('countSeg').addEventListener('change', e => { this.settings.count = Number(e.target.value); this.saveSettings(); this.renderHome(); });
     $('startBtn').addEventListener('click', () => this.start());
     $('quitBtn').addEventListener('click', () => {
-      if (confirm('出題をやめますか？（ここまでの回答は記録されています）')) { this.session = null; this.playView = 'home'; this.render(); }
+      if (confirm('出題をやめますか？（ここまでの回答は記録されています）')) { this.resetLookup(); this.session = null; this.playView = 'home'; this.render(); }
+    });
+    $('lkWiki').addEventListener('click', () => this.lookupWiki());
+    $('lkGoogle').addEventListener('click', () => this.lookupGoogle());
+    $('lkClear').addEventListener('click', () => { this.resetLookup(true); $('lkInput').focus(); });
+    $('lkInput').addEventListener('keydown', e => {
+      // 日本語入力の変換確定の Enter では検索しない
+      if (e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) { e.preventDefault(); this.lookupWiki(); }
     });
     $('nextBtn').addEventListener('click', () => this.next());
     $('retryWrongBtn').addEventListener('click', () => {
@@ -771,6 +895,7 @@ const App = {
   renderQuestion() {
     const ss = this.session, it = this.current(), q = it.q;
     ss.answered = false; ss.revealed = false;
+    this.resetLookup();
     $('qPos').textContent = (ss.idx + 1) + ' / ' + ss.items.length;
     $('qBar').style.width = (ss.idx / ss.items.length * 100) + '%';
     $('qChips').innerHTML =
@@ -847,13 +972,14 @@ const App = {
       '<div class="caution">※ 制度は変わるので、原典で確認してください。</div>';
     $('nextBtn').textContent = ss.idx + 1 >= ss.items.length ? '結果を見る（Enter）' : '次へ（Enter）';
     $('nextBtn').classList.remove('hidden');
+    $('lookup').classList.remove('hidden');
     if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
   },
   next() {
     const ss = this.session;
     if (!ss || !ss.answered) return;
     ss.idx++;
-    if (ss.idx >= ss.items.length) { this.playView = 'result'; this.render(); this.renderResult(); return; }
+    if (ss.idx >= ss.items.length) { this.resetLookup(); this.playView = 'result'; this.render(); this.renderResult(); return; }
     this.renderQuestion();
     window.scrollTo(0, 0);
   },
@@ -874,6 +1000,63 @@ const App = {
     const n = Number(e.key);
     const btns = $('qArea').querySelectorAll('.choice');
     if (Number.isInteger(n) && n >= 1 && n <= btns.length) { e.preventDefault(); btns[n - 1].click(); }
+  },
+
+  /* ---------- 単語を調べる ---------- */
+  /** 入力欄と結果を空に戻し、通信中なら中止する。keepOpen=false ならパネルも隠す */
+  resetLookup(keepOpen) {
+    this.lookupSeq++;
+    if (this.lookupCtrl) { this.lookupCtrl.abort(); this.lookupCtrl = null; }
+    $('lkInput').value = '';
+    $('lkResults').innerHTML = '';
+    this.lookupStatus('', false);
+    if (!keepOpen) $('lookup').classList.add('hidden');
+  },
+  lookupStatus(text, isError) {
+    const el = $('lkStatus');
+    el.textContent = text;
+    el.className = 'lk-status' + (isError ? ' ng' : '');
+  },
+  lookupWord() { return $('lkInput').value.replace(/\s+/g, ' ').trim(); },
+  async lookupWiki() {
+    const word = this.lookupWord();
+    if (!word) { this.lookupStatus('調べる単語を入力してください。', true); $('lkInput').focus(); return; }
+    const seq = ++this.lookupSeq;
+    if (this.lookupCtrl) this.lookupCtrl.abort();
+    const ctrl = this.lookupCtrl = new AbortController();
+    $('lkResults').innerHTML = '';
+    this.lookupStatus('検索中…', false);
+    let r;
+    try {
+      r = await wikiLookup(word, { fetchImpl: this.lookupFetch || undefined, timeoutMs: this.lookupTimeoutMs, signal: ctrl.signal });
+    } catch (e) {
+      if (seq !== this.lookupSeq) return; // 次の問題に進んだ・クリアした・検索し直した
+      this.lookupCtrl = null;
+      this.lookupStatus('検索できませんでした。通信状況を確認してください', true);
+      return;
+    }
+    if (seq !== this.lookupSeq) return;
+    this.lookupCtrl = null;
+    if (!r.items.length) { this.lookupStatus('Wikipediaに見つかりませんでした。『Googleで検索』をお試しください', false); return; }
+    this.lookupStatus('', false);
+    const ul = $('lkResults');
+    r.items.forEach(it => {
+      const li = document.createElement('li');
+      const a = document.createElement('a');
+      a.className = 'lk-item' + (it.lead ? ' lead' : '');
+      a.href = it.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+      const t = document.createElement('span'); t.className = 'lk-title'; t.textContent = it.title;
+      const s = document.createElement('span'); s.className = 'lk-snip'; s.textContent = it.text;
+      a.append(t, s); li.append(a); ul.append(li);
+    });
+    // タブバーに隠れないように、結果の先頭が見えるところまでスクロール
+    const first = ul.firstElementChild;
+    if (first && first.scrollIntoView) first.scrollIntoView({ block: 'nearest' });
+  },
+  lookupGoogle() {
+    const word = this.lookupWord();
+    if (!word) { this.lookupStatus('調べる単語を入力してください。', true); $('lkInput').focus(); return; }
+    this.openWindow(googleSearchUrl(word, $('lkPower').checked));
   },
 
   /* ---------- 結果 ---------- */
@@ -1020,12 +1203,10 @@ function dailyChart(log, today, nDays) {
    セルフテスト（index.html#selftest で開くと実行）
    本番の保存データには触らない（メモリ上の保存先とテスト用のキーを使う）
    ========================================================= */
-function runSelfTests() {
+async function runSelfTests() {
   const results = [];
-  const test = (name, fn) => {
-    try { fn(); results.push({ name, ok: true }); }
-    catch (e) { results.push({ name, ok: false, err: e.message }); }
-  };
+  const queue = [];
+  const test = (name, fn) => queue.push({ name, fn });
   const eq = (a, b, m) => { if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error((m || '') + ' 期待:' + JSON.stringify(b) + ' 実際:' + JSON.stringify(a)); };
   const ok = (c, m) => { if (!c) throw new Error(m || '条件が成り立たない'); };
   const base = (o) => Object.assign({ id: 'q1', category: '分野A', type: 'choice', question: '問', choices: ['a', 'b', 'c', 'd'], answer: 0 }, o);
@@ -1220,8 +1401,187 @@ function runSelfTests() {
     eq(App.set.questions.map(q => q.id), ['g1']); eq(App.set.isSample, false);
   });
 
+  // --- 単語を調べる（通信はにせものに差し替えて確認） ---
+  const resp = (obj, status) => Promise.resolve({ ok: (status || 200) < 400, status: status || 200, json: async () => obj });
+  const hang = (init) => new Promise((_, rej) => init.signal.addEventListener('abort', () => rej(new DOMException('中止', 'AbortError'))));
+  const SEARCH_OK = { query: { search: [
+    { title: '同時市場', snippet: '<span class="searchmatch">同時</span>市場は &quot;kWh&quot; &amp; ΔkW を<script>alert(1)<\/script>まとめて' },
+    { title: '電力 市場', snippet: '<b>電力</b>の<i>取引</i>' }] } };
+  const EXTRACT_OK = { query: { pages: { '123': { title: '同時市場', extract: '同時市場とは、長めの要約の本文である。' } } } };
+  const wikiFake = (calls) => (url, init) => {
+    calls && calls.push(url);
+    if (url.includes('list=search')) return resp(url.includes('zzqx') ? { query: { search: [] } } : SEARCH_OK);
+    if (url.includes('prop=extracts')) return resp(EXTRACT_OK);
+    return Promise.reject(new TypeError('Failed to fetch'));
+  };
+  const tick = (ms) => new Promise(r => setTimeout(r, ms || 0));
+
+  test('調べる：URL の組み立て（検索・要約・ページ・Google）', () => {
+    const s = wikiSearchUrl('同時市場');
+    ok(s.startsWith('https://ja.wikipedia.org/w/api.php?action=query&list=search&srsearch=' + encodeURIComponent('同時市場')), s);
+    ok(s.endsWith('&srlimit=5&format=json&origin=*'), s);
+    const x = wikiExtractUrl('A&B');
+    ok(x.includes('prop=extracts&exintro&explaintext&exchars=300&titles=A%26B') && x.includes('origin=*'), x);
+    eq(wikiPageUrl('需給 調整'), 'https://ja.wikipedia.org/wiki/' + encodeURIComponent('需給_調整'));
+    eq(googleSearchUrl('kW', true), 'https://www.google.com/search?q=kW%20' + encodeURIComponent('電力'));
+    eq(googleSearchUrl('kW', false), 'https://www.google.com/search?q=kW');
+  });
+  test('調べる：snippet のタグを除き、文字参照を戻す（スクリプトは出さない）', () => {
+    eq(htmlToText(SEARCH_OK.query.search[0].snippet), '同時市場は "kWh" & ΔkW をまとめて');
+    eq(htmlToText('<img src=x onerror="window.__xss=1">a'), 'a');
+    ok(!window.__xss, 'onerror が実行された');
+  });
+  test('調べる：結果5件まで・先頭だけ長めの要約にする', async () => {
+    const calls = [];
+    const r = await wikiLookup('同時市場', { fetchImpl: wikiFake(calls) });
+    eq(r.items.length, 2);
+    eq(r.items[0], { title: '同時市場', text: '同時市場とは、長めの要約の本文である。', url: wikiPageUrl('同時市場'), lead: true });
+    eq(r.items[1].text, '電力の取引'); eq(r.items[1].lead, false);
+    eq(calls.length, 2);
+  });
+  test('調べる：0件のときは要約を取りに行かない', async () => {
+    const calls = [];
+    const r = await wikiLookup('zzqx', { fetchImpl: wikiFake(calls) });
+    eq(r.items, []); eq(calls.length, 1);
+  });
+  test('調べる：要約の取得だけ失敗しても、検索結果は返す', async () => {
+    const f = (url) => url.includes('list=search') ? resp(SEARCH_OK) : Promise.reject(new TypeError('Failed to fetch'));
+    const r = await wikiLookup('同時市場', { fetchImpl: f });
+    eq(r.items[0].text, '同時市場は "kWh" & ΔkW をまとめて');
+  });
+  test('調べる：通信エラー・HTTP エラーは例外になる', async () => {
+    let threw = 0;
+    try { await wikiLookup('a', { fetchImpl: () => Promise.reject(new TypeError('Failed to fetch')) }); } catch (e) { threw++; }
+    try { await wikiLookup('a', { fetchImpl: () => resp({}, 503) }); } catch (e) { threw++; }
+    eq(threw, 2);
+  });
+  test('調べる：応答がないときは、決めた時間でタイムアウトする（既定は8秒）', async () => {
+    eq(LOOKUP_TIMEOUT_MS, 8000);
+    const t0 = Date.now();
+    let err = null;
+    try { await fetchJson('https://example.invalid/', { fetchImpl: (u, init) => hang(init), timeoutMs: 40 }); } catch (e) { err = e; }
+    ok(err && err.name === 'AbortError', '中止されない：' + (err && err.name));
+    ok(Date.now() - t0 < 2000, '時間がかかりすぎ');
+  });
+
+  // 画面の操作：回答した直後の状態を作る
+  const lkMem = memoryStorage();
+  const answeredOne = () => {
+    App.today = () => '2026-11-18';
+    App.lookupTimeoutMs = LOOKUP_TIMEOUT_MS;
+    App.init(createStore(lkMem, 'lk.'), true);
+    $('startBtn').click();
+    if (App.current().q.type === 'card') App.reveal();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: '1', bubbles: true }));
+    ok(App.session.answered, '回答できない');
+  };
+  const typeAndEnter = (word) => {
+    $('lkInput').value = word;
+    $('lkInput').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  };
+
+  test('画面：回答前は隠れていて、回答後に解説の直下に出る', () => {
+    App.init(createStore(memoryStorage(), 'lk0.'), true);
+    $('startBtn').click();
+    ok($('lookup').classList.contains('hidden'), '回答前に出ている');
+    answeredOne();
+    ok(!$('lookup').classList.contains('hidden'), '回答後に出ない');
+    eq($('qFeedback').nextElementSibling.id, 'lookup', '解説の直下にない');
+    eq($('lookup').querySelector('h3').textContent, '単語を調べる');
+    eq($('lkInput').placeholder, '分からない単語を貼り付け or 入力');
+    ok($('lkPower').checked, '「電力」を付けるの初期値がオンでない');
+  });
+  test('画面：入力欄で Enter → 検索中… → 結果（問題は進まない）', async () => {
+    answeredOne();
+    App.lookupFetch = wikiFake();
+    const idx = App.session.idx;
+    typeAndEnter('同時市場');
+    eq($('lkStatus').textContent, '検索中…');
+    await tick(20);
+    eq(App.session.idx, idx, 'Enter で次の問題に進んでしまった');
+    const items = $('lkResults').querySelectorAll('a.lk-item');
+    eq(items.length, 2);
+    ok(items[0].classList.contains('lead'), '先頭が長めの表示でない');
+    eq(items[0].querySelector('.lk-snip').textContent, '同時市場とは、長めの要約の本文である。');
+    eq(items[0].getAttribute('href'), wikiPageUrl('同時市場'));
+    eq(items[0].target, '_blank');
+    eq($('lkStatus').textContent, '');
+    ok(!$('lkResults').innerHTML.includes('<script'), 'タグが残っている');
+  });
+  test('画面：0件のとき・通信エラーのとき・タイムアウトのときの表示', async () => {
+    answeredOne();
+    App.lookupFetch = wikiFake();
+    typeAndEnter('zzqx');
+    await tick(20);
+    eq($('lkStatus').textContent, 'Wikipediaに見つかりませんでした。『Googleで検索』をお試しください');
+    App.lookupFetch = () => Promise.reject(new TypeError('Failed to fetch'));
+    $('lkWiki').click();
+    await tick(20);
+    eq($('lkStatus').textContent, '検索できませんでした。通信状況を確認してください');
+    App.lookupFetch = (u, init) => hang(init);
+    App.lookupTimeoutMs = 40;
+    $('lkWiki').click();
+    eq($('lkStatus').textContent, '検索中…');
+    await tick(120);
+    eq($('lkStatus').textContent, '検索できませんでした。通信状況を確認してください');
+    eq($('lkResults').children.length, 0);
+  });
+  test('画面：Googleで検索（「電力」を付ける／付けない）・空欄のとき', () => {
+    answeredOne();
+    const opened = [];
+    const orig = App.openWindow;
+    App.openWindow = (u) => opened.push(u);
+    try {
+      $('lkGoogle').click();
+      eq(opened.length, 0, '空欄なのに開いた');
+      ok($('lkStatus').textContent.includes('入力してください'));
+      $('lkInput').value = ' ホスティング容量 ';
+      $('lkGoogle').click();
+      $('lkPower').checked = false;
+      $('lkGoogle').click();
+    } finally { App.openWindow = orig; }
+    eq(opened, [googleSearchUrl('ホスティング容量', true), googleSearchUrl('ホスティング容量', false)]);
+  });
+  test('画面：クリアで空に戻る・次の問題で空に戻り、遅れて届いた結果は出さない', async () => {
+    answeredOne();
+    App.lookupFetch = wikiFake();
+    typeAndEnter('同時市場');
+    await tick(20);
+    $('lkClear').click();
+    eq([$('lkInput').value, $('lkResults').children.length, $('lkStatus').textContent], ['', 0, '']);
+    ok(!$('lookup').classList.contains('hidden'), 'クリアでパネルまで消えた');
+
+    let release;
+    App.lookupFetch = (url) => new Promise(r => { release = () => r({ ok: true, status: 200, json: async () => SEARCH_OK }); });
+    typeAndEnter('同時市場');
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); // 次の問題へ
+    eq(App.session.idx, 1, '次の問題に進まない');
+    eq([$('lkInput').value, $('lkResults').children.length, $('lkStatus').textContent], ['', 0, '']);
+    ok($('lookup').classList.contains('hidden'), '次の問題でパネルが残っている');
+    release && release();
+    await tick(20);
+    eq($('lkResults').children.length, 0, '前の問題の結果が出てしまった');
+  });
+  test('画面：入力した単語は保存されない', async () => {
+    answeredOne();
+    App.lookupFetch = wikiFake();
+    typeAndEnter('保存されない単語');
+    await tick(20);
+    const st = createStore(lkMem, 'lk.');
+    const all = JSON.stringify([st.loadProgress(), st.loadLog(), st.loadSettings(), st.loadQuestionSet()]);
+    ok(!all.includes('保存されない単語'), '単語が保存されている');
+    App.lookupFetch = null;
+  });
+
+  for (const t of queue) {
+    try { await t.fn(); results.push({ name: t.name, ok: true }); }
+    catch (e) { results.push({ name: t.name, ok: false, err: e.message }); }
+  }
+
   // 後片付け：画面をふつうの状態に戻す
   App.today = todayStr;
+  App.lookupFetch = null;
+  App.lookupTimeoutMs = LOOKUP_TIMEOUT_MS;
   App.init(createStore(memoryStorage(), 'after.'), true);
 
   const pass = results.filter(r => r.ok).length, fail = results.length - pass;
