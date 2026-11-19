@@ -1,13 +1,13 @@
 {
- "updatedAt": "2026-11-18T22:29:01+00:00",
+ "updatedAt": "2026-11-19T01:27:40+00:00",
  "source": "Yahoo!ファイナンス（yfinance で取得）",
  "quotes": {
   "^N225": {
-   "price": 58860.4297,
-   "prevClose": 59662.0195,
-   "monthAgo": 65324.2891,
+   "price": 59542.3789,
+   "prevClose": 58860.4297,
+   "monthAgo": 64916.6992,
    "yearStart": 50339.4805,
-   "date": "2026-11-17"
+   "date": "2026-11-19"
   },
   "^NDX": {
    "price": 27116.2578,
@@ -24,109 +24,109 @@
    "date": "2026-11-18"
   },
   "USDJPY": {
-   "price": 159.319,
-   "prevClose": 159.523,
-   "monthAgo": 158.143,
+   "price": 159.332,
+   "prevClose": 159.504,
+   "monthAgo": 157.806,
    "yearStart": 156.413,
-   "date": "2026-11-18"
+   "date": "2026-11-19"
   },
   "7203": {
-   "price": 3391.0,
-   "prevClose": 3414.0,
-   "monthAgo": 3094.0,
+   "price": 3393.0,
+   "prevClose": 3391.0,
+   "monthAgo": 3102.0,
    "yearStart": 3356.0,
-   "date": "2026-11-18"
+   "date": "2026-11-19"
   },
   "6758": {
-   "price": 4241.0,
-   "prevClose": 4271.0,
-   "monthAgo": 3959.0,
+   "price": 4343.0,
+   "prevClose": 4241.0,
+   "monthAgo": 3960.0,
    "yearStart": 4024.0,
-   "date": "2026-11-18"
+   "date": "2026-11-19"
   },
   "9984": {
-   "price": 3383.0,
-   "prevClose": 3281.0,
-   "monthAgo": 4944.0,
+   "price": 3482.0,
+   "prevClose": 3383.0,
+   "monthAgo": 4845.0,
    "yearStart": 4400.0,
-   "date": "2026-11-18"
+   "date": "2026-11-19"
   },
   "AAPL": {
-   "price": 352.45,
-   "prevClose": 351.91,
+   "price": 351.91,
+   "prevClose": 352.78,
    "monthAgo": 343.46,
    "yearStart": 271.86,
-   "date": "2026-11-18"
+   "date": "2026-11-17"
   },
   "NVDA": {
-   "price": 150.96,
-   "prevClose": 155.46,
+   "price": 155.46,
+   "prevClose": 156.14,
    "monthAgo": 214.13,
    "yearStart": 186.5,
-   "date": "2026-11-18"
+   "date": "2026-11-17"
   },
   "MSFT": {
-   "price": 508.29,
-   "prevClose": 506.24,
+   "price": 506.24,
+   "prevClose": 517.99,
    "monthAgo": 529.05,
    "yearStart": 483.62,
-   "date": "2026-11-18"
+   "date": "2026-11-17"
   },
   "TSLA": {
-   "price": 383.72,
-   "prevClose": 380.11,
+   "price": 380.11,
+   "prevClose": 379.74,
    "monthAgo": 354.72,
    "yearStart": 449.72,
-   "date": "2026-11-18"
+   "date": "2026-11-17"
   },
   "SOXL": {
-   "price": 49.26,
-   "prevClose": 49.07,
+   "price": 49.07,
+   "prevClose": 48.76,
    "monthAgo": 93.67,
    "yearStart": 42.03,
-   "date": "2026-11-18"
+   "date": "2026-11-17"
   },
   "DAL": {
-   "price": 84.88,
-   "prevClose": 84.3,
+   "price": 84.3,
+   "prevClose": 86.6,
    "monthAgo": 75.37,
    "yearStart": 69.4,
-   "date": "2026-11-18"
+   "date": "2026-11-17"
   },
   "GEV": {
-   "price": 772.22,
-   "prevClose": 779.91,
+   "price": 779.91,
+   "prevClose": 763.57,
    "monthAgo": 921.2,
    "yearStart": 653.57,
-   "date": "2026-11-18"
+   "date": "2026-11-17"
   },
   "OKLO": {
-   "price": 21.8,
-   "prevClose": 22.37,
+   "price": 22.37,
+   "prevClose": 23.03,
    "monthAgo": 27.97,
    "yearStart": 71.76,
-   "date": "2026-11-18"
+   "date": "2026-11-17"
   },
   "SPCX": {
-   "price": 143.5,
-   "prevClose": 141.7,
+   "price": 141.7,
+   "prevClose": 137.36,
    "monthAgo": 146.03,
    "yearStart": null,
-   "date": "2026-11-18"
+   "date": "2026-11-17"
   },
   "CRWD": {
-   "price": 237.03,
-   "prevClose": 219.58,
+   "price": 219.58,
+   "prevClose": 223.21,
    "monthAgo": 227.39,
    "yearStart": 117.19,
-   "date": "2026-11-18"
+   "date": "2026-11-17"
   },
   "PANW": {
-   "price": 339.92,
-   "prevClose": 309.29,
+   "price": 309.29,
+   "prevClose": 316.09,
    "monthAgo": 342.0,
    "yearStart": 184.2,
-   "date": "2026-11-18"
+   "date": "2026-11-17"
   }
  },
  "errors": {}
