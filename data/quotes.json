@@ -1,9 +1,9 @@
 {
- "updatedAt": "2026-11-20T05:45:59+00:00",
+ "updatedAt": "2026-11-20T07:31:36+00:00",
  "source": "Yahoo!ファイナンス（yfinance で取得）",
  "quotes": {
   "^N225": {
-   "price": 56625.8789,
+   "price": 56436.6484,
    "prevClose": 59444.2109,
    "monthAgo": 64075.4219,
    "yearStart": 50339.4805,
@@ -24,28 +24,28 @@
    "date": "2026-11-19"
   },
   "USDJPY": {
-   "price": 159.109,
+   "price": 159.1,
    "prevClose": 159.381,
    "monthAgo": 158.523,
    "yearStart": 156.413,
    "date": "2026-11-20"
   },
   "7203": {
-   "price": 3305.0,
+   "price": 3312.0,
    "prevClose": 3378.0,
    "monthAgo": 3102.0,
    "yearStart": 3356.0,
    "date": "2026-11-20"
   },
   "6758": {
-   "price": 4310.0,
+   "price": 4312.0,
    "prevClose": 4365.0,
    "monthAgo": 3960.0,
    "yearStart": 4024.0,
    "date": "2026-11-20"
   },
   "9984": {
-   "price": 3058.0,
+   "price": 3025.0,
    "prevClose": 3537.0,
    "monthAgo": 4554.0,
    "yearStart": 4400.0,
@@ -94,39 +94,39 @@
    "date": "2026-11-19"
   },
   "GEV": {
-   "price": 772.22,
-   "prevClose": 779.91,
-   "monthAgo": 921.2,
+   "price": 756.28,
+   "prevClose": 772.22,
+   "monthAgo": 908.44,
    "yearStart": 653.57,
-   "date": "2026-11-18"
+   "date": "2026-11-19"
   },
   "OKLO": {
-   "price": 21.8,
-   "prevClose": 22.37,
-   "monthAgo": 27.97,
+   "price": 20.84,
+   "prevClose": 21.8,
+   "monthAgo": 27.24,
    "yearStart": 71.76,
-   "date": "2026-11-18"
+   "date": "2026-11-19"
   },
   "SPCX": {
-   "price": 143.5,
-   "prevClose": 141.7,
-   "monthAgo": 146.03,
+   "price": 138.43,
+   "prevClose": 143.5,
+   "monthAgo": 147.96,
    "yearStart": null,
-   "date": "2026-11-18"
+   "date": "2026-11-19"
   },
   "CRWD": {
-   "price": 237.03,
-   "prevClose": 219.58,
-   "monthAgo": 227.39,
+   "price": 243.46,
+   "prevClose": 237.03,
+   "monthAgo": 228.1,
    "yearStart": 117.19,
-   "date": "2026-11-18"
+   "date": "2026-11-19"
   },
   "PANW": {
-   "price": 339.92,
-   "prevClose": 309.29,
-   "monthAgo": 342.0,
+   "price": 361.73,
+   "prevClose": 339.92,
+   "monthAgo": 346.95,
    "yearStart": 184.2,
-   "date": "2026-11-18"
+   "date": "2026-11-19"
   }
  },
  "errors": {}
