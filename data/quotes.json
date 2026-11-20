@@ -1,5 +1,5 @@
 {
- "updatedAt": "2026-11-20T07:31:36+00:00",
+ "updatedAt": "2026-11-20T14:22:55+00:00",
  "source": "Yahoo!ファイナンス（yfinance で取得）",
  "quotes": {
   "^N225": {
@@ -24,7 +24,7 @@
    "date": "2026-11-19"
   },
   "USDJPY": {
-   "price": 159.1,
+   "price": 158.76,
    "prevClose": 159.381,
    "monthAgo": 158.523,
    "yearStart": 156.413,
