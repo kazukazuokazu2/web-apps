@@ -270,20 +270,51 @@
   .legend i.hatch { background: repeating-linear-gradient(45deg, var(--text-2) 0 2px, transparent 2px 4px); }
   .legend i.short { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ng); }
 
-  .pick { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
-  .pick button { border: 1px solid var(--border); border-left: 4px solid var(--uc); background: var(--surface-2); border-radius: 8px; padding: 6px 10px; cursor: pointer; font-size: 13px; }
-  .pick button[aria-pressed="true"] { border-color: var(--uc); box-shadow: 0 0 0 1px var(--uc); background: color-mix(in srgb, var(--uc) 16%, var(--surface-2)); font-weight: 700; }
-  .pick button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .field-l { font-size: 12px; color: var(--muted); margin: 0 0 4px; }
-  .field-l b { color: var(--text); font-size: 14px; }
-  .slider { position: relative; margin: 0 0 6px; padding-top: 22px; }
-  .slider input[type=range] { width: 100%; margin: 0; accent-color: var(--accent); }
-  .s-labels span.gcl { color: #ff9c9c; }
-  .slider .gc { position: absolute; top: 0; height: calc(100% + 2px); width: 0; border-left: 2px dashed var(--ng); pointer-events: none; }
-  .slider .gc span { position: absolute; top: -1px; left: 50%; transform: translateX(-50%); font-size: 11px; color: #ff9c9c; white-space: nowrap; font-weight: 700; background: var(--surface); padding: 0 4px; }
-  .s-labels { position: relative; height: 32px; margin-bottom: 8px; }
-  .s-labels span { position: absolute; transform: translateX(-50%); font-size: 10px; color: var(--muted); text-align: center; line-height: 1.3; white-space: nowrap; }
-  .s-labels span.cur { color: var(--text); font-weight: 700; }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .presets .btn { font-size: 12px; padding: 6px 10px; text-align: left; }
+  .frows { display: grid; gap: 8px; }
+  .frow { background: var(--surface-2); border: 1px solid var(--border); border-left: 4px solid var(--uc); border-radius: 9px; padding: 8px 10px; transition: box-shadow .2s; }
+  .frow.on { box-shadow: 0 0 0 1px var(--ng); }
+  .fhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+  .fname { font-weight: 700; }
+  .fname small { color: var(--muted); font-weight: 400; font-size: 11px; margin-left: 6px; }
+  .sw { position: relative; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12px; }
+  .sw input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .sw-ui { position: relative; width: 34px; height: 20px; border-radius: 10px; background: var(--surface); border: 1px solid var(--border); transition: background .2s; }
+  .sw-ui::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--muted); transition: transform .2s, background .2s; }
+  .sw input:checked + .sw-ui { background: var(--ng); border-color: var(--ng); }
+  .sw input:checked + .sw-ui::after { transform: translateX(14px); background: #fff; }
+  .sw input:focus-visible + .sw-ui { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .tbtns { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin-top: 8px; }
+  @media (max-width: 560px) { .tbtns { grid-template-columns: repeat(3, 1fr); } }
+  .tbtns button { border: 1px solid var(--border); background: var(--surface); border-radius: 7px; padding: 4px 2px; font-size: 12px; line-height: 1.3; cursor: pointer; color: var(--text-2); }
+  .tbtns button small { display: block; font-size: 10px; color: var(--muted); white-space: nowrap; }
+  .tbtns button.gc small { color: #ff9c9c; }
+  .tbtns button[aria-pressed="true"] { background: color-mix(in srgb, var(--ng) 22%, var(--surface)); border-color: var(--ng); color: var(--text); font-weight: 700; }
+  .tbtns button:disabled { opacity: .35; cursor: default; }
+  .tbtns button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .werr { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+  .werr input { flex: 1; accent-color: var(--ng); }
+  .werr input { min-width: 0; }
+  .werr span, .werr b { white-space: nowrap; }
+  .werr b { color: var(--text); }
+  .evs { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+  .evs li { display: grid; grid-template-columns: 4em 1fr; gap: 8px; align-items: start; background: var(--surface-2); border-radius: 8px; padding: 8px 10px; font-size: 13px; transition: box-shadow .3s; }
+  .evs li.cur { box-shadow: 0 0 0 1px var(--z-day); }
+  .evs li.empty { display: block; color: var(--muted); }
+  .evs .et { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .evs li.gcline { background: transparent; border-top: 2px dashed var(--ng); border-radius: 0; color: #ff9c9c; padding: 6px 10px; font-size: 12px; }
+  .st { display: inline-block; margin-top: 3px; font-size: 11px; font-weight: 700; border-radius: 4px; padding: 0 6px; }
+  .st.ok { background: color-mix(in srgb, var(--ok) 20%, transparent); color: var(--ok); }
+  .st.ng { background: color-mix(in srgb, var(--ng) 22%, transparent); color: #ff9c9c; }
+  .st.now { background: var(--z-day); color: #0f1115; }
+  .st.wait { background: var(--surface); color: var(--muted); }
+  .evblock + .evblock { border-top: 1px solid var(--border); margin-top: 12px; padding-top: 12px; }
+  .sumtbl { display: grid; grid-template-columns: 1fr auto; gap: 3px 16px; margin: 6px 0 8px; max-width: 320px; }
+  .sumtbl dt { color: var(--text-2); }
+  .sumtbl dd { margin: 0; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .sumtbl dd.ng { color: #ff9c9c; }
   .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
 
   .msg { border-radius: 8px; padding: 8px 12px; font-weight: 700; margin-bottom: 8px; }
@@ -423,22 +454,19 @@
 
     <div class="panel">
       <h3>3・4. 故障を起こす</h3>
-      <p class="field-l">故障する発電機</p>
-      <div class="pick" id="gPick" role="group" aria-label="故障する発電機"></div>
-      <div id="gWindBox" hidden>
-        <p class="field-l">風力の予測外れの量：<b id="gWindVal"></b></p>
-        <div class="slider" style="padding-top:0"><input type="range" id="gWind" min="0" max="30" step="1" aria-label="風力の予測外れの量（MW）"></div>
-      </div>
-      <p class="field-l">故障の発生時刻：<b id="gTimeVal"></b></p>
-      <div class="slider" id="gSlider">
-        <span class="gc" id="gGc"><span>計画変更の締切（ゲートクローズ）</span></span>
-        <input type="range" id="gTime" min="0" max="6" step="1" aria-label="故障の発生時刻">
-      </div>
-      <div class="s-labels" id="gTicks" aria-hidden="true"></div>
+      <p class="field-l">例（押すと設定が入ります）</p>
+      <div class="presets" id="gPresets"></div>
+      <p class="hint">発電機ごとに「故障させる」をオンにして、発生時刻を選びます。17:00（実需給の1時間前）は締切の時点で、17:00までの故障は計画変更できます。17:30は締切より後です。</p>
+      <div class="frows" id="gRows"></div>
       <div class="actions">
         <button class="btn" id="gReset">最初に戻す</button>
         <button class="btn primary" id="gRun">実行</button>
       </div>
+    </div>
+
+    <div class="panel">
+      <h3>出来事のタイムライン</h3>
+      <ol class="evs" id="gEvents" aria-live="polite"></ol>
     </div>
 
     <div class="panel" id="gFlow" aria-live="polite"></div>
@@ -880,128 +908,160 @@ const G_RSV = [
 const RSV_OF = {};
 G_RSV.forEach(x => x.parts.forEach(p => { RSV_OF[p.g] = (RSV_OF[p.g] || 0) + p.mw; }));
 const RSV_TOTAL = Object.values(RSV_OF).reduce((s, v) => s + v, 0); // 110MW
+// 故障の発生時刻の選択肢。17:00（実需給の1時間前）は締切の時点で、17:00ちょうどまでは計画変更できる扱い
 const G_TIMES = [
-  { s: '前日', t: '' }, { s: '当日朝', t: '' }, { s: '3時間前', t: '15:00' }, { s: '2時間前', t: '16:00' },
-  { s: '1時間前', t: '17:00' }, { s: '30分前', t: '17:30' }, { s: '実需給', t: '18:00' },
+  { s: '前日', t: '', at: '前日' },
+  { s: '当日朝', t: '', at: '当日朝' },
+  { s: '3時間前', t: '15:00', at: '15:00' },
+  { s: '2時間前', t: '16:00', at: '16:00' },
+  { s: '1時間前', t: '17:00', at: '17:00', gc: true },
+  { s: '30分前', t: '17:30', at: '17:30' },
 ];
-const GC_IDX = 4; // 実需給の1時間前（17:00）＝計画変更の締切
-const timeText = i => i === 0 ? '前日' : i === 1 ? '当日の朝' : i === 6 ? '実需給（18:00）' : `実需給の${G_TIMES[i].s}（${G_TIMES[i].t}）`;
+const GC_IDX = 4;
+const canChange = i => i <= GC_IDX;
+const timeText = i => i === 0 ? '前日' : i === 1 ? '当日の朝' : `実需給の${G_TIMES[i].s}（${G_TIMES[i].t}）`;
+const evText = (id, short) => id === 'W' ? `風力Wの予測が外れる（不足${short}MW）` : `${G[id].name}が故障（不足${short}MW）`;
+const PRESETS = [
+  { name: '例1：火力Aが2時間前に故障', set: { A: 3 } },
+  { name: '例2：蓄電池が30分前に故障', set: { S: 5 } },
+  { name: '例3：火力Aが2時間前、蓄電池が30分前に故障', set: { A: 3, S: 5 } },
+  { name: '例4：火力Bが30分前に故障', set: { B: 5 } },
+  { name: '例5：火力Cが2時間前、風力が30分前に20MW外れる', set: { C: 3, W: 5 }, err: 20 },
+];
 
-let g5 = null;
-function g5Init(keep) {
-  if (g5) clearTimeout(g5.timer);
-  const p = keep ? g5 : null;
-  g5 = { sel: p ? p.sel : 'A', tIdx: p ? p.tIdx : 3, windErr: p ? p.windErr : 20,
-    ran: false, short: 0, mode: '', ups: {}, market: 0, log: [], steps: [], shown: 0, done: false, timer: 0 };
+// 設定（発電機ごとに1つ。同じ発電機を2回故障させることはできない）
+const cfgInit = () => Object.fromEntries(GENS.map(g => [g.id, { on: false, t: 3, err: 20 }]));
+let cfg = cfgInit();
+let sim = null; // 実行中・実行後の状態（null＝未実行）
+let simTimer = 0;
+
+// 設定した故障を、時刻ごとにまとめる（同じ時刻は同時に起きたものとして合算）
+function cfgGroups() {
+  const by = {};
+  GENS.forEach(g => { const c = cfg[g.id]; if (c.on) (by[c.t] = by[c.t] || []).push(g.id); });
+  return Object.keys(by).map(Number).sort((a, b) => a - b).map(t => ({ t, ids: by[t] }));
 }
-const isFailed = id => g5.ran && g5.sel === id;
-function g5Out(id) {
-  const g = G[id];
-  if (isFailed(id)) return id === 'W' ? g.plan - g5.windErr : 0;
-  return g.plan + (g5.ups[id] || 0);
+function simReset() { clearTimeout(simTimer); sim = null; }
+function simStart() {
+  clearTimeout(simTimer);
+  sim = {
+    out: Object.fromEntries(GENS.map(g => [g.id, g.plan])), // いまの計画出力
+    ups: {}, failed: {}, market: 0,
+    // 調整力は共通の枠。累積で使い、故障した発電機の担当分は使えなくなる
+    pool: G_RSV.flatMap(x => x.parts.map(p => ({ r: x.r, name: x.name, resp: x.resp, g: p.g, left: p.mw, lost: false }))),
+    groups: cfgGroups().map(x => ({ ...x, items: [], short: 0, kind: canChange(x.t) ? 'plan' : 'rsv',
+      state: 'wait', log: [], steps: [], shown: 0, lack: 0, lost: [], avail: 0, row: null })),
+    gi: -1, finished: false,
+  };
+  simNext();
 }
-const g5PlanSum = () => GENS.reduce((s, g) => s + g5Out(g.id), 0) + g5.market;
-const g5Remaining = () => Math.max(0, DEMAND - g5PlanSum());
-// 自社の他の発電機で上げられる量＝定格−計画−調整力として約定済みの分（風力は上げられない）
-function g5SelfAvail() {
-  return GENS.filter(g => g.type !== 'wind' && !isFailed(g.id))
-    .map(g => ({ g, mw: Math.max(0, g.rated - g.plan - (g5.ups[g.id] || 0) - (RSV_OF[g.id] || 0)) }))
+const simPlanSum = () => GENS.reduce((s, g) => s + sim.out[g.id], 0) + sim.market;
+const simRemaining = () => Math.max(0, DEMAND - simPlanSum());
+const simActs = () => sim ? sim.groups.flatMap(gr => gr.steps.slice(0, gr.shown)) : [];
+// 自社の他の発電機で上げられる量＝定格−いまの計画−調整力として約定済みの分（風力・故障中は不可）
+function simSelfAvail() {
+  return GENS.filter(g => g.type !== 'wind' && sim.failed[g.id] == null)
+    .map(g => ({ g, mw: Math.max(0, g.rated - sim.out[g.id] - (RSV_OF[g.id] || 0)) }))
     .filter(x => x.mw > 0);
 }
-// 調整力を順に動かす（不足が解消したら、残りは出番なし）
-function g5BuildSteps() {
-  let rem = g5.short;
-  return G_RSV.map(x => {
-    if (rem <= 0) return { x, used: 0, rem: 0, parts: [], skip: true };
-    const parts = [];
-    let used = 0;
-    x.parts.forEach(p => { const u = Math.min(p.mw, rem - used); if (u > 0) { parts.push({ g: p.g, mw: u }); used += u; } });
-    rem -= used;
-    return { x, used, rem, parts, skip: false };
+function simNext() {
+  sim.gi++;
+  if (sim.gi >= sim.groups.length) { sim.finished = true; renderG5(); return; }
+  const gr = sim.groups[sim.gi];
+  gr.state = 'now';
+  gr.ids.forEach(id => {
+    // 不足量：故障は、その時点の計画出力。風力は予測外れの量（減る方向のみ）
+    const short = id === 'W' ? Math.min(cfg.W.err, sim.out.W) : sim.out[id];
+    gr.items.push({ id, short });
+    sim.out[id] -= short;
+    if (id === 'W') return;
+    sim.failed[id] = gr.t;
+    sim.pool.filter(p => p.g === id && !p.lost && p.left > 0).forEach(p => { p.lost = true; gr.lost.push({ name: p.name, mw: p.left }); });
   });
-}
-const g5Active = () => g5.steps.filter(s => !s.skip).slice(0, g5.shown);
-
-function g5Run() {
-  g5Init(true);
-  g5.ran = true;
-  g5.short = g5.sel === 'W' ? g5.windErr : G[g5.sel].plan;
-  if (g5.short === 0) g5.mode = 'none';
-  else if (g5.tIdx < GC_IDX) g5.mode = 'plan';
-  else {
-    g5.mode = 'rsv';
-    g5.steps = g5BuildSteps();
-    const n = g5.steps.filter(s => !s.skip).length;
-    if (matchMedia('(prefers-reduced-motion: reduce)').matches) { g5.shown = n; g5.done = true; }
-    else {
-      const tick = () => {
-        if (g5.shown < n) { g5.shown++; renderG5(); g5.timer = setTimeout(tick, 1400); }
-        else { g5.done = true; renderG5(); }
-      };
-      g5.timer = setTimeout(tick, 900);
-    }
+  gr.short = gr.items.reduce((s, x) => s + x.short, 0);
+  if (gr.kind === 'plan') {
+    if (simRemaining() === 0) simDone(gr); else renderG5();
+    return;
   }
-  renderG5();
-}
-function g5DoMarket() {
-  const r = g5Remaining();
-  if (!r) return;
-  g5.market += r;
-  g5.log.push(`① 時間前市場で ${r}MW を調達し、計画を変更した。`);
-  renderG5();
-}
-function g5DoSelf() {
-  let r = g5Remaining();
-  g5SelfAvail().forEach(({ g, mw }) => {
-    if (r <= 0) return;
-    const u = Math.min(mw, r), before = g.plan + (g5.ups[g.id] || 0);
-    g5.ups[g.id] = (g5.ups[g.id] || 0) + u;
-    r -= u;
-    g5.log.push(`② ${g.name}の計画を ${before}→${before + u}MW に上げた（+${u}MW、余力の範囲内）。`);
+  // 締切より後：調整力が一次→二次①→二次②→三次①の順に自動で動く
+  gr.avail = sim.pool.filter(p => !p.lost).reduce((s, p) => s + p.left, 0);
+  let rem = gr.short;
+  sim.pool.forEach(p => {
+    if (rem <= 0 || p.lost || p.left <= 0) return;
+    const u = Math.min(p.left, rem);
+    p.left -= u; rem -= u;
+    gr.steps.push({ r: p.r, name: p.name, resp: p.resp, g: p.g, used: u, rem });
   });
+  gr.lack = rem;
+  const n = gr.steps.length;
+  if (n === 0 || matchMedia('(prefers-reduced-motion: reduce)').matches) { gr.shown = n; simDone(gr); return; }
   renderG5();
+  const tick = () => { gr.shown++; renderG5(); simTimer = setTimeout(gr.shown < n ? tick : () => simDone(gr), 1300); };
+  simTimer = setTimeout(tick, 900);
+}
+function simDone(gr) {
+  gr.state = 'done';
+  gr.row = g5Segs(false);
+  simNext();
+}
+function simMarket() {
+  const gr = sim.groups[sim.gi], r = simRemaining();
+  if (!r) return;
+  sim.market += r;
+  gr.log.push(`① 時間前市場で ${r}MW を調達し、計画を変更した。`);
+  if (simRemaining() === 0) simDone(gr); else renderG5();
+}
+function simSelf() {
+  const gr = sim.groups[sim.gi];
+  let r = simRemaining();
+  simSelfAvail().forEach(({ g, mw }) => {
+    if (r <= 0) return;
+    const u = Math.min(mw, r), before = sim.out[g.id];
+    sim.out[g.id] += u;
+    sim.ups[g.id] = (sim.ups[g.id] || 0) + u;
+    r -= u;
+    gr.log.push(`② ${g.name}の計画を ${before}→${before + u}MW に上げた（+${u}MW、余力の範囲内）。`);
+  });
+  if (simRemaining() === 0) simDone(gr); else renderG5();
 }
 
 // 1. 設備カード
 function g5Cards() {
+  const acts = simActs();
   $('gGens').innerHTML = GENS.map(g => {
-    const failed = isFailed(g.id), down = failed && g.id !== 'W', miss = failed && g.id === 'W';
-    const out = g5Out(g.id), up = g5.ups[g.id] || 0, rs = RSV_OF[g.id] || 0;
-    const act = g5Active().reduce((t, s) => t + s.parts.filter(p => p.g === g.id).reduce((u, p) => u + p.mw, 0), 0);
+    const ft = sim ? sim.failed[g.id] : null, down = ft != null;
+    const out = sim ? sim.out[g.id] : g.plan, up = sim ? (sim.ups[g.id] || 0) : 0, rs = RSV_OF[g.id] || 0;
+    const miss = g.id === 'W' && out < g.plan, err = g.plan - out;
+    const act = acts.filter(a => a.g === g.id).reduce((t, a) => t + a.used, 0);
     const planCell = out !== g.plan ? `${g.plan}→<span class="${out > g.plan ? 'chg' : ''}">${out}</span>` : `${g.plan}`;
-    const free = g.rated - g.plan - up;
     let rows = `<dt>定格</dt><dd>${g.rated}${g.type === 'bess' ? 'MW／100MWh' : ''}</dd>`;
     if (g.type === 'wind') rows += `<dt>予測出力</dt><dd>${planCell}</dd><dt>余力</dt><dd>—（風しだい）</dd>`;
     else {
       rows += `<dt>計画出力</dt><dd>${g.type === 'bess' ? '放電 ' : ''}${planCell}</dd>`;
-      rows += `<dt>余力</dt><dd>${down ? '—' : free + (rs ? `（うち調整力 ${rs}）` : '')}</dd>`;
+      rows += `<dt>余力</dt><dd>${down ? '—' : (g.rated - g.plan - up) + (rs ? `（うち調整力 ${rs}）` : '')}</dd>`;
       rows += g.type === 'bess' ? `<dt>SOC</dt><dd>${g.soc}MWh</dd>` : `<dt>最低出力</dt><dd>${g.min}</dd>`;
     }
-    const note = down ? '故障で停止中' : miss ? `予測より ${g5.windErr}MW 少ない` : g.type === 'wind' ? '予測なので外れることがある'
-      : rs ? `調整力：${G_RSV.filter(x => x.parts.some(p => p.g === g.id)).map(x => x.name).join('・')}` : '調整力は出していない';
-    const badge = down ? '<span class="badge">停止</span>' : miss ? `<span class="badge">予測外れ −${g5.windErr}</span>`
+    const rsNames = G_RSV.filter(x => x.parts.some(p => p.g === g.id)).map(x => x.name).join('・');
+    const note = down ? `故障で停止中${rs ? `（担当の調整力 ${rsNames} も使えない）` : ''}` : miss ? `予測より ${err}MW 少ない`
+      : g.type === 'wind' ? '予測なので外れることがある' : rs ? `調整力：${rsNames}` : '調整力は出していない';
+    const badge = down ? `<span class="badge">停止 ${G_TIMES[ft].at}</span>` : miss ? `<span class="badge">予測外れ −${err}</span>`
       : act ? `<span class="badge act">調整力 +${act}</span>` : '';
-    const pl = (down ? 0 : out) / g.rated * 100;
     const rsBar = rs && !down ? `<span class="rs" style="left:${(g.plan + up) / g.rated * 100}%;width:${rs / g.rated * 100}%"></span>` : '';
     return `<div class="gen${down ? ' down' : ''}${miss ? ' miss' : ''}" data-g="${g.id}">
       <div class="gh"><span class="ic" aria-hidden="true">${G_ICON[g.type]}</span>${esc(g.name)}<span class="kind">${G_TYPE[g.type]}・${esc(g.kind)}</span>${badge}</div>
-      <div class="cap" style="width:${g.rated / CAP_MAX * 100}%" title="定格 ${g.rated}MW"><span class="pl" style="width:${pl}%"></span>${rsBar}</div>
+      <div class="cap" style="width:${g.rated / CAP_MAX * 100}%" title="定格 ${g.rated}MW"><span class="pl" style="width:${out / g.rated * 100}%"></span>${rsBar}</div>
       <dl>${rows}</dl>
       <div class="note-g">${esc(note)}</div></div>`;
   }).join('');
 }
 
-// 2. 需給バランス図
+// 2. 需給バランス図（当初の計画＋出来事ごとに1行）
 function g5Segs(base) {
-  const segs = [];
-  GENS.forEach(g => {
-    const mw = base ? g.plan : g5Out(g.id);
-    if (mw > 0) segs.push({ g: g.id, mw, label: g.name, title: `${g.name}：${mw}MW` });
-  });
-  if (base) return segs;
-  if (g5.market) segs.push({ g: 'M', mw: g5.market, label: '時間前市場', title: `時間前市場で調達：${g5.market}MW`, hatch: true });
-  g5Active().forEach(s => s.parts.forEach(p =>
-    segs.push({ g: p.g, mw: p.mw, label: s.x.name, title: `調整力 ${s.x.name}：${G[p.g].name} +${p.mw}MW`, hatch: true })));
+  if (base || !sim) return GENS.map(g => ({ g: g.id, mw: g.plan, label: g.name, title: `${g.name}：${g.plan}MW` }));
+  const segs = GENS.filter(g => sim.out[g.id] > 0).map(g => ({ g: g.id, mw: sim.out[g.id], label: g.name,
+    title: `${g.name}：${sim.out[g.id]}MW` + (sim.ups[g.id] ? `（計画変更で+${sim.ups[g.id]}）` : '') }));
+  if (sim.market) segs.push({ g: 'M', mw: sim.market, label: '時間前市場', title: `時間前市場で調達：${sim.market}MW`, hatch: true });
+  simActs().forEach(a => segs.push({ g: a.g, mw: a.used, label: a.name, title: `調整力 ${a.name}：${G[a.g].name} +${a.used}MW`, hatch: true }));
   return segs;
 }
 function g5Row(name, segs) {
@@ -1018,83 +1078,142 @@ function g5Row(name, segs) {
   return `<div class="bal-row"><span class="nm">${name}</span><div class="bal-track">${html}${sh}</div></div>`;
 }
 function g5Balance() {
-  const now = g5Segs(false);
-  const sum = now.reduce((s, x) => s + x.mw, 0), short = DEMAND - sum;
-  const name2 = !g5.ran ? 'いま' : g5.mode === 'rsv' ? '実需給<br>（調整力）' : g5.log.length ? '変更後の計画' : '故障後';
+  const rows = [g5Row('当初の計画', g5Segs(true))];
+  let last = g5Segs(true);
+  if (sim) sim.groups.forEach(gr => {
+    if (gr.state === 'done') { rows.push(g5Row(`${G_TIMES[gr.t].at}の後`, gr.row)); last = gr.row; }
+    else if (gr.state === 'now') { last = g5Segs(false); rows.push(g5Row(`${G_TIMES[gr.t].at}の後<br>（対応中）`, last)); }
+  });
+  const sum = last.reduce((s, x) => s + x.mw, 0), short = DEMAND - sum;
   const dl = `calc(6.2em + 6px + (100% - 6.2em - 6px) * ${DEMAND / BAL_MAX})`;
-  $('gBal').innerHTML = g5Row('当初の計画', g5Segs(true)) + g5Row(name2, now) +
+  $('gBal').innerHTML = rows.join('') +
     `<span class="bal-demand" style="left:${dl}"><span style="left:auto;right:5px">需要 ${DEMAND}</span></span>` +
     `<div class="bal-ticks">${[0, 200, 400, 600, 800].map(v => `<span style="left:${v / BAL_MAX * 100}%">${v}</span>`).join('')}</div>`;
-  $('gBalSum').innerHTML = `供給 ${sum}MW ／ 需要 ${DEMAND}MW → ` +
+  $('gBalSum').innerHTML = `${rows.length > 1 ? 'いちばん下の行：' : ''}供給 ${sum}MW ／ 需要 ${DEMAND}MW → ` +
     (short > 0 ? `<b class="ng">不足 ${short}MW</b>` : '<b class="ok">一致</b>');
 }
 
-// 5. 結果（流れの説明）
-function g5Flow() {
-  const el = $('gFlow');
-  if (!g5.ran) {
-    el.innerHTML = '<h3>5. 結果</h3><p class="hint" style="margin:0">発電機と故障の発生時刻を選んで「実行」を押してください。計画変更の締切（実需給の1時間前）より前か後かで、対応が変わります。</p>';
+// 出来事のタイムライン
+function g5Events() {
+  const el = $('gEvents');
+  const groups = sim ? sim.groups : cfgGroups().map(x => ({ ...x, state: 'cfg', kind: canChange(x.t) ? 'plan' : 'rsv',
+    items: x.ids.map(id => ({ id, short: id === 'W' ? cfg.W.err : G[id].plan })) }));
+  if (!groups.length) {
+    el.innerHTML = '<li class="empty">故障が設定されていません。上の欄で「故障させる」をオンにするか、例のボタンを押してください。</li>';
     return;
   }
-  const g = G[g5.sel];
-  const what = g5.sel === 'W' ? `${g.name}の出力が予測より ${g5.windErr}MW 少なくなる（予測外れ）` : `${g.name}が故障して停止`;
-  let h = `<h3>5. 結果</h3><p class="flow-p">${timeText(g5.tIdx)}に、${esc(what)}。<br>不足量：<b>${g5.short}MW</b>${g5.sel === 'S' ? '（放電40MWが出せなくなる）' : ''}</p>`;
-  if (g5.mode === 'none') {
-    h += '<div class="msg ok">不足は生じません（予測外れ 0MW）</div>';
-  } else if (g5.mode === 'plan') {
-    const rem = g5Remaining();
-    h += '<div class="msg ok">計画変更ができます</div><p class="flow-p">計画変更の締切（実需給の1時間前・17:00）より前なので、BGは不足を埋めるように計画を変更できます。</p>';
-    if (g5.log.length) h += `<ul class="log">${g5.log.map(l => `<li>${esc(l)}</li>`).join('')}</ul>`;
+  const gcLi = '<li class="gcline"><span class="et">17:00</span><span>締切（ゲートクローズ）：これより後は計画変更できない。調整力が動く</span></li>';
+  let html = '', gcDone = false;
+  groups.forEach(gr => {
+    if (!gcDone && gr.t > GC_IDX) { html += gcLi; gcDone = true; }
+    // まだ処理していない出来事は、いまの計画から見込みの不足量を出す
+    const items = gr.items.length ? gr.items : gr.ids.map(id => ({ id, short: id === 'W' ? cfg.W.err : sim.out[id] }));
+    const sum = items.reduce((s, x) => s + x.short, 0);
+    const covered = (gr.steps || []).reduce((s, x) => s + x.used, 0);
+    let st;
+    if (gr.state === 'cfg') st = `<span class="st wait">未実行・${gr.kind === 'plan' ? '締切より前（計画変更できる）' : '締切より後（調整力が動く）'}</span>`;
+    else if (gr.state === 'wait') st = '<span class="st wait">これから</span>';
+    else if (gr.state === 'now') st = `<span class="st now">${gr.kind === 'plan' ? '計画変更の対応を選んでください' : '調整力が動いています…'}</span>`;
+    else if (gr.kind === 'plan') st = sum === 0 ? '<span class="st ok">不足なし</span>' : '<span class="st ok">計画変更で解消</span>';
+    else st = gr.lack === 0 ? `<span class="st ok">調整力で補った（${covered}MW）</span>`
+      : `<span class="st ng">足りない：${gr.lack}MW（調整力で補えたのは${covered}MW）</span>`;
+    html += `<li class="${gr.state === 'now' ? 'cur' : ''}"><span class="et">${G_TIMES[gr.t].at}</span><span>${items.map(x => esc(evText(x.id, x.short))).join('<br>')}` +
+      `${items.length > 1 ? `<br><span class="hint">同時に発生：合計で不足${sum}MW</span>` : ''}<br>${st}</span></li>`;
+  });
+  if (!gcDone) html += gcLi;
+  el.innerHTML = html;
+}
+
+// 5. 結果（出来事ごとの説明と、最後のまとめ）
+function g5Group(gr) {
+  const what = gr.items.map(x => esc(evText(x.id, x.short))).join('、');
+  let h = `<p class="flow-p"><b>${G_TIMES[gr.t].at}</b>　${timeText(gr.t)}に、${what}${gr.items.length > 1 ? `。同時に起きたので、合算して<b>不足${gr.short}MW</b>` : ''}。</p>`;
+  if (gr.lost.length) h += `<p class="hint">故障した発電機が担当していた調整力は使えなくなります：${esc(gr.lost.map(l => `${l.name} ${l.mw}MW`).join('、'))}</p>`;
+  if (gr.kind === 'plan') {
+    if (gr.short === 0) return h + '<div class="msg ok">不足は生じません</div>';
+    h += '<div class="msg ok">計画変更ができます</div>';
+    h += `<p class="flow-p">${gr.t === GC_IDX ? '17:00は締切の時点です。17:00ちょうどまでの故障は、計画変更が間に合う扱いにしています。' : '締切（17:00）より前なので、BGが計画を変更して不足を埋めます。'}</p>`;
+    if (gr.log.length) h += `<ul class="log">${gr.log.map(l => `<li>${esc(l)}</li>`).join('')}</ul>`;
+    const rem = gr.state === 'now' ? simRemaining() : 0;
     if (rem > 0) {
-      const av = g5SelfAvail(), avSum = av.reduce((s, x) => s + x.mw, 0);
+      const av = simSelfAvail(), avSum = av.reduce((s, x) => s + x.mw, 0);
       h += `<p class="flow-p">残りの不足：<b style="color:#ff9c9c">${rem}MW</b>。対応を選んでください。</p><div class="choice">
         <button class="btn" id="gOpt1">① 時間前市場で ${rem}MW を調達する（BGの計画変更）<span class="why">卸電力市場（JEPX時間前市場）で買って、計画を変更します。実際に買える量と価格は、そのときの売り入札しだいです。</span></button>
         <button class="btn" id="gOpt2"${avSum ? '' : ' disabled'}>② 自社の他の発電機の出力を上げる（使える余力 ${avSum}MW）<span class="why">${avSum ? esc(av.map(x => `${x.g.name}は +${x.mw}MW まで`).join('、')) + '。' : '使える余力がありません。'}火力A・火力B・蓄電池の余力は、調整力として約定済みなので使えません。</span></button></div>`;
-    } else {
-      h += `<div class="msg ok">計画変更が完了しました（供給 ${DEMAND}MW ＝ 需要 ${DEMAND}MW）</div><p class="flow-p" style="margin:0">変更後の計画を、締切（17:00）までに広域機関へ提出します。実需給では計画どおりに運転するので、ほかにずれがなければ調整力は動きません。</p>`;
+    } else if (gr.state === 'done') {
+      h += `<div class="msg ok">計画変更が完了しました（供給 ${DEMAND}MW ＝ 需要 ${DEMAND}MW）。変更後の計画を、締切（17:00）までに広域機関へ提出します。</div>`;
     }
-  } else {
-    h += `<div class="msg warn">計画変更の締切を過ぎています。調整力が動きます</div><p class="flow-p">確保済みの調整力（合計${RSV_TOTAL}MW）が、速いものから順に動きます。</p>`;
-    let ai = 0;
-    h += `<ol class="rsteps">${g5.steps.map(s => {
-      const names = esc(s.x.parts.map(p => `${G[p.g].name} ${p.mw}MW`).join('＋'));
-      const head = `<span class="rn">${s.x.name}</span>`;
-      if (s.skip) return `<li data-r="${s.x.r}" class="${g5.done ? 'skip' : 'wait'}">${head}<span>${names}　${g5.done ? '出番なし（不足は解消済み）' : '待機'}</span></li>`;
-      if (ai++ >= g5.shown) return `<li data-r="${s.x.r}" class="wait">${head}<span>${names}　待機中…</span></li>`;
-      return `<li data-r="${s.x.r}">${head}<span>${names}<span class="rv">
-        <span>動いた量 <b>${s.used}MW</b></span><span>残りの不足 <b class="${s.rem ? 'rem-ng' : ''}">${s.rem}MW</b></span><span>応動時間の目安 <b>${s.x.resp}</b></span></span></span></li>`;
-    }).join('')}</ol>`;
-    if (RSV_OF[g5.sel]) h += '<p class="hint">※ この画面では、流れを追いやすいように、故障した発電機が出している調整力も約定どおり動く扱いにしています（実際には、停止した発電機は調整力を出せません）。</p>';
-    if (g5.done) {
-      const act = g5.steps.filter(s => !s.skip), rem = act.length ? act[act.length - 1].rem : g5.short;
-      h += rem > 0
-        ? `<div class="msg ng">調整力が足りません。周波数が低下します。負荷遮断などの緊急対応が必要になるおそれがあります（調整力${RSV_TOTAL}MWを使い切っても、${rem}MWが不足）</div>`
-        : `<div class="msg ok">調整力で不足（${g5.short}MW）を補いました</div>`;
-      h += '<div class="msg info">事後：計画と実績のずれは、インバランスとして精算されます。</div>';
-    }
+    return h;
+  }
+  h += '<div class="msg warn">計画変更の締切を過ぎています。調整力が動きます</div>';
+  h += `<p class="flow-p">確保済みの調整力${RSV_TOTAL}MWのうち、この時点で使えるのは <b>${gr.avail}MW</b> です（故障した発電機の担当分と、先に使った分を除く）。</p>`;
+  if (gr.steps.length) h += `<ol class="rsteps">${gr.steps.map((s, i) => i < gr.shown
+    ? `<li data-r="${s.r}"><span class="rn">${s.name}</span><span>${esc(G[s.g].name)}<span class="rv">
+        <span>動いた量 <b>${s.used}MW</b></span><span>残りの不足 <b class="${s.rem ? 'rem-ng' : ''}">${s.rem}MW</b></span><span>応動時間の目安 <b>${s.resp}</b></span></span></span></li>`
+    : `<li data-r="${s.r}" class="wait"><span class="rn">${s.name}</span><span>${esc(G[s.g].name)}　待機中…</span></li>`).join('')}</ol>`;
+  if (gr.state === 'done') h += gr.lack > 0
+    ? `<div class="msg ng">調整力で足りない分が ${gr.lack}MW あります。周波数が低下します。負荷遮断などの緊急対応が必要になるおそれがあります</div>`
+    : `<div class="msg ok">調整力で不足（${gr.short}MW）を補いました</div>`;
+  return h;
+}
+function g5Flow() {
+  const el = $('gFlow');
+  let h = '<h3>5. 結果</h3>';
+  if (!sim) {
+    el.innerHTML = h + '<p class="hint" style="margin:0">故障を設定して「実行」を押すと、時刻の早いものから順に処理します。締切（17:00）までの故障は計画変更、それより後は調整力で対応します。</p>';
+    return;
+  }
+  if (!sim.groups.length) {
+    el.innerHTML = h + '<p class="hint" style="margin:0">故障が設定されていません。「故障させる」をオンにするか、例のボタンを押してから「実行」を押してください。</p>';
+    return;
+  }
+  sim.groups.forEach(gr => { if (gr.state !== 'wait') h += `<div class="evblock">${g5Group(gr)}</div>`; });
+  if (sim.finished) {
+    const total = sim.groups.reduce((s, g) => s + g.short, 0);
+    const byPlan = sim.groups.filter(g => g.kind === 'plan').reduce((s, g) => s + g.short, 0);
+    const byRsv = sim.groups.reduce((s, g) => s + g.steps.reduce((t, x) => t + x.used, 0), 0);
+    const lack = sim.groups.reduce((s, g) => s + g.lack, 0);
+    const hasRsv = sim.groups.some(g => g.kind === 'rsv' && g.short > 0);
+    h += `<div class="evblock"><h3>まとめ</h3><dl class="sumtbl">
+      <dt>不足量の合計</dt><dd>${total}MW</dd>
+      <dt>計画変更で解消</dt><dd>${byPlan}MW</dd>
+      <dt>調整力で補った</dt><dd>${byRsv}MW</dd>
+      <dt>足りなかった</dt><dd class="${lack ? 'ng' : ''}">${lack}MW</dd></dl>
+      <div class="msg info">${hasRsv ? '事後：計画と実績のずれは、インバランスとして精算されます。' : '締切までに計画で不足を埋めたので、計画どおりに運転すれば、ほかにずれがない限りインバランスは生じません。'}</div></div>`;
   }
   el.innerHTML = h;
-  if ($('gOpt1')) $('gOpt1').addEventListener('click', g5DoMarket);
-  if ($('gOpt2')) $('gOpt2').addEventListener('click', g5DoSelf);
+  if ($('gOpt1')) $('gOpt1').addEventListener('click', simMarket);
+  if ($('gOpt2')) $('gOpt2').addEventListener('click', simSelf);
 }
 
 // 周波数（概念図：正確な物理計算はしない）
 function g5Freq() {
-  const base = 36, xa = 40, xf = 92, xe = 392, gap = 64;
+  const base = 36, xa = 40, xf = 92, xe = 392;
   const depth = mw => mw <= 0 ? 0 : 12 + Math.min(mw, 350) / 350 * 76;
+  const rs = sim ? sim.groups.filter(g => g.kind === 'rsv' && g.state !== 'wait' && g.short > 0) : [];
   let pts = [[xa, base], [xe, base]], labels = [], red = false, msg = '';
-  if (g5.mode === 'rsv') {
-    pts = [[xa, base], [xf, base], [xf + 8, base + depth(g5.short)]];
-    labels.push([xf, '故障']);
-    g5Active().forEach((s, i) => {
-      const x = xf + 8 + gap * (i + 1);
-      pts.push([x, base + depth(s.rem)]);
-      labels.push([x, s.x.name]);
+  if (rs.length) {
+    const nSteps = rs.reduce((s, g) => s + g.steps.length + 1, 0);
+    const gap = Math.min(64, (xe - xf - 20) / Math.max(nSteps, 1));
+    pts = [[xa, base], [xf, base]];
+    let x = xf, carry = 0;
+    rs.forEach(gr => {
+      pts.push([x + 8, base + depth(carry + gr.short)]);
+      labels.push([x, `${G_TIMES[gr.t].at}故障`]);
+      let prev = '';
+      gr.steps.slice(0, gr.shown).forEach(s => {
+        x += gap;
+        pts.push([x + 8, base + depth(carry + s.rem)]);
+        if (s.name !== prev) labels.push([x + 8, s.name]);
+        prev = s.name;
+      });
+      x += 8 + gap;
+      carry += gr.state === 'done' ? gr.lack : 0;
     });
-    if (g5.done) { const y = pts[pts.length - 1][1]; pts.push([xe, y]); red = y > base; }
-  } else if (!g5.ran) msg = '平常時：需要と供給が一致し、周波数は基準のまま';
-  else if (g5.mode === 'plan') msg = g5Remaining() ? '実需給の前：計画を変更すれば、周波数は乱れない' : '計画で不足を埋めたので、実需給でも周波数は基準のまま';
-  else msg = '不足がないので、周波数は基準のまま';
+    if (sim.finished) { const y = pts[pts.length - 1][1]; pts.push([xe, y]); red = y > base; }
+  } else if (!sim || !sim.groups.length) msg = '平常時：需要と供給が一致し、周波数は基準のまま';
+  else if (!sim.finished) msg = '実需給の前：計画を変更すれば、周波数は乱れない';
+  else msg = '計画で不足を埋めたので、実需給でも周波数は基準のまま';
   const line = (a, color) => `<polyline points="${a.map(p => p.join(',')).join(' ')}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round"/>`;
   const main = red ? pts.slice(0, -1) : pts;
   $('gFreq').innerHTML = `<svg viewBox="0 0 400 150" role="img" aria-label="周波数の概念図${red ? '：調整力が足りず、周波数が低いまま' : ''}" style="max-width:560px">
@@ -1105,42 +1224,67 @@ function g5Freq() {
     <text x="${xe}" y="127" font-size="10" fill="#8a909b" text-anchor="end">時間 →</text>
     ${line(main, '#5b8ff5')}
     ${red ? line(pts.slice(-2), '#e66767') + `<text x="${xe}" y="${pts[pts.length - 1][1] - 9}" font-size="11" fill="#ff9c9c" text-anchor="end">低いまま</text>` : ''}
-    ${pts.slice(2, red ? -1 : undefined).map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="4" fill="#5b8ff5" stroke="#181b22" stroke-width="2"/>`).join('')}
+    ${rs.length ? pts.slice(2, red ? -1 : undefined).map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="4" fill="#5b8ff5" stroke="#181b22" stroke-width="2"/>`).join('') : ''}
     ${labels.map(([x, t]) => `<text x="${x}" y="146" font-size="10" fill="#b9bec8" text-anchor="middle">${t}</text>`).join('')}
     ${msg ? `<text x="216" y="${base + 26}" font-size="11" fill="#b9bec8" text-anchor="middle">${msg}</text>` : ''}
   </svg>`;
 }
 
-function renderG5() {
-  g5Cards(); g5Balance(); g5Flow(); g5Freq();
-  $('gPick').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.g === g5.sel)));
-  $('gWindBox').hidden = g5.sel !== 'W';
-  $('gWind').value = g5.windErr;
-  $('gWindVal').textContent = `${g5.windErr}MW（予測30MW → 実際${30 - g5.windErr}MW）`;
-  $('gTime').value = g5.tIdx;
-  $('gTimeVal').textContent = `${timeText(g5.tIdx)}　` +
-    (g5.tIdx < GC_IDX ? '→ 締切より前（計画変更できる）' : g5.tIdx === GC_IDX ? '→ ちょうど締切（計画変更は間に合わない）' : '→ 締切より後（計画変更できない）');
-  $('gTicks').querySelectorAll('span').forEach((s, i) => s.classList.toggle('cur', i === g5.tIdx));
+function renderG5() { g5Cards(); g5Balance(); g5Events(); g5Flow(); g5Freq(); }
+
+// 設定欄の表示を、cfg に合わせる
+function g5SyncRows() {
+  GENS.forEach(g => {
+    const c = cfg[g.id], row = $('gRows').querySelector(`.frow[data-g="${g.id}"]`);
+    row.classList.toggle('on', c.on);
+    row.querySelector('input[type=checkbox]').checked = c.on;
+    row.querySelectorAll('.tbtns button').forEach(b => {
+      b.disabled = !c.on;
+      b.setAttribute('aria-pressed', String(c.on && Number(b.dataset.t) === c.t));
+    });
+  });
+  $('gWind').value = cfg.W.err;
+  $('gWind').disabled = !cfg.W.on;
+  $('gWindVal').textContent = `${cfg.W.err}MW（予測30 → 実際${30 - cfg.W.err}）`;
 }
+function g5Changed() { simReset(); g5SyncRows(); renderG5(); }
 
 (function setupG5() {
-  const pos = i => `calc(8px + (100% - 16px) * ${i / (G_TIMES.length - 1)})`;
-  $('gTicks').innerHTML = G_TIMES.map((t, i) => `<span style="left:${pos(i)}"${i === GC_IDX ? ' class="gcl"' : ''}>${t.s}${t.t ? `<br>${t.t}` : ''}</span>`).join('');
-  $('gGc').style.left = pos(GC_IDX);
+  $('gPresets').innerHTML = PRESETS.map((p, i) => `<button class="btn" data-i="${i}">${esc(p.name)}</button>`).join('');
+  $('gPresets').addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    const p = PRESETS[Number(b.dataset.i)];
+    cfg = cfgInit();
+    Object.entries(p.set).forEach(([id, t]) => { cfg[id].on = true; cfg[id].t = t; });
+    if (p.err != null) cfg.W.err = p.err;
+    g5Changed();
+  });
+  $('gRows').innerHTML = GENS.map(g => `<div class="frow" data-g="${g.id}">
+    <div class="fhead"><span class="fname"><span aria-hidden="true">${G_ICON[g.type]}</span> ${esc(g.name)}<small>${g.type === 'wind' ? '予測' : '計画'} ${g.plan}MW</small></span>
+      <label class="sw"><input type="checkbox" data-g="${g.id}"><span class="sw-ui" aria-hidden="true"></span><span>${g.type === 'wind' ? '予測外れを起こす' : '故障させる'}</span></label></div>
+    <div class="tbtns" role="group" aria-label="${esc(g.name)}の${g.type === 'wind' ? '予測外れ' : '故障'}の発生時刻">${G_TIMES.map((t, i) =>
+      `<button data-g="${g.id}" data-t="${i}"${t.gc ? ' class="gc"' : ''}>${t.s}<small>${t.t ? t.t : '&nbsp;'}${t.gc ? ' 締切の時点' : i > GC_IDX ? ' 締切より後' : ''}</small></button>`).join('')}</div>
+    ${g.type === 'wind' ? '<div class="werr"><span>外れる量</span><input type="range" id="gWind" min="0" max="30" step="1" aria-label="風力の予測外れの量（MW）"><b id="gWindVal"></b></div>' : ''}
+  </div>`).join('');
+  $('gRows').addEventListener('change', e => {
+    if (e.target.type !== 'checkbox') return;
+    cfg[e.target.dataset.g].on = e.target.checked;
+    g5Changed();
+  });
+  $('gRows').addEventListener('click', e => {
+    const b = e.target.closest('.tbtns button');
+    if (!b || b.disabled) return;
+    cfg[b.dataset.g].t = Number(b.dataset.t);
+    g5Changed();
+  });
+  $('gWind').addEventListener('input', e => { cfg.W.err = Number(e.target.value); g5Changed(); });
+  $('gRun').addEventListener('click', simStart);
+  $('gReset').addEventListener('click', () => { cfg = cfgInit(); g5Changed(); });
   $('gLegend').innerHTML = GENS.map(g => `<span data-g="${g.id}"><i></i>${esc(g.name)}</span>`).join('') +
     '<span data-g="M"><i></i>時間前市場で調達</span><span><i class="hatch"></i>斜線＝時間前市場で調達した分・調整力が動いた分</span>' +
     '<span><i class="short"></i>赤枠＝不足</span><span>白い縦線＝需要</span>';
-  $('gPick').innerHTML = GENS.map(g => `<button data-g="${g.id}" aria-pressed="false">${G_ICON[g.type]} ${esc(g.name)}</button>`).join('');
-  $('gPick').addEventListener('click', e => {
-    const b = e.target.closest('button');
-    if (!b) return;
-    g5.sel = b.dataset.g; g5Init(true); renderG5();
-  });
-  $('gTime').addEventListener('input', e => { g5.tIdx = Number(e.target.value); g5Init(true); renderG5(); });
-  $('gWind').addEventListener('input', e => { g5.windErr = Number(e.target.value); g5Init(true); renderG5(); });
-  $('gRun').addEventListener('click', g5Run);
-  $('gReset').addEventListener('click', () => { g5Init(false); renderG5(); });
-  g5Init(false);
+  g5SyncRows();
   renderG5();
 })();
 
