@@ -6,7 +6,7 @@
 // ・保存するファイル（PRECACHE）を増やしたり減らしたりしたときは、VERSION を上げる（例: timeline-v2）。
 //   新しい版が動き始めると、古い版のキャッシュは自動で削除される。
 
-const VERSION = 'timeline-v3';
+const VERSION = 'timeline-v5';
 const CACHE_PREFIX = 'timeline-';
 const PRECACHE = ['./', 'index.html', 'manifest.json', 'icons/icon-192.png', 'icons/icon-512.png'];
 

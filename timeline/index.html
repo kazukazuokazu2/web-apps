@@ -246,6 +246,50 @@
   .gen dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
   .gen .chg { color: var(--ok); font-weight: 700; }
   .gen .note-g { color: var(--muted); font-size: 11px; margin-top: 4px; }
+  .gen .rlabel { display: inline-block; margin-top: 4px; font-size: 11px; color: var(--text-2); border: 1px solid var(--border); border-radius: 4px; padding: 0 6px; }
+  .gen .rlabel.off { text-decoration: line-through; color: var(--muted); }
+  table.cmp.fit { min-width: 0; }
+  table.cmp tr:has(+ tr.chk) > * { border-bottom: 0; }
+  table.cmp tr.chk td { padding-top: 0; font-size: 12px; }
+  #gRsvTable .rchip { white-space: nowrap; }
+  .rsvt td, .rsvt th { vertical-align: middle; }
+  .rsvt .fx { display: block; font-size: 10px; color: var(--muted); font-weight: 400; white-space: nowrap; }
+  .rsvt td.chk-ok, .rsvt td.chk-ng { font-size: 15px; }
+  .rsvt td.chk-ng .fx { color: #ff9c9c; }
+  .rsvt td.func { font-size: 12px; color: var(--text-2); }
+  .qty { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+  .qty b { min-width: 2.2em; text-align: center; font-variant-numeric: tabular-nums; }
+  .qbtn { width: 28px; height: 28px; border: 1px solid var(--border); background: var(--surface-2); border-radius: 6px; cursor: pointer; font-weight: 700; padding: 0; }
+  .qbtn:disabled { opacity: .35; cursor: default; }
+  .qbtn:focus-visible, .xbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .xbtn { padding: 4px 8px; font-size: 12px; font-weight: 400; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .addrow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
+  /* スマホ幅：表の各行をカード状に並べ替えて、横にはみ出さないようにする */
+  @media (max-width: 640px) {
+    .rsvt thead { display: none; }
+    .rsvt, .rsvt tbody { display: block; }
+    .rsvt tr:not(.chk) { display: grid; grid-template-columns: auto 1fr auto; gap: 8px 10px; align-items: center; padding: 10px 0 4px; border-top: 1px solid var(--border); }
+    .rsvt tr:not(.chk) > * { border: 0 !important; padding: 0 !important; position: static !important; background: none !important; }
+    .rsvt tr.chk { display: block; }
+    .rsvt tr.chk td { display: block; padding: 2px 0 10px !important; }
+    .rsvt td[data-label]::before { content: attr(data-label); display: block; font-size: 10px; color: var(--muted); font-weight: 400; }
+    .rsvt td.func { grid-column: 1 / 3; }
+    .rsvt td.del { grid-column: 3; justify-self: end; }
+    .rsvt td.func::before { display: none; }
+  }
+  table.cmp td.chk-ok { color: var(--ok); }
+  table.cmp td.chk-ng { color: #ff9c9c; font-weight: 700; }
+  select.asg { font: inherit; font-size: 13px; color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 3px 4px; max-width: 100%; }
+  select.asg:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  table.cmp.fit th:first-child { width: auto; white-space: normal; }
+  details.fold { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; }
+  details.fold > summary { cursor: pointer; padding: 12px 14px; font-weight: 700; list-style: none; display: flex; justify-content: space-between; align-items: center; }
+  details.fold > summary::-webkit-details-marker { display: none; }
+  details.fold > summary::after { content: "＋"; color: var(--muted); font-weight: 400; }
+  details.fold[open] > summary::after { content: "－"; }
+  details.fold > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 10px; }
+  .fold-body { padding: 0 14px 14px; }
   .gen .badge { margin-left: auto; white-space: nowrap; font-size: 11px; font-weight: 700; border-radius: 4px; padding: 0 6px; background: var(--ng); color: #fff; }
   .gen .badge.act { background: var(--text); color: #0f1115; }
   .gen.down { filter: grayscale(1); opacity: .5; }
@@ -273,7 +317,7 @@
   .field-l { font-size: 12px; color: var(--muted); margin: 0 0 4px; }
   .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
   .presets .btn { font-size: 12px; padding: 6px 10px; text-align: left; }
-  .frows { display: grid; gap: 8px; }
+  .frows { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
   .frow { background: var(--surface-2); border: 1px solid var(--border); border-left: 4px solid var(--uc); border-radius: 9px; padding: 8px 10px; transition: box-shadow .2s; }
   .frow.on { box-shadow: 0 0 0 1px var(--ng); }
   .fhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
@@ -286,17 +330,17 @@
   .sw input:checked + .sw-ui { background: var(--ng); border-color: var(--ng); }
   .sw input:checked + .sw-ui::after { transform: translateX(14px); background: #fff; }
   .sw input:focus-visible + .sw-ui { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .tbtns { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin-top: 8px; }
-  @media (max-width: 560px) { .tbtns { grid-template-columns: repeat(3, 1fr); } }
-  .tbtns button { border: 1px solid var(--border); background: var(--surface); border-radius: 7px; padding: 4px 2px; font-size: 12px; line-height: 1.3; cursor: pointer; color: var(--text-2); }
-  .tbtns button small { display: block; font-size: 10px; color: var(--muted); white-space: nowrap; }
+  .tbtns { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; margin-top: 8px; }
+  @media (max-width: 560px) { .tbtns { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  .tbtns button { min-width: 0; border: 1px solid var(--border); background: var(--surface); border-radius: 7px; padding: 4px 2px; font-size: 12px; line-height: 1.3; cursor: pointer; color: var(--text-2); }
+  .tbtns button small { display: block; font-size: 10px; color: var(--muted); }
   .tbtns button.gc small { color: #ff9c9c; }
   .tbtns button[aria-pressed="true"] { background: color-mix(in srgb, var(--ng) 22%, var(--surface)); border-color: var(--ng); color: var(--text); font-weight: 700; }
   .tbtns button:disabled { opacity: .35; cursor: default; }
   .tbtns button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .werr { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+  .werr { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 8px; font-size: 12px; color: var(--muted); }
   .werr input { flex: 1; accent-color: var(--ng); }
-  .werr input { min-width: 0; }
+  .werr input { min-width: 120px; }
   .werr span, .werr b { white-space: nowrap; }
   .werr b { color: var(--text); }
   .evs { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
@@ -425,6 +469,24 @@
     <div class="panel">
       <div class="table-wrap"><table class="cmp" id="cmpTable"></table></div>
     </div>
+    <details class="fold" id="cmp2">
+      <summary>二次①と二次②の違い</summary>
+      <div class="fold-body">
+        <div class="table-wrap">
+          <table class="cmp fit">
+            <thead><tr><th scope="col">項目</th><th scope="col" data-r="r2a">二次①</th><th scope="col" data-r="r2b">二次②</th></tr></thead>
+            <tbody>
+              <tr><th scope="row">指令の方式</th><td>LFC信号（負荷周波数制御）</td><td>EDC信号（経済負荷配分制御）</td></tr>
+              <tr><th scope="row">何を補うか</th><td>周波数の偏差、連系線潮流のずれ</td><td>需給のずれ（需要や再エネの予測誤差など）</td></tr>
+              <tr><th scope="row">動かし方</th><td>中給から、短い周期（秒単位）で自動的に増減の指令が出る</td><td>中給から、長めの周期（数分単位）で指令が出る</td></tr>
+              <tr><th scope="row">考え方</th><td>周波数を、すばやく一定に保つ</td><td>需給のずれを、安い電源から順に経済的に配分して補う</td></tr>
+              <tr><th scope="row">応動・継続<br>（目安）</th><td colspan="2">どちらも応動5分以内／継続30分以上</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="hint" style="margin:10px 0 0">実際には、一次・二次①・二次②は並行して動くことが多く、LFCは常時動いています。アプリの『一次→二次①→二次②→三次①』の順番は、応動時間の違いを分かりやすくするための単純化です。</p>
+      </div>
+    </details>
   </section>
 
   <!-- 画面4：確認クイズ -->
@@ -443,6 +505,20 @@
       <h3>1. 設備の一覧</h3>
       <p class="hint">棒の長さ＝定格出力、塗りつぶし＝計画出力、斜線＝調整力として約定済みの分（前日に需給調整市場で約定した想定）。</p>
       <div class="gens" id="gGens"></div>
+      <h3 style="margin-top:16px">確保済みの調整力（前日の需給調整市場の約定結果の例）</h3>
+      <p class="flow-p">電源ごとに、出力変化速度が違います。応動時間に間に合う量までしか、調整力は出せません。担当を組み替えて、試してみましょう</p>
+      <p class="hint">「担当する電源」はプルダウンで、量は±ボタン（1MW刻み）で変えられます。風力は調整力に使わないので選べません。間に合う量＝出力変化速度×応動時間（火力の一次は10秒以内なので、出力変化速度÷6）。出力変化速度・余力などの数値は、すべて学習用の架空のものです。</p>
+      <div class="table-wrap"><table class="cmp fit rsvt" id="gRsvTable"></table></div>
+      <p class="hint" id="gRsvSum" style="margin:6px 0 0"></p>
+      <div class="addrow">
+        <span class="field-l" style="margin:0">行を追加：</span>
+        <select class="asg" id="gAddR" aria-label="追加する商品"></select>
+        <select class="asg" id="gAddG" aria-label="追加する担当の電源"></select>
+        <button class="btn" id="gAdd">行を追加（10MW）</button>
+      </div>
+      <div id="gAsgWarn" aria-live="polite"></div>
+      <div class="actions" style="justify-content:flex-start;margin-top:8px"><button class="btn" id="gAsgReset">初期の担当に戻す</button></div>
+      <p class="hint" style="margin:8px 0 0">調整力の担当は、前日の需給調整市場の約定結果で、30分コマごとに決まります。同じ電源の余力を、複数の商品に重ねて出すことはできません。翌日は、別の電源・別の組み合わせで約定することもあります。</p>
     </div>
 
     <div class="panel">
@@ -462,6 +538,7 @@
         <button class="btn" id="gReset">最初に戻す</button>
         <button class="btn primary" id="gRun">実行</button>
       </div>
+      <p class="hint" id="gRunNote" style="margin:6px 0 0;text-align:right;color:#ff9c9c" aria-live="polite"></p>
     </div>
 
     <div class="panel">
@@ -617,6 +694,12 @@ const QUIZ = [
     a: '周波数が低下し、緊急対応が必要になるおそれがある',
     wrong: ['周波数が上昇する', '影響はなく、事後のインバランス精算だけで済む', '需要が自動的に計画値まで下がるので、問題は起きない'],
     exp: '調整力で補えない不足は、周波数の低下につながります。' },
+  { q: '二次①（応動5分以内）で、火力が30MWを担当するために必要な出力変化速度は、最低でどれだけ？',
+    a: '6MW/分', wrong: ['3MW/分', '10MW/分', '30MW/分'],
+    exp: '30MWを5分で出すには、30÷5＝6MW/分が必要です。' },
+  { q: '出力変化が遅めの電源が、担当しやすい商品は？',
+    a: '三次①', wrong: ['一次', '二次①', '二次②'],
+    exp: '三次①は応動時間が15分以内と長く、出力変化が遅めの電源でも、量を出しやすいためです。' },
 ];
 
 const shuffle = arr => {
@@ -889,9 +972,10 @@ $('qHint').textContent = `全${QUIZ.length}問の択一式です。問題と選�
 // ===== 画面5：発電機と需給バランス（すべて架空の学習用データ） =====
 const DEMAND = 770, BAL_MAX = 800, CAP_MAX = 400;
 const GENS = [
-  { id: 'A', name: '火力A', kind: 'LNG', type: 'thermal', rated: 400, plan: 350, min: 150 },
-  { id: 'B', name: '火力B', kind: '石炭', type: 'thermal', rated: 300, plan: 250, min: 150 },
-  { id: 'C', name: '火力C', kind: 'LNG・小型', type: 'thermal', rated: 200, plan: 100, min: 50 },
+  // ramp：出力変化速度（MW/分、架空の学習用データ）。蓄電池は即時、風力は調整力に使わない
+  { id: 'A', name: '火力A', kind: 'LNG', type: 'thermal', rated: 400, plan: 350, min: 150, ramp: 8 },
+  { id: 'B', name: '火力B', kind: '石炭', type: 'thermal', rated: 300, plan: 250, min: 150, ramp: 6 },
+  { id: 'C', name: '火力C', kind: 'LNG・小型', type: 'thermal', rated: 200, plan: 100, min: 50, ramp: 5 },
   { id: 'W', name: '風力W', kind: '予測で運転', type: 'wind', rated: 100, plan: 30 },
   { id: 'S', name: '蓄電池BESS', kind: '容量100MWh', type: 'bess', rated: 50, plan: 40, soc: 80 },
 ];
@@ -899,15 +983,40 @@ const G = Object.fromEntries(GENS.map(g => [g.id, g]));
 const G_ICON = { thermal: '🔥', wind: '🌬️', bess: '🔋' };
 const G_TYPE = { thermal: '火力', wind: '風力', bess: '蓄電池' };
 // 前日に需給調整市場で約定した調整力（この順に動く）
+// respMin：応動時間（分）。間に合う量＝出力変化速度×応動時間
 const G_RSV = [
-  { r: 'r1', name: '一次', resp: '10秒以内', parts: [{ g: 'S', mw: 10 }] },
-  { r: 'r2a', name: '二次①', resp: '5分以内', parts: [{ g: 'A', mw: 30 }] },
-  { r: 'r2b', name: '二次②', resp: '5分以内', parts: [{ g: 'B', mw: 30 }] },
-  { r: 'r3a', name: '三次①', resp: '15分以内', parts: [{ g: 'A', mw: 20 }, { g: 'B', mw: 20 }] },
+  { r: 'r1', name: '一次', resp: '10秒以内', respMin: 10 / 60, respTxt: '1/6分', parts: [{ g: 'S', mw: 10 }] },
+  { r: 'r2a', name: '二次①', resp: '5分以内', respMin: 5, respTxt: '5', parts: [{ g: 'A', mw: 30 }] },
+  { r: 'r2b', name: '二次②', resp: '5分以内', respMin: 5, respTxt: '5', parts: [{ g: 'B', mw: 30 }] },
+  { r: 'r3a', name: '三次①', resp: '15分以内', respMin: 15, respTxt: '15', parts: [{ g: 'A', mw: 20 }, { g: 'B', mw: 20 }] },
 ];
-const RSV_OF = {};
-G_RSV.forEach(x => x.parts.forEach(p => { RSV_OF[p.g] = (RSV_OF[p.g] || 0) + p.mw; }));
-const RSV_TOTAL = Object.values(RSV_OF).reduce((s, v) => s + v, 0); // 110MW
+const RSV_FUNC = { r1: '周波数に自分で応答する機能（自端制御）', r2a: 'LFC信号を受けて動く機能', r2b: 'EDC信号を受けて動く機能', r3a: '指令を受けて動く機能' };
+const PROD = Object.fromEntries(G_RSV.map(x => [x.r, x]));
+const PROD_ORDER = G_RSV.map(x => x.r);
+// 担当の割り当て（表で組み替え・量の変更・行の追加と削除ができる）。ASG0 は初期の担当
+const ASG0 = G_RSV.flatMap(x => x.parts.map(p => ({ r: x.r, g: p.g, mw: p.mw })));
+const asgInit = () => ASG0.map(a => ({ ...a }));
+let asg = asgInit();
+const asgIsInit = () => asg.length === ASG0.length && asg.every((a, i) => a.r === ASG0[i].r && a.g === ASG0[i].g && a.mw === ASG0[i].mw);
+// 動く順：商品の順（一次→二次①→二次②→三次①）、同じ商品は表の上から
+const asgSorted = () => asg.map((a, i) => ({ a, i }))
+  .sort((x, y) => PROD_ORDER.indexOf(x.a.r) - PROD_ORDER.indexOf(y.a.r) || x.i - y.i).map(x => x.a);
+const rsvOf = id => asg.filter(a => a.g === id).reduce((s, a) => s + a.mw, 0);
+const rsvTotal = () => asg.reduce((s, a) => s + a.mw, 0); // 初期値は110MW
+const headroom = g => g.rated - g.plan; // 計画出力からの余力（火力A 50、火力B 50、火力C 100、蓄電池 10）
+const asgOver = () => GENS.filter(g => g.type !== 'wind' && rsvOf(g.id) > headroom(g));
+// 間に合う量（各担当を独立にチェックする単純化）。
+// 蓄電池は余力の範囲なら即時。火力の一次（10秒以内）は、出力変化速度÷6（1MW未満は切り捨て）
+function asgCheck(a) {
+  const g = G[a.g], p = PROD[a.r];
+  let reach, fx;
+  if (g.type === 'bess') { reach = headroom(g); fx = '即時（余力の範囲）'; }
+  else if (a.r === 'r1') { reach = Math.floor(g.ramp / 6); fx = `${g.ramp}÷6≒${reach}`; }
+  else { reach = g.ramp * p.respMin; fx = `${g.ramp}×${p.respTxt}＝${reach}`; }
+  const ok = Math.min(a.mw, reach), short = reach < a.mw;
+  const text = g.type === 'bess' ? `即時（余力 ${reach}MW ${short ? '<' : '≥'} ${a.mw}MW）` : `${fx}MW ${short ? '<' : '≥'} ${a.mw}MW`;
+  return { ok, reach, fx, short, text, limit: short ? `${reach}MWまでしか${g.type === 'bess' ? '出せません' : '間に合いません'}` : '' };
+}
 // 故障の発生時刻の選択肢。17:00（実需給の1時間前）は締切の時点で、17:00ちょうどまでは計画変更できる扱い
 const G_TIMES = [
   { s: '前日', t: '', at: '前日' },
@@ -948,7 +1057,9 @@ function simStart() {
     out: Object.fromEntries(GENS.map(g => [g.id, g.plan])), // いまの計画出力
     ups: {}, failed: {}, market: 0,
     // 調整力は共通の枠。累積で使い、故障した発電機の担当分は使えなくなる
-    pool: G_RSV.flatMap(x => x.parts.map(p => ({ r: x.r, name: x.name, resp: x.resp, g: p.g, left: p.mw, lost: false }))),
+    // reach：応動時間内に間に合う量（約定量と、出力変化速度×応動時間の小さいほう）
+    pool: asgSorted().map(a => ({ r: a.r, name: PROD[a.r].name, resp: PROD[a.r].resp, g: a.g, left: a.mw, reach: asgCheck(a).ok, lost: false })),
+    used: {}, // 電源ごとの、調整力で上げた量の合計
     groups: cfgGroups().map(x => ({ ...x, items: [], short: 0, kind: canChange(x.t) ? 'plan' : 'rsv',
       state: 'wait', log: [], steps: [], shown: 0, lack: 0, lost: [], avail: 0, row: null })),
     gi: -1, finished: false,
@@ -961,7 +1072,7 @@ const simActs = () => sim ? sim.groups.flatMap(gr => gr.steps.slice(0, gr.shown)
 // 自社の他の発電機で上げられる量＝定格−いまの計画−調整力として約定済みの分（風力・故障中は不可）
 function simSelfAvail() {
   return GENS.filter(g => g.type !== 'wind' && sim.failed[g.id] == null)
-    .map(g => ({ g, mw: Math.max(0, g.rated - sim.out[g.id] - (RSV_OF[g.id] || 0)) }))
+    .map(g => ({ g, mw: Math.max(0, g.rated - sim.out[g.id] - rsvOf(g.id)) }))
     .filter(x => x.mw > 0);
 }
 function simNext() {
@@ -988,9 +1099,14 @@ function simNext() {
   let rem = gr.short;
   sim.pool.forEach(p => {
     if (rem <= 0 || p.lost || p.left <= 0) return;
-    const u = Math.min(p.left, rem);
-    p.left -= u; rem -= u;
-    gr.steps.push({ r: p.r, name: p.name, resp: p.resp, g: p.g, used: u, rem });
+    const want = Math.min(p.left, rem);
+    // 応動時間内に間に合う量と、電源の実際の余力（複数の商品で重ねて出せない）で頭打ち
+    const room = Math.max(0, G[p.g].rated - sim.out[p.g] - (sim.used[p.g] || 0));
+    const u = Math.min(want, p.reach, room);
+    const why = u >= want ? '' : p.reach < want && p.reach <= room ? 'late' : 'room';
+    p.left -= u; p.reach -= u; rem -= u;
+    sim.used[p.g] = (sim.used[p.g] || 0) + u;
+    gr.steps.push({ r: p.r, name: p.name, resp: p.resp, g: p.g, used: u, want, why, rem });
   });
   gr.lack = rem;
   const n = gr.steps.length;
@@ -1030,7 +1146,7 @@ function g5Cards() {
   const acts = simActs();
   $('gGens').innerHTML = GENS.map(g => {
     const ft = sim ? sim.failed[g.id] : null, down = ft != null;
-    const out = sim ? sim.out[g.id] : g.plan, up = sim ? (sim.ups[g.id] || 0) : 0, rs = RSV_OF[g.id] || 0;
+    const out = sim ? sim.out[g.id] : g.plan, up = sim ? (sim.ups[g.id] || 0) : 0, rs = rsvOf(g.id);
     const miss = g.id === 'W' && out < g.plan, err = g.plan - out;
     const act = acts.filter(a => a.g === g.id).reduce((t, a) => t + a.used, 0);
     const planCell = out !== g.plan ? `${g.plan}→<span class="${out > g.plan ? 'chg' : ''}">${out}</span>` : `${g.plan}`;
@@ -1041,17 +1157,23 @@ function g5Cards() {
       rows += `<dt>余力</dt><dd>${down ? '—' : (g.rated - g.plan - up) + (rs ? `（うち調整力 ${rs}）` : '')}</dd>`;
       rows += g.type === 'bess' ? `<dt>SOC</dt><dd>${g.soc}MWh</dd>` : `<dt>最低出力</dt><dd>${g.min}</dd>`;
     }
-    const rsNames = G_RSV.filter(x => x.parts.some(p => p.g === g.id)).map(x => x.name).join('・');
+    rows += `<dt>出力変化速度</dt><dd>${g.type === 'wind' ? '調整力に使わない' : g.type === 'bess' ? '即時' : `${g.ramp} MW/分`}</dd>`;
+    const mine = asgSorted().filter(a => a.g === g.id);
+    const rsNames = [...new Set(mine.map(a => PROD[a.r].name))].join('・');
+    // 担当する調整力のラベル（例：二次① 30／三次① 20）。故障したら取り消し線
+    const rsText = mine.map(a => `${PROD[a.r].name} ${a.mw}`).join('／');
+    const rlabel = rs ? `<span class="rlabel${down ? ' off' : ''}" title="担当する調整力${down ? '（故障のため使えない）' : ''}">${rsText}</span>` : '';
     const note = down ? `故障で停止中${rs ? `（担当の調整力 ${rsNames} も使えない）` : ''}` : miss ? `予測より ${err}MW 少ない`
-      : g.type === 'wind' ? '予測なので外れることがある' : rs ? `調整力：${rsNames}` : '調整力は出していない';
+      : g.type === 'wind' ? '予測なので外れることがある' : rs ? '' : '調整力は出していない';
     const badge = down ? `<span class="badge">停止 ${G_TIMES[ft].at}</span>` : miss ? `<span class="badge">予測外れ −${err}</span>`
       : act ? `<span class="badge act">調整力 +${act}</span>` : '';
     const rsBar = rs && !down ? `<span class="rs" style="left:${(g.plan + up) / g.rated * 100}%;width:${rs / g.rated * 100}%"></span>` : '';
     return `<div class="gen${down ? ' down' : ''}${miss ? ' miss' : ''}" data-g="${g.id}">
       <div class="gh"><span class="ic" aria-hidden="true">${G_ICON[g.type]}</span>${esc(g.name)}<span class="kind">${G_TYPE[g.type]}・${esc(g.kind)}</span>${badge}</div>
+      ${rlabel}
       <div class="cap" style="width:${g.rated / CAP_MAX * 100}%" title="定格 ${g.rated}MW"><span class="pl" style="width:${out / g.rated * 100}%"></span>${rsBar}</div>
       <dl>${rows}</dl>
-      <div class="note-g">${esc(note)}</div></div>`;
+      ${note ? `<div class="note-g">${esc(note)}</div>` : ''}</div>`;
   }).join('');
 }
 
@@ -1139,18 +1261,21 @@ function g5Group(gr) {
       const av = simSelfAvail(), avSum = av.reduce((s, x) => s + x.mw, 0);
       h += `<p class="flow-p">残りの不足：<b style="color:#ff9c9c">${rem}MW</b>。対応を選んでください。</p><div class="choice">
         <button class="btn" id="gOpt1">① 時間前市場で ${rem}MW を調達する（BGの計画変更）<span class="why">卸電力市場（JEPX時間前市場）で買って、計画を変更します。実際に買える量と価格は、そのときの売り入札しだいです。</span></button>
-        <button class="btn" id="gOpt2"${avSum ? '' : ' disabled'}>② 自社の他の発電機の出力を上げる（使える余力 ${avSum}MW）<span class="why">${avSum ? esc(av.map(x => `${x.g.name}は +${x.mw}MW まで`).join('、')) + '。' : '使える余力がありません。'}火力A・火力B・蓄電池の余力は、調整力として約定済みなので使えません。</span></button></div>`;
+        <button class="btn" id="gOpt2"${avSum ? '' : ' disabled'}>② 自社の他の発電機の出力を上げる（使える余力 ${avSum}MW）<span class="why">${avSum ? esc(av.map(x => `${x.g.name}は +${x.mw}MW まで`).join('、')) + '。' : '使える余力がありません。'}${esc(GENS.filter(g => rsvOf(g.id) > 0).map(g => g.name).join('・'))}の余力のうち、調整力として約定済みの分は使えません。</span></button></div>`;
     } else if (gr.state === 'done') {
       h += `<div class="msg ok">計画変更が完了しました（供給 ${DEMAND}MW ＝ 需要 ${DEMAND}MW）。変更後の計画を、締切（17:00）までに広域機関へ提出します。</div>`;
     }
     return h;
   }
   h += '<div class="msg warn">計画変更の締切を過ぎています。調整力が動きます</div>';
-  h += `<p class="flow-p">確保済みの調整力${RSV_TOTAL}MWのうち、この時点で使えるのは <b>${gr.avail}MW</b> です（故障した発電機の担当分と、先に使った分を除く）。</p>`;
+  h += `<p class="flow-p">確保済みの調整力${rsvTotal()}MWのうち、この時点で使えるのは <b>${gr.avail}MW</b> です（故障した発電機の担当分と、先に使った分を除く）。</p>`;
   if (gr.steps.length) h += `<ol class="rsteps">${gr.steps.map((s, i) => i < gr.shown
-    ? `<li data-r="${s.r}"><span class="rn">${s.name}</span><span>${esc(G[s.g].name)}<span class="rv">
-        <span>動いた量 <b>${s.used}MW</b></span><span>残りの不足 <b class="${s.rem ? 'rem-ng' : ''}">${s.rem}MW</b></span><span>応動時間の目安 <b>${s.resp}</b></span></span></span></li>`
-    : `<li data-r="${s.r}" class="wait"><span class="rn">${s.name}</span><span>${esc(G[s.g].name)}　待機中…</span></li>`).join('')}</ol>`;
+    ? `<li data-r="${s.r}"><span class="rn">${s.name}</span><span>担当：${esc(G[s.g].name)}（${s.name}）<span class="rv">
+        <span>動いた量 <b>${s.used}MW</b></span><span>残りの不足 <b class="${s.rem ? 'rem-ng' : ''}">${s.rem}MW</b></span><span>応動時間の目安 <b>${s.resp}</b></span></span>${s.why ? `<span class="rv rem-ng">${s.why === 'late'
+          ? `応動が間に合わず、不足が残る（${s.want}MWのうち、${s.resp}に間に合うのは${s.used}MW）`
+          : `電源の余力が足りず、不足が残る（${s.want}MWのうち${s.used}MWまで）`}</span>` : ''}</span></li>`
+    : `<li data-r="${s.r}" class="wait"><span class="rn">${s.name}</span><span>担当：${esc(G[s.g].name)}（${s.name}）　待機中…</span></li>`).join('')}</ol>`;
+  if (gr.state === 'done' && gr.steps.some(s => s.why === 'late')) h += `<p class="flow-p rem-ng" style="color:#ff9c9c">応動が間に合わず、不足が残った担当があります（出力変化速度×応動時間が、約定した量に届かない）。</p>`;
   if (gr.state === 'done') h += gr.lack > 0
     ? `<div class="msg ng">調整力で足りない分が ${gr.lack}MW あります。周波数が低下します。負荷遮断などの緊急対応が必要になるおそれがあります</div>`
     : `<div class="msg ok">調整力で不足（${gr.short}MW）を補いました</div>`;
@@ -1232,6 +1357,37 @@ function g5Freq() {
 
 function renderG5() { g5Cards(); g5Balance(); g5Events(); g5Flow(); g5Freq(); }
 
+// 確保済みの調整力の表（担当はプルダウンで組み替えられる。風力は選べない）
+function g5RsvTable() {
+  const opts = GENS.filter(g => g.type !== 'wind');
+  const unitOpts = sel => opts.map(o => `<option value="${o.id}"${o.id === sel ? ' selected' : ''}>${esc(o.name)}</option>`).join('');
+  $('gRsvTable').innerHTML = '<thead><tr><th scope="col">商品</th><th scope="col">担当する電源</th><th scope="col">量（MW）</th><th scope="col">間に合う量</th><th scope="col">判定</th><th scope="col">必要な機能</th><th scope="col"><span class="sr">削除</span></th></tr></thead><tbody>' +
+    (asg.length ? asg.map((a, i) => {
+      const c = asgCheck(a), p = PROD[a.r], gn = esc(G[a.g].name);
+      return `<tr data-i="${i}"><th scope="row" data-label="商品"><span class="rchip" data-r="${a.r}">${p.name}</span></th>
+        <td data-label="担当する電源"><select class="asg" data-i="${i}" aria-label="${p.name} ${a.mw}MWを担当する電源">${unitOpts(a.g)}</select></td>
+        <td data-label="量（MW）"><span class="qty"><button class="qbtn" data-act="dec" data-i="${i}" aria-label="${p.name}（${gn}）の量を1MW減らす"${a.mw <= 1 ? ' disabled' : ''}>−</button><b>${a.mw}</b><button class="qbtn" data-act="inc" data-i="${i}" aria-label="${p.name}（${gn}）の量を1MW増やす"${a.mw >= 200 ? ' disabled' : ''}>＋</button></span></td>
+        <td data-label="間に合う量"><b>${c.reach}MW</b><small class="fx">${c.fx}${G[a.g].type === 'bess' ? '' : 'MW'}</small></td>
+        <td data-label="判定" class="${c.short ? 'chk-ng' : 'chk-ok'}">${c.short ? '✗' : '✓'}<small class="fx">${c.short ? '足りない' : '間に合う'}</small></td>
+        <td data-label="必要な機能" class="func">${RSV_FUNC[a.r]}</td>
+        <td class="del"><button class="btn xbtn" data-act="del" data-i="${i}" aria-label="${p.name}（${gn} ${a.mw}MW）の行を削除">削除</button></td></tr>
+        <tr class="chk"><td colspan="7" class="${c.short ? 'chk-ng' : 'chk-ok'}">${gn}・${p.name} ${a.mw}MW：${c.text} → ${c.short ? c.limit : '間に合います'}</td></tr>`;
+    }).join('') : '<tr class="chk"><td colspan="7" class="hint">担当がありません。下の「行を追加」で追加できます。</td></tr>') + '</tbody>';
+  // 同じ電源に、余力を超える担当を重ねていないか。超えていたら「実行」を押せなくする
+  const over = asgOver();
+  $('gAsgWarn').innerHTML = over.length ? `<div class="msg ng" style="font-weight:400">${over.map(g =>
+    `${esc(g.name)}の担当の合計 ${rsvOf(g.id)}MW が、余力 ${headroom(g)}MW を超えています。`).join('<br>')}<br>同じ電源の余力を、複数の商品に重ねて出すことはできません。担当か量を直すまで、「実行」は押せません。</div>` : '';
+  $('gRun').disabled = over.length > 0;
+  $('gRunNote').textContent = over.length ? '担当の合計が余力を超えているため、実行できません（「1. 設備の一覧」の表を直してください）。' : '';
+  $('gAsgReset').disabled = asgIsInit();
+  $('gRsvSum').textContent = `担当の合計：${GENS.filter(g => g.type !== 'wind').map(g => `${g.name} ${rsvOf(g.id)}／余力${headroom(g)}`).join('、')}（MW）`;
+}
+function g5AsgChanged(focusSel) {
+  simReset(); g5RsvTable(); renderG5();
+  const f = focusSel && ($('gRsvTable').querySelector(focusSel) || document.querySelector(focusSel));
+  if (f && !f.disabled) f.focus();
+}
+
 // 設定欄の表示を、cfg に合わせる
 function g5SyncRows() {
   GENS.forEach(g => {
@@ -1281,6 +1437,28 @@ function g5Changed() { simReset(); g5SyncRows(); renderG5(); }
   $('gWind').addEventListener('input', e => { cfg.W.err = Number(e.target.value); g5Changed(); });
   $('gRun').addEventListener('click', simStart);
   $('gReset').addEventListener('click', () => { cfg = cfgInit(); g5Changed(); });
+  $('gRsvTable').addEventListener('change', e => {
+    const s = e.target.closest('select');
+    if (!s) return;
+    asg[Number(s.dataset.i)].g = s.value;
+    g5AsgChanged(`select[data-i="${s.dataset.i}"]`);
+  });
+  $('gRsvTable').addEventListener('click', e => {
+    const b = e.target.closest('button[data-act]');
+    if (!b) return;
+    const i = Number(b.dataset.i), act = b.dataset.act;
+    if (act === 'del') { asg.splice(i, 1); g5AsgChanged('#gAdd'); return; }
+    asg[i].mw = Math.min(200, Math.max(1, asg[i].mw + (act === 'inc' ? 1 : -1)));
+    g5AsgChanged(`button[data-act="${act}"][data-i="${i}"]`);
+  });
+  $('gAddR').innerHTML = G_RSV.map(x => `<option value="${x.r}">${x.name}</option>`).join('');
+  $('gAddG').innerHTML = GENS.filter(g => g.type !== 'wind').map(g => `<option value="${g.id}">${esc(g.name)}</option>`).join('');
+  $('gAdd').addEventListener('click', () => {
+    asg.push({ r: $('gAddR').value, g: $('gAddG').value, mw: 10 });
+    g5AsgChanged(`select[data-i="${asg.length - 1}"]`);
+  });
+  $('gAsgReset').addEventListener('click', () => { asg = asgInit(); g5AsgChanged(); });
+  g5RsvTable();
   $('gLegend').innerHTML = GENS.map(g => `<span data-g="${g.id}"><i></i>${esc(g.name)}</span>`).join('') +
     '<span data-g="M"><i></i>時間前市場で調達</span><span><i class="hatch"></i>斜線＝時間前市場で調達した分・調整力が動いた分</span>' +
     '<span><i class="short"></i>赤枠＝不足</span><span>白い縦線＝需要</span>';
