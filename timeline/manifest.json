@@ -1,0 +1,18 @@
+{
+  "id": "./",
+  "name": "前日〜実需給 タイムライン",
+  "short_name": "需給タイムライン",
+  "description": "電力の前日取引から、当日の実需給、事後の精算までの流れを時間軸の上で学ぶ学習用アプリです。",
+  "lang": "ja",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "theme_color": "#14171d",
+  "background_color": "#0f1115",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

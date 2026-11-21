@@ -1,0 +1,731 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>前日〜実需給 タイムライン</title>
+<meta name="description" content="電力の前日取引から、当日の実需給、事後の精算までの流れを時間軸の上で学ぶ学習用アプリです。">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#14171d">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+  :root {
+    --bg: #0f1115;
+    --surface: #181b22;
+    --surface-2: #20242d;
+    --text: #e8eaee;
+    --text-2: #b9bec8;
+    --muted: #8a909b;
+    --border: rgba(255, 255, 255, 0.10);
+    --accent: #5b8ff5;
+    --ok: #3fbf8a;
+    --ng: #e66767;
+    /* ゾーンの色：前日／当日（実需給）／事後 */
+    --z-pre: #5b8ff5;
+    --z-day: #eda33b;
+    --z-post: #3fbf8a;
+    /* 調整力の色 */
+    --r1: #e87ba4; --r2a: #eda33b; --r2b: #d9c44a; --r3a: #5b8ff5; --r3b: #9085e9;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Yu Gothic UI", Meiryo, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    padding-bottom: 76px; /* 下部の注記の分 */
+  }
+  button { font: inherit; color: inherit; }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 16px 16px 24px; }
+  header h1 { font-size: 20px; margin: 0; line-height: 1.35; }
+  header .lead { color: var(--text-2); margin: 4px 0 12px; font-size: 13px; }
+  header .back { color: var(--muted); font-size: 12px; text-decoration: none; }
+  header .back:hover { color: var(--accent); }
+
+  /* タブ */
+  .tabs {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 4px;
+    position: sticky; top: 0; z-index: 5; margin: 0 -2px 14px;
+  }
+  .tabs button {
+    border: 0; background: transparent; border-radius: 7px; padding: 8px 2px;
+    font-size: 13px; font-weight: 600; color: var(--text-2); cursor: pointer; white-space: nowrap;
+  }
+  .tabs button[aria-selected="true"] { background: var(--accent); color: #fff; }
+  .tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .screen[hidden] { display: none; }
+  h2 { font-size: 16px; margin: 0 0 4px; }
+  h3 { font-size: 14px; margin: 0 0 8px; }
+  .hint { color: var(--muted); font-size: 12px; margin: 0 0 10px; }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 14px; }
+
+  /* ===== タイムライン ===== */
+  .track-wrap { position: relative; margin: 0 -16px 12px; }
+  .track {
+    display: flex; gap: 10px; overflow-x: auto; padding: 4px 16px 10px;
+    scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; scrollbar-width: thin;
+  }
+  .zone { flex: none; display: flex; flex-direction: column; gap: 8px; }
+  .zone-head {
+    font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 6px;
+    color: #0f1115; background: var(--zc);
+  }
+  .zone-cards { display: flex; gap: 8px; }
+  .zone-axis { height: 4px; border-radius: 2px; background: var(--zc); opacity: .55; }
+  .zone[data-zone="pre"] { --zc: var(--z-pre); }
+  .zone[data-zone="day"] { --zc: var(--z-day); }
+  .zone[data-zone="post"] { --zc: var(--z-post); }
+
+  .card {
+    flex: none; width: 150px; min-height: 118px; text-align: left; cursor: pointer;
+    background: var(--surface); border: 1px solid var(--border); border-top: 3px solid var(--zc);
+    border-radius: 9px; padding: 8px 10px; scroll-snap-align: center;
+    transition: transform .25s, box-shadow .25s, background .25s, border-color .25s, opacity .25s;
+  }
+  .card .no { font-size: 11px; color: var(--zc); font-weight: 700; }
+  .card .time { font-size: 11px; color: var(--muted); }
+  .card .title { font-size: 13px; font-weight: 600; line-height: 1.4; margin-top: 4px; }
+  .card:hover { border-color: var(--zc); }
+  .card:focus-visible { outline: 2px solid var(--zc); outline-offset: 2px; }
+  .card.on {
+    background: color-mix(in srgb, var(--zc) 18%, var(--surface));
+    border-color: var(--zc); box-shadow: 0 0 0 2px var(--zc), 0 6px 18px rgba(0,0,0,.45);
+    transform: translateY(-3px);
+  }
+  .track.dim .card:not(.on) { opacity: .45; }
+  .axis-label { display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; padding: 0 16px; }
+
+  .stepper { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .btn {
+    border: 1px solid var(--border); background: var(--surface-2); border-radius: 8px;
+    padding: 8px 14px; cursor: pointer; font-weight: 600; font-size: 13px;
+  }
+  .btn:hover:not(:disabled) { border-color: var(--accent); }
+  .btn:disabled { opacity: .4; cursor: default; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .stepper .pos { color: var(--muted); font-size: 12px; }
+
+  .detail { border-left: 4px solid var(--zc); }
+  .detail[data-zone="pre"] { --zc: var(--z-pre); }
+  .detail[data-zone="day"] { --zc: var(--z-day); }
+  .detail[data-zone="post"] { --zc: var(--z-post); }
+  .detail .tag { display: inline-block; font-size: 11px; font-weight: 700; color: #0f1115; background: var(--zc); border-radius: 4px; padding: 1px 7px; }
+  .detail h2 { margin: 6px 0 10px; }
+  .kv { display: grid; grid-template-columns: 7.5em 1fr; gap: 6px 10px; margin: 0; }
+  .kv dt { color: var(--muted); font-size: 12px; padding-top: 1px; }
+  .kv dd { margin: 0; }
+  .kv dd.point { background: var(--surface-2); border-radius: 6px; padding: 6px 9px; }
+  .kv .sub { display: block; color: var(--text-2); font-size: 12px; margin-top: 2px; }
+  @media (max-width: 420px) {
+    .kv { grid-template-columns: 1fr; gap: 0; }
+    .kv dt { margin-top: 8px; }
+  }
+  .fade { animation: fade .35s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  /* ===== シナリオ ===== */
+  .sc-pick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 12px; }
+  .sc-pick button {
+    border: 1px solid var(--border); background: var(--surface); border-radius: 9px; padding: 8px 6px;
+    cursor: pointer; font-size: 12px; line-height: 1.35; text-align: left;
+  }
+  .sc-pick button b { display: block; font-size: 11px; color: var(--muted); }
+  .sc-pick button[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--surface)); }
+  .mini .card { width: 116px; min-height: 84px; padding: 6px 8px; }
+  .mini .card .title { font-size: 12px; }
+
+  .dots { display: flex; gap: 5px; justify-content: center; margin: 4px 0 10px; }
+  .dots span { width: 8px; height: 8px; border-radius: 50%; background: var(--surface-2); border: 1px solid var(--border); transition: background .3s, transform .3s; }
+  .dots span.done { background: color-mix(in srgb, var(--accent) 50%, var(--surface-2)); }
+  .dots span.cur { background: var(--accent); transform: scale(1.3); }
+
+  .step-label { font-size: 12px; font-weight: 700; color: var(--accent); }
+  .step-text { font-size: 15px; margin: 4px 0 12px; }
+  .chips { display: grid; grid-template-columns: 5em 1fr; gap: 6px 8px; font-size: 13px; }
+  .chips dt { color: var(--muted); font-size: 12px; }
+  .chips dd { margin: 0; }
+  .none { color: var(--muted); }
+  .rchip { display: inline-block; padding: 0 8px; border-radius: 10px; margin: 0 4px 3px 0; font-size: 12px; font-weight: 700; color: #0f1115; background: var(--rc); }
+
+  /* 調整力の時間軸（模式図）と横棒グラフ */
+  .lanes { position: relative; margin-top: 6px; }
+  .lane { display: grid; grid-template-columns: 3.4em 1fr; align-items: center; gap: 6px; height: 30px; transition: opacity .3s; }
+  .lane .nm { font-size: 12px; font-weight: 700; }
+  .lane .bar-area { position: relative; height: 16px; }
+  .lane .ramp { position: absolute; top: 7px; height: 2px; left: 0; background: var(--rc); opacity: .7; }
+  .lane .hold { position: absolute; top: 2px; height: 12px; border-radius: 3px; background: var(--rc); }
+  .lane .mark { position: absolute; top: -2px; width: 2px; height: 20px; background: var(--rc); }
+  .lane.off { opacity: .22; }
+  .lane.now .hold { box-shadow: 0 0 0 2px var(--text); animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--text) 25%, transparent); } }
+  .ticks { position: relative; height: 26px; margin-left: calc(3.4em + 6px); border-top: 1px solid var(--border); }
+  .ticks span { position: absolute; top: 3px; transform: translateX(-50%); font-size: 10px; color: var(--muted); white-space: nowrap; }
+  .ticks span::before { content: ""; position: absolute; left: 50%; top: -6px; width: 1px; height: 5px; background: var(--muted); }
+  .gridlines { position: absolute; inset: 0 0 0 calc(3.4em + 6px); pointer-events: none; }
+  .gridlines i { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--border); }
+  .order { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin: 0 0 8px; font-size: 13px; }
+  .order .o { padding: 2px 8px; border-radius: 12px; border: 1px solid var(--border); color: var(--muted); transition: all .3s; }
+  .order .o.lit { color: #0f1115; background: var(--rc); border-color: var(--rc); font-weight: 700; }
+  .order .arr { color: var(--muted); }
+  [data-r="r1"] { --rc: var(--r1); } [data-r="r2a"] { --rc: var(--r2a); } [data-r="r2b"] { --rc: var(--r2b); }
+  [data-r="r3a"] { --rc: var(--r3a); } [data-r="r3b"] { --rc: var(--r3b); }
+
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 10px; }
+  .seg button { border: 0; background: transparent; padding: 5px 12px; font-size: 12px; cursor: pointer; color: var(--text-2); }
+  .seg button[aria-pressed="true"] { background: var(--surface-2); color: var(--text); font-weight: 700; }
+  .hbars { display: grid; gap: 8px; }
+  .hbar { display: grid; grid-template-columns: 3.4em 1fr; gap: 6px; align-items: center; }
+  .hbar .nm { font-size: 12px; font-weight: 700; }
+  .hbar .track-b { position: relative; height: 20px; background: var(--surface-2); border-radius: 4px; }
+  .hbar .fill { position: absolute; left: 0; top: 0; bottom: 0; min-width: 3px; border-radius: 4px; background: var(--rc); transition: width .5s ease; }
+  .hbar .plan { position: absolute; top: 0; bottom: 0; border: 1.5px dashed var(--rc); border-left: 0; border-radius: 0 4px 4px 0; transition: left .5s, width .5s; }
+  .hbar .val { position: absolute; top: 0; line-height: 20px; font-size: 11px; white-space: nowrap; padding-left: 6px; transition: left .5s; }
+  .hbar.hl .nm { color: var(--rc); }
+  .hbar.hl .track-b { box-shadow: 0 0 0 1px var(--rc); }
+
+  /* ===== 比較表 ===== */
+  .table-wrap { overflow-x: auto; margin: 0 -14px; padding: 0 14px; }
+  table.cmp { border-collapse: separate; border-spacing: 0; min-width: 640px; width: 100%; font-size: 13px; }
+  table.cmp th, table.cmp td { border-bottom: 1px solid var(--border); padding: 8px; vertical-align: top; text-align: left; }
+  table.cmp thead th { font-size: 13px; border-top: 3px solid var(--rc); background: var(--surface-2); }
+  table.cmp thead th:first-child { border-top-color: transparent; }
+  table.cmp tbody th { color: var(--muted); font-weight: 600; font-size: 12px; white-space: nowrap; }
+  table.cmp th:first-child { position: sticky; left: 0; background: var(--surface); z-index: 1; width: 6.5em; }
+  table.cmp thead th:first-child { background: var(--surface-2); }
+  .num { font-weight: 700; font-size: 14px; }
+  .yes { color: var(--ok); font-weight: 700; } .no-t { color: var(--ng); font-weight: 700; }
+  .note-s { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; font-weight: 400; }
+
+  /* ===== クイズ ===== */
+  .q-head { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+  .q-bar { height: 4px; background: var(--surface-2); border-radius: 2px; margin-bottom: 12px; overflow: hidden; }
+  .q-bar i { display: block; height: 100%; background: var(--accent); transition: width .3s; }
+  .q-text { font-size: 16px; font-weight: 700; margin: 0 0 12px; }
+  .opts { display: grid; gap: 8px; }
+  .opt {
+    text-align: left; border: 1px solid var(--border); background: var(--surface-2); border-radius: 9px;
+    padding: 10px 12px; cursor: pointer; font-size: 14px; display: flex; gap: 8px;
+  }
+  .opt:hover:not(:disabled) { border-color: var(--accent); }
+  .opt:disabled { cursor: default; }
+  .opt .k { color: var(--muted); font-weight: 700; }
+  .opt.correct { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 18%, var(--surface-2)); }
+  .opt.wrong { border-color: var(--ng); background: color-mix(in srgb, var(--ng) 16%, var(--surface-2)); }
+  .feedback { margin-top: 12px; border-radius: 9px; padding: 10px 12px; background: var(--surface-2); }
+  .feedback .res { font-weight: 700; margin-bottom: 2px; }
+  .feedback .res.ok { color: var(--ok); } .feedback .res.ng { color: var(--ng); }
+  .q-next { margin-top: 12px; display: flex; justify-content: flex-end; }
+  .score { text-align: center; padding: 10px 0 4px; }
+  .score .big { font-size: 40px; font-weight: 800; }
+  .review { list-style: none; padding: 0; margin: 12px 0; display: grid; gap: 6px; font-size: 13px; }
+  .review li { display: grid; grid-template-columns: 1.4em 1fr; gap: 4px; background: var(--surface-2); border-radius: 8px; padding: 8px 10px; }
+  .review .ans { color: var(--text-2); font-size: 12px; }
+
+  /* 下部の注記（常に表示） */
+  .disclaimer {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+    background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(6px);
+    border-top: 1px solid var(--border); color: var(--text-2);
+    font-size: 11px; line-height: 1.5; padding: 7px 16px calc(7px + env(safe-area-inset-bottom));
+  }
+  .disclaimer p { max-width: 928px; margin: 0 auto; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <a class="back" href="../">← Webアプリ集</a>
+    <h1>前日〜実需給 タイムライン</h1>
+    <p class="lead">卸電力市場（スポット・時間前）と需給調整市場の、前日の取引から当日の実需給、事後の精算までを時間軸で学びます。</p>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="画面の切り替え">
+    <button role="tab" id="tab-tl" aria-controls="scr-tl" aria-selected="true">タイムライン</button>
+    <button role="tab" id="tab-sc" aria-controls="scr-sc" aria-selected="false">シナリオ</button>
+    <button role="tab" id="tab-cmp" aria-controls="scr-cmp" aria-selected="false">比較表</button>
+    <button role="tab" id="tab-qz" aria-controls="scr-qz" aria-selected="false">クイズ</button>
+  </nav>
+
+  <!-- 画面1：タイムライン -->
+  <section class="screen" id="scr-tl" role="tabpanel" aria-labelledby="tab-tl">
+    <h2>段階のタイムライン</h2>
+    <p class="hint">横にスクロールできます。カードをタップすると、下に詳しい説明が出ます。</p>
+    <div class="track-wrap">
+      <div class="track" id="tlTrack"></div>
+      <div class="axis-label"><span>前日</span><span>時間 →</span><span>事後</span></div>
+    </div>
+    <div class="stepper">
+      <button class="btn" id="tlPrev">← 前の段階</button>
+      <span class="pos" id="tlPos"></span>
+      <button class="btn" id="tlNext">次の段階 →</button>
+    </div>
+    <div class="panel detail" id="tlDetail" aria-live="polite"></div>
+  </section>
+
+  <!-- 画面2：シナリオ体験 -->
+  <section class="screen" id="scr-sc" role="tabpanel" aria-labelledby="tab-sc" hidden>
+    <h2>シナリオ体験</h2>
+    <p class="hint">シナリオを選んで「次へ」を押すと、1ステップずつ進みます。</p>
+    <div class="sc-pick" id="scPick"></div>
+    <div class="track-wrap mini">
+      <div class="track dim" id="scTrack"></div>
+    </div>
+    <div class="dots" id="scDots" aria-hidden="true"></div>
+    <div class="panel" id="scStep" aria-live="polite"></div>
+    <div class="stepper">
+      <button class="btn" id="scPrev">← 戻る</button>
+      <button class="btn" id="scReset">最初から</button>
+      <button class="btn primary" id="scNext">次へ →</button>
+    </div>
+
+    <div class="panel" id="scLanesPanel">
+      <h3>動く調整力の順番（応動時間の違い）</h3>
+      <div class="order" id="scOrder"></div>
+      <div class="lanes" id="scLanes"></div>
+      <p class="hint" style="margin:8px 0 0">模式図・対数目盛。細い線は応動時間（○以内）、太い帯は継続時間の目安です。速い調整力から順に動き、遅い調整力が引き継ぎます。</p>
+    </div>
+
+    <div class="panel">
+      <h3>応動時間を比べる</h3>
+      <div class="seg" role="group" aria-label="目盛の切り替え">
+        <button id="scaleLin" aria-pressed="true">等間隔の目盛</button>
+        <button id="scaleLog" aria-pressed="false">対数目盛</button>
+      </div>
+      <div class="hbars" id="hbars"></div>
+      <p class="hint" style="margin:8px 0 0" id="hbarNote"></p>
+    </div>
+  </section>
+
+  <!-- 画面3：調整力の比較表 -->
+  <section class="screen" id="scr-cmp" role="tabpanel" aria-labelledby="tab-cmp" hidden>
+    <h2>調整力の比較表</h2>
+    <p class="hint">応動時間・継続時間は、2024年度以降の要件の目安です。最新は原典で確認してください。表は横にスクロールできます。</p>
+    <div class="panel">
+      <div class="table-wrap"><table class="cmp" id="cmpTable"></table></div>
+    </div>
+  </section>
+
+  <!-- 画面4：確認クイズ -->
+  <section class="screen" id="scr-qz" role="tabpanel" aria-labelledby="tab-qz" hidden>
+    <h2>確認クイズ</h2>
+    <p class="hint">全5問の択一式です。問題と選択肢の順番は毎回変わります。</p>
+    <div class="panel" id="quiz" aria-live="polite"></div>
+  </section>
+</div>
+
+<footer class="disclaimer">
+  <p>公開資料に基づく学習用の整理です。時刻・数値は目安で、制度は変わるため、最新は原典（広域機関、EPRX、JEPXの資料）で確認してください。実在の入札価格や約定データは表示していません。</p>
+</footer>
+
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// ===== データ（学習用の説明データ） =====
+const ZONES = [
+  { id: 'pre', name: '前日' },
+  { id: 'day', name: '当日（実需給）' },
+  { id: 'post', name: '事後' },
+];
+
+const STAGES = [
+  { no: 1, zone: 'pre', time: '前日・午前', title: '卸電力市場（スポット）の入札・約定',
+    who: '小売・発電・アグリゲーター（BGなど）', where: 'JEPXの取引システム（専用線によるAPI連携）',
+    sys: 'BLEnDer BG（入札）、BLEnDer PP', point: '電力量（kWh）を取引する。' },
+  { no: 2, zone: 'pre', time: '前日', title: '需給調整市場の応札・約定（一次〜三次①）',
+    who: '発電事業者、蓄電池、アグリゲーター', where: 'EPRXの市場システム（MMS）',
+    sys: 'BLEnDer AC／DR、BLEnDer RE',
+    point: '調整力（ΔkW）を事前に確保する。2026年3月13日の取引から、一次〜三次①は前日取引になった（三次②は対象外）。' },
+  { no: 3, zone: 'pre', time: '前日', title: '発電・販売計画の提出',
+    who: 'BG（発電・小売）', where: '広域機関の計画提出の仕組み',
+    sys: 'BLEnDer BG（BP：計画提出）', point: '計画値同時同量が求められる。' },
+  { no: 4, zone: 'day', time: '当日・実需給の前', title: '時間前市場での調整、計画の変更',
+    who: 'BG', where: 'JEPX時間前市場、広域機関', sys: 'BLEnDer BG',
+    point: '計画の変更は、実需給の1時間前まで。' },
+  { no: 5, zone: 'day', time: '当日・実需給の前', title: '確保した調整力の連係',
+    who: '需給調整市場、広域需給調整システム、中給', where: '', sys: '',
+    point: '市場で約定した調整力の情報が、広域需給調整システムを通じて中給に渡る（約定結果の連係）。広域メリットオーダーで、安い調整力から使う。' },
+  { no: 6, zone: 'day', time: '実需給', title: '調整力の発動と周波数・需給バランスの維持',
+    who: '中給（一般送配電事業者）',
+    where: '中給システム、簡易指令システム（アグリゲーターへの指令。ERABサイバーセキュリティガイドラインへの適合が接続条件）', sys: '',
+    point: '一次は蓄電池などが周波数に自端で応答。二次①はLFC、二次②はEDC、三次は需給の偏差に応じて発動。' },
+  { no: 7, zone: 'post', time: '実需給の直後', title: '計量値の確定',
+    who: '一般送配電事業者', where: 'スマートメーター（Aルート）→ヘッドエンド→託送・精算システム', sys: '',
+    point: '30分ごとの計量値が、日次などで精算に渡る。' },
+  { no: 8, zone: 'post', time: '事後', title: '調整力のアセスメントと精算',
+    who: '一般送配電事業者、市場運営者', where: '', sys: '',
+    point: 'ΔkWは、供出可否の確認（アセスメントⅠ）と応動実績の確認（Ⅱ）で評価される。不適合だとペナルティ（上限はΔkW落札価格の1.5倍）。' },
+  { no: 9, zone: 'post', time: '事後', title: 'インバランスの精算',
+    who: 'BG、一般送配電事業者', where: '', sys: '',
+    point: '計画と実績のずれ（インバランス）が精算される。' },
+];
+
+// 応動時間・継続時間は秒で持つ（2024年度以降の要件の目安）
+const RESERVES = [
+  { id: 'r1', name: '一次', purpose: '周波数の微小変動を、自端制御で即時に抑える',
+    resp: 10, respText: '10秒以内', dur: 300, durText: '5分以上', dayAhead: true },
+  { id: 'r2a', name: '二次①', purpose: 'LFC信号で、周波数偏差・連系線潮流を調整',
+    resp: 300, respText: '5分以内', dur: 1800, durText: '30分以上', dayAhead: true },
+  { id: 'r2b', name: '二次②', purpose: 'EDC信号で、需給のずれを経済的に配分して補う',
+    resp: 300, respText: '5分以内', dur: 1800, durText: '30分以上', dayAhead: true },
+  { id: 'r3a', name: '三次①', purpose: '二次の回復や、需給予測誤差への対応',
+    resp: 900, respText: '15分以内', dur: 10800, durText: '3時間', dayAhead: true },
+  { id: 'r3b', name: '三次②', purpose: 'FIT特例の再エネの予測誤差への対応',
+    resp: 2700, respText: '45分以内', respNote: '2025年度から60分以内へ変更予定とされた', respPlan: 3600,
+    dur: 10800, durText: '3時間', dayAhead: false },
+];
+const R = Object.fromEntries(RESERVES.map(r => [r.id, r]));
+
+const SCENARIOS = [
+  { id: 's1', name: '通常の1日', sub: '前日の取引から、実需給、事後の精算まで', lanes: false, steps: [
+    { label: '前日・午前', stages: [1], text: '前日午前に、スポットで翌日の電力量を調達する。',
+      market: '卸電力市場（JEPXスポット）', reserve: [], system: 'JEPXの取引システム、BLEnDer BG・PP' },
+    { label: '前日', stages: [2], text: '前日に、調整力（ΔkW）を需給調整市場で確保する。',
+      market: '需給調整市場（一次〜三次①は前日取引）', reserve: ['r1', 'r2a', 'r2b', 'r3a'], reserveNote: '確保のみ（まだ動かない）', system: 'EPRXの市場システム（MMS）、BLEnDer AC／DR・RE' },
+    { label: '前日', stages: [3], text: '前日に、発電・販売計画を広域機関へ提出する。',
+      market: '', reserve: [], system: '広域機関の計画提出の仕組み、BLEnDer BG（BP）' },
+    { label: '当日（実需給の前）', stages: [4, 5], text: '当日に、時間前市場や計画変更で、実需給の1時間前までに調整する。',
+      market: '卸電力市場（JEPX時間前市場）', reserve: [], system: 'JEPX時間前市場、広域機関、広域需給調整システム（約定結果の連係）' },
+    { label: '実需給', stages: [6], text: '実需給で、中給が周波数と需給バランスを維持する。',
+      market: '', reserve: ['r1', 'r2a', 'r2b', 'r3a'], reserveNote: '需給の偏差に応じて発動', system: '中給システム、簡易指令システム' },
+    { label: '事後', stages: [7, 8, 9], text: '事後に、計量値の確定、アセスメント、インバランス精算を行う。',
+      market: '需給調整市場（アセスメント・精算）', reserve: [], system: 'スマートメーター→ヘッドエンド→託送・精算システム' },
+  ]},
+  { id: 's2', name: '再エネの予測が外れた日', sub: '前日の想定より発電が少なかった', lanes: true, steps: [
+    { label: '前日', stages: [1], text: '前日の予測では太陽光が多く、スポットで売った。',
+      market: '卸電力市場（JEPXスポット）', reserve: [], system: 'JEPXの取引システム' },
+    { label: '当日', stages: [6], text: '当日、雲で発電が減り、計画より供給が足りなくなる。',
+      market: '', reserve: [], system: '中給システム（需給の監視）' },
+    { label: '数秒〜数分', stages: [6], text: '周波数が下がり、一次が自端で応答する。',
+      market: '', reserve: ['r1'], system: '発電機・蓄電池などの自端制御' },
+    { label: '数分', stages: [6], text: '二次①（LFC）、二次②（EDC）が中給の指令で動く。',
+      market: '', reserve: ['r2a', 'r2b'], system: '中給システム（LFC・EDC信号）、簡易指令システム' },
+    { label: '15分程度', stages: [6], text: '三次①が動き、二次を回復させる。',
+      market: '', reserve: ['r3a'], system: '中給システム、簡易指令システム' },
+    { label: '事後', stages: [9], text: '計画とのずれが、インバランスとして精算される。',
+      market: '', reserve: [], system: '託送・精算システム' },
+  ]},
+  { id: 's3', name: '需要が急に増えた日', sub: '当日の需要が想定を上回った', lanes: true, steps: [
+    { label: '当日', stages: [6], text: '猛暑で需要が想定を上回る。',
+      market: '', reserve: [], system: '中給システム（需給の監視）' },
+    { label: '数秒〜', stages: [6], text: '周波数が下がり、一次が応答する。',
+      market: '', reserve: ['r1'], system: '発電機・蓄電池などの自端制御' },
+    { label: '数分〜15分程度', stages: [6], text: '二次①、二次②、三次①の順に発動する。',
+      market: '', reserve: ['r2a', 'r2b', 'r3a'], system: '中給システム（LFC・EDC信号）、簡易指令システム' },
+    { label: '当日（実需給の1時間前まで）', stages: [4], text: '時間前市場が使える間は、BGが追加調達して計画を変更する（実需給の1時間前まで）。',
+      market: '卸電力市場（JEPX時間前市場）', reserve: [], system: 'JEPX時間前市場、広域機関、BLEnDer BG' },
+    { label: '事後', stages: [8, 9], text: 'アセスメントとインバランスの精算を行う。',
+      market: '需給調整市場（アセスメント）', reserve: [], system: '託送・精算システム' },
+  ]},
+];
+
+const QUIZ = [
+  { q: '2026年3月から前日取引になった需給調整市場の商品は？',
+    a: '一次〜三次①', wrong: ['一次〜三次②のすべて', '三次①と三次②だけ', '一次だけ'],
+    exp: '2026年3月13日の取引から、一次〜三次①が前日取引になりました。三次②は前日取引の対象外です。' },
+  { q: '発電・販売計画の変更を、広域機関へ出せるのはいつまで？',
+    a: '実需給の1時間前まで', wrong: ['前日の夕方まで', '実需給の開始時刻まで', '実需給の30分後まで'],
+    exp: '当日の変更は、実需給の1時間前まで可能です。BGはそれまで、時間前市場での調整とあわせて計画を見直せます。' },
+  { q: '応動時間が最も短い調整力は？',
+    a: '一次', wrong: ['二次①', '二次②', '三次①'],
+    exp: '一次は10秒以内に、蓄電池などが周波数に自端で応答します。二次①・二次②は5分以内、三次①は15分以内が目安です。' },
+  { q: '中給からの調整力の発動指令を、アグリゲーターに伝える経路は？',
+    a: '中給システム→簡易指令システム→アグリゲーター',
+    wrong: ['JEPXの取引システム→アグリゲーター', 'EPRXの市場システム（MMS）→アグリゲーター', 'スマートメーター→ヘッドエンド→アグリゲーター'],
+    exp: '実需給で中給が調整力を発動し、その指令が簡易指令システムを通じてアグリゲーターに届きます。簡易指令システムへの接続には、ERABサイバーセキュリティガイドラインへの適合が条件です。' },
+  { q: 'ΔkWの事後評価（アセスメントⅠ・Ⅱ）で不適合だったときのペナルティの上限は？',
+    a: 'ΔkW落札価格の1.5倍', wrong: ['ΔkW落札価格の1.0倍', 'ΔkW落札価格の2.0倍', 'ΔkW落札価格の3.0倍'],
+    exp: '不適合のときのペナルティは、ΔkW落札価格の1.5倍が上限です。アセスメントⅠは供出可否の確認、Ⅱは応動実績の確認です。' },
+];
+
+const shuffle = arr => {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+};
+
+// ===== タブ =====
+const TABS = ['tl', 'sc', 'cmp', 'qz'];
+function showTab(name) {
+  TABS.forEach(t => {
+    $('tab-' + t).setAttribute('aria-selected', String(t === name));
+    $('scr-' + t).hidden = t !== name;
+  });
+  try { localStorage.setItem('timeline-tab', name); } catch (e) {}
+  // 隠れていた画面ではスクロール位置を合わせられないので、表示してから合わせ直す
+  requestAnimationFrame(() => {
+    if (name === 'tl') highlight($('tlTrack'), [tlCur], true);
+    if (name === 'sc') highlight($('scTrack'), sc.steps[scIdx].stages, true);
+  });
+}
+TABS.forEach((t, i) => {
+  const b = $('tab-' + t);
+  b.addEventListener('click', () => showTab(t));
+  b.addEventListener('keydown', e => {
+    const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+    if (!d) return;
+    const n = TABS[(i + d + TABS.length) % TABS.length];
+    showTab(n); $('tab-' + n).focus();
+  });
+});
+
+// ===== タイムライン描画（画面1とシナリオで共用） =====
+function buildTrack(el, onPick) {
+  el.innerHTML = ZONES.map(z => `
+    <div class="zone" data-zone="${z.id}">
+      <div class="zone-head">${esc(z.name)}</div>
+      <div class="zone-cards">
+        ${STAGES.filter(s => s.zone === z.id).map(s => `
+          <button class="card" data-no="${s.no}">
+            <div class="no">段階${s.no}</div>
+            <div class="time">${esc(s.time)}</div>
+            <div class="title">${esc(s.title)}</div>
+          </button>`).join('')}
+      </div>
+      <div class="zone-axis"></div>
+    </div>`).join('');
+  if (onPick) el.addEventListener('click', e => {
+    const c = e.target.closest('.card');
+    if (c) onPick(Number(c.dataset.no));
+  });
+}
+function highlight(el, nos, scroll) {
+  let first = null;
+  el.querySelectorAll('.card').forEach(c => {
+    const on = nos.includes(Number(c.dataset.no));
+    c.classList.toggle('on', on);
+    c.setAttribute('aria-pressed', String(on));
+    if (on && !first) first = c;
+  });
+  if (scroll && first) {
+    // 選んだカード（複数なら先頭〜末尾の中央）が見えるように横スクロール
+    const cards = [...el.querySelectorAll('.card.on')];
+    const box = el.getBoundingClientRect();
+    const left = cards[0].getBoundingClientRect().left, right = cards[cards.length - 1].getBoundingClientRect().right;
+    const target = el.scrollLeft + (left + right) / 2 - box.left - el.clientWidth / 2;
+    const smooth = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+    el.scrollTo({ left: Math.max(0, target), behavior: smooth ? 'smooth' : 'auto' });
+  }
+}
+
+// ===== 画面1：タイムライン =====
+let tlCur = 1;
+function renderDetail() {
+  const s = STAGES.find(x => x.no === tlCur);
+  const z = ZONES.find(x => x.id === s.zone);
+  const d = $('tlDetail');
+  d.dataset.zone = s.zone;
+  let where = s.where ? esc(s.where) : '<span class="none">—</span>';
+  if (s.sys) where += `<span class="sub">関連システム：${esc(s.sys)}</span>`;
+  d.innerHTML = `<div class="fade">
+    <span class="tag">${esc(z.name)}｜段階${s.no}</span>
+    <h2>${esc(s.title)}</h2>
+    <dl class="kv">
+      <dt>誰が</dt><dd>${esc(s.who)}</dd>
+      <dt>何を</dt><dd>${esc(s.title)}</dd>
+      <dt>どこで<br>（システム）</dt><dd>${where}</dd>
+      <dt>時刻の目安</dt><dd>${esc(s.time)}</dd>
+      <dt>ポイント</dt><dd class="point">${esc(s.point)}</dd>
+    </dl></div>`;
+  $('tlPos').textContent = `${s.no} / ${STAGES.length}`;
+  $('tlPrev').disabled = tlCur === 1;
+  $('tlNext').disabled = tlCur === STAGES.length;
+}
+function tlSelect(no, scroll = true) {
+  tlCur = no;
+  highlight($('tlTrack'), [no], scroll);
+  renderDetail();
+}
+buildTrack($('tlTrack'), no => tlSelect(no));
+$('tlPrev').addEventListener('click', () => tlSelect(Math.max(1, tlCur - 1)));
+$('tlNext').addEventListener('click', () => tlSelect(Math.min(STAGES.length, tlCur + 1)));
+
+// ===== 画面2：シナリオ =====
+let sc = SCENARIOS[0], scIdx = 0;
+$('scPick').innerHTML = SCENARIOS.map((s, i) =>
+  `<button data-i="${i}" aria-pressed="${i === 0}"><b>シナリオ${i + 1}</b>${esc(s.name)}</button>`).join('');
+$('scPick').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  sc = SCENARIOS[Number(b.dataset.i)]; scIdx = 0;
+  $('scPick').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  renderScenario();
+});
+buildTrack($('scTrack'), null);
+$('scTrack').querySelectorAll('.card').forEach(c => { c.tabIndex = -1; c.style.cursor = 'default'; });
+
+// 対数の時間軸（1秒〜4時間）
+const T_MIN = 1, T_MAX = 14400;
+const logX = t => Math.log10(Math.max(t, T_MIN) / T_MIN) / Math.log10(T_MAX / T_MIN) * 100;
+// 1時間は目盛線だけ（スマホ幅で3時間のラベルと重なるため）
+const TICKS = [[1, '1秒'], [10, '10秒'], [60, '1分'], [300, '5分'], [900, '15分'], [3600, ''], [10800, '3時間']];
+const LANE_IDS = ['r1', 'r2a', 'r2b', 'r3a'];
+
+function buildLanes() {
+  $('scOrder').innerHTML = LANE_IDS.map(id => `<span class="o" data-r="${id}">${R[id].name}</span>`).join('<span class="arr">→</span>');
+  $('scLanes').innerHTML =
+    `<div class="gridlines">${TICKS.map(([t]) => `<i style="left:${logX(t)}%"></i>`).join('')}</div>` +
+    LANE_IDS.map(id => {
+      const r = R[id], x1 = logX(r.resp), x2 = logX(r.resp + r.dur);
+      return `<div class="lane off" data-r="${id}">
+        <span class="nm">${r.name}</span>
+        <div class="bar-area">
+          <span class="ramp" style="width:${x1}%"></span>
+          <span class="mark" style="left:calc(${x1}% - 1px)"></span>
+          <span class="hold" style="left:${x1}%;width:${x2 - x1}%" title="応動${r.respText}・継続${r.durText}"></span>
+        </div></div>`;
+    }).join('') +
+    `<div class="ticks">${TICKS.filter(([, l]) => l).map(([t, l]) => `<span style="left:${logX(t)}%">${l}</span>`).join('')}</div>`;
+}
+buildLanes();
+
+let scale = 'lin';
+function renderBars(hl) {
+  const LIN_MAX = 3600;
+  const x = t => scale === 'lin' ? t / LIN_MAX * 100 : logX(t) / logX(LIN_MAX) * 100;
+  $('hbars').innerHTML = RESERVES.map(r => {
+    const w = x(r.resp);
+    const plan = r.respPlan ? `<span class="plan" style="left:${w}%;width:${x(r.respPlan) - w}%"></span>` : '';
+    const label = r.respText;
+    const valLeft = w > 62 ? `left:auto;right:${100 - w}%;padding-right:6px;text-align:right;color:#0f1115;font-weight:700` : `left:${w}%`;
+    return `<div class="hbar${hl.includes(r.id) ? ' hl' : ''}" data-r="${r.id}">
+      <span class="nm">${r.name}</span>
+      <div class="track-b"><span class="fill" style="width:${w}%"></span>${plan}<span class="val" style="${valLeft}">${label}</span></div>
+    </div>`;
+  }).join('');
+  $('hbarNote').textContent = scale === 'lin'
+    ? '等間隔の目盛（右端＝60分）。一次の10秒は、ほとんど見えないほど短いことがわかります。点線は三次②の変更予定（60分以内）です。'
+    : '対数目盛（左端＝1秒、右端＝60分）。短い時間の違いも見比べられます。点線は三次②の変更予定（60分以内）です。';
+}
+['lin', 'log'].forEach(k => $('scale' + (k === 'lin' ? 'Lin' : 'Log')).addEventListener('click', () => {
+  scale = k;
+  $('scaleLin').setAttribute('aria-pressed', String(k === 'lin'));
+  $('scaleLog').setAttribute('aria-pressed', String(k === 'log'));
+  renderScenario(false);
+}));
+
+function renderScenario(scroll = true) {
+  const step = sc.steps[scIdx];
+  highlight($('scTrack'), step.stages, scroll);
+  $('scDots').innerHTML = sc.steps.map((_, i) => `<span class="${i < scIdx ? 'done' : i === scIdx ? 'cur' : ''}"></span>`).join('');
+
+  const rs = step.reserve.length
+    ? step.reserve.map(id => `<span class="rchip" data-r="${id}">${R[id].name}</span>`).join('') +
+      (step.reserveNote ? `<span class="none" style="font-size:12px">${esc(step.reserveNote)}</span>` : '')
+    : '<span class="none">—</span>';
+  $('scStep').innerHTML = `<div class="fade">
+    <div class="step-label">シナリオ${SCENARIOS.indexOf(sc) + 1}「${esc(sc.name)}」 ステップ ${scIdx + 1} / ${sc.steps.length}｜${esc(step.label)}</div>
+    <p class="step-text">${esc(step.text)}</p>
+    <dl class="chips">
+      <dt>市場</dt><dd>${step.market ? esc(step.market) : '<span class="none">—</span>'}</dd>
+      <dt>調整力</dt><dd>${rs}</dd>
+      <dt>システム</dt><dd>${step.system ? esc(step.system) : '<span class="none">—</span>'}</dd>
+      <dt>段階</dt><dd>${step.stages.map(n => `段階${n}：${esc(STAGES[n - 1].title)}`).join('<br>')}</dd>
+    </dl></div>`;
+
+  // 調整力の時間軸：シナリオ2・3で、これまでに動いた調整力を点灯する
+  const lp = $('scLanesPanel');
+  lp.hidden = !sc.lanes;
+  const seen = new Set();
+  if (sc.lanes) sc.steps.slice(0, scIdx + 1).forEach(s => s.reserve.forEach(id => seen.add(id)));
+  lp.querySelectorAll('.o').forEach(o => o.classList.toggle('lit', seen.has(o.dataset.r)));
+  lp.querySelectorAll('.lane').forEach(l => {
+    l.classList.toggle('off', !seen.has(l.dataset.r));
+    l.classList.toggle('now', step.reserve.includes(l.dataset.r));
+  });
+  renderBars(step.reserve);
+
+  $('scPrev').disabled = scIdx === 0;
+  $('scNext').disabled = scIdx === sc.steps.length - 1;
+  $('scNext').textContent = scIdx === sc.steps.length - 1 ? 'おわり' : '次へ →';
+}
+$('scNext').addEventListener('click', () => { if (scIdx < sc.steps.length - 1) { scIdx++; renderScenario(); } });
+$('scPrev').addEventListener('click', () => { if (scIdx > 0) { scIdx--; renderScenario(); } });
+$('scReset').addEventListener('click', () => { scIdx = 0; renderScenario(); });
+
+// ===== 画面3：比較表 =====
+(function buildTable() {
+  const rows = [
+    ['目的', r => esc(r.purpose)],
+    ['応動時間', r => `<span class="num">${esc(r.respText)}</span>${r.respNote ? `<span class="note-s">${esc(r.respNote)}</span>` : ''}`],
+    ['継続時間', r => `<span class="num">${esc(r.durText)}</span>`],
+    ['前日取引化の対象か', r => r.dayAhead ? '<span class="yes">対象</span>' : '<span class="no-t">対象外</span>'],
+  ];
+  $('cmpTable').innerHTML =
+    `<caption class="hint" style="caption-side:bottom;text-align:left;padding-top:8px">前日取引化：2026年3月13日の取引から（一次〜三次①）。</caption>` +
+    `<thead><tr><th scope="col">項目</th>${RESERVES.map(r => `<th scope="col" data-r="${r.id}">${r.name}</th>`).join('')}</tr></thead>` +
+    `<tbody>${rows.map(([h, f]) => `<tr><th scope="row">${h}</th>${RESERVES.map(r => `<td>${f(r)}</td>`).join('')}</tr>`).join('')}</tbody>`;
+})();
+
+// ===== 画面4：クイズ =====
+let qs = [], qi = 0, results = [];
+function startQuiz() {
+  qs = shuffle(QUIZ).map(q => ({ ...q, opts: shuffle([q.a, ...q.wrong]) }));
+  qi = 0; results = [];
+  renderQ();
+}
+function renderQ() {
+  const box = $('quiz');
+  if (qi >= qs.length) return renderScore();
+  const q = qs[qi];
+  box.innerHTML = `<div class="fade">
+    <div class="q-head"><span>第${qi + 1}問 / 全${qs.length}問</span><span>正解 ${results.filter(Boolean).length}</span></div>
+    <div class="q-bar"><i style="width:${qi / qs.length * 100}%"></i></div>
+    <p class="q-text">${esc(q.q)}</p>
+    <div class="opts">${q.opts.map((o, i) => `<button class="opt" data-i="${i}"><span class="k">${'ABCD'[i]}</span><span>${esc(o)}</span></button>`).join('')}</div>
+    <div id="qFb"></div></div>`;
+  box.querySelectorAll('.opt').forEach(b => b.addEventListener('click', () => answer(Number(b.dataset.i))));
+}
+function answer(i) {
+  const q = qs[qi], ok = q.opts[i] === q.a;
+  results.push(ok);
+  $('quiz').querySelectorAll('.opt').forEach((b, j) => {
+    b.disabled = true;
+    if (q.opts[j] === q.a) b.classList.add('correct');
+    else if (j === i) b.classList.add('wrong');
+  });
+  const last = qi === qs.length - 1;
+  $('qFb').innerHTML = `<div class="feedback fade">
+      <div class="res ${ok ? 'ok' : 'ng'}">${ok ? '○ 正解' : '× 不正解'}（正解：${esc(q.a)}）</div>
+      <div>${esc(q.exp)}</div></div>
+    <div class="q-next"><button class="btn primary" id="qNext">${last ? '結果を見る' : '次の問題 →'}</button></div>`;
+  $('qNext').addEventListener('click', () => { qi++; renderQ(); });
+  $('qNext').focus({ preventScroll: true });
+}
+function renderScore() {
+  const n = results.filter(Boolean).length;
+  const msg = n === qs.length ? '全問正解です！' : n >= 3 ? 'よくできました。間違えた問題をタイムラインで確認しましょう。' : 'タイムラインと比較表を見直してから、もう一度挑戦しましょう。';
+  $('quiz').innerHTML = `<div class="fade">
+    <div class="score"><div class="hint" style="margin:0">あなたの点数</div><div class="big">${n} / ${qs.length}</div><div>${msg}</div></div>
+    <ul class="review">${qs.map((q, i) => `<li><span class="${results[i] ? 'yes' : 'no-t'}">${results[i] ? '○' : '×'}</span>
+      <span>${esc(q.q)}<br><span class="ans">正解：${esc(q.a)}</span></span></li>`).join('')}</ul>
+    <div class="q-next"><button class="btn primary" id="qAgain">もう一度（問題を並べ替えて）</button></div></div>`;
+  $('qAgain').addEventListener('click', startQuiz);
+}
+
+// ===== 初期表示 =====
+tlSelect(1, false);
+renderScenario(false);
+startQuiz();
+let saved = null;
+try { saved = localStorage.getItem('timeline-tab'); } catch (e) {}
+if (TABS.includes(saved)) showTab(saved);
+
+// オフラインでも開けるように、サービスワーカーを登録する（相対パスなのでサブフォルダ公開でも動く）
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
