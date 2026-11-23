@@ -1,3 +1,7 @@
 # 一問一答クイズの実際の問題データは、リポジトリに入れない
 quiz/private/
 questions*.json
+
+# 塾テスト対策：塾のテキストが元の問題データは、リポジトリに入れない
+juku/private/
+juku/questions*.json
