@@ -61,6 +61,9 @@ function validateQuestions(text) {
     if (q.hint != null && typeof q.hint !== 'string') err('「hint」（ヒント）は、文字にしてください。');
     if (q.tags != null && !(Array.isArray(q.tags) && q.tags.every(t => typeof t === 'string'))) err('「tags」は、文字のならびにしてください。');
     if (q.fixedOrder != null && typeof q.fixedOrder !== 'boolean') err('「fixedOrder」は true か false にしてください。');
+    if (q.say != null && typeof q.say !== 'string') err('「say」（読み上げる英語）は、文字にしてください。');
+    if (q.sayLang != null && !(typeof q.sayLang === 'string' && /^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(q.sayLang)))
+      err('「sayLang」は "en-US" のような言語の名前にしてください。');
     out.push(q);
   });
   return errors.length ? { errors } : { questions: out };
@@ -74,6 +77,8 @@ function cleanQuestion(q, ord) {
   if (q.hint) c.hint = q.hint;
   if (q.tags) c.tags = q.tags.slice();
   if (q.fixedOrder === true) c.fixedOrder = true;
+  if (typeof q.say === 'string' && plain(q.say).trim()) c.say = plain(q.say).trim();   // ふりがな記法は外す
+  if (typeof q.sayLang === 'string' && q.sayLang) c.sayLang = q.sayLang;
   return c;
 }
 

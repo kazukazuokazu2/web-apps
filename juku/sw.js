@@ -7,7 +7,7 @@
 //   新しい版が動き始めると、古い版のキャッシュは自動で削除される。
 // ・問題データ（JSON）は、ファイルから読み込んで端末に保存するので、ここではキャッシュしない。
 
-const VERSION = 'juku-v2';
+const VERSION = 'juku-v3';
 const CACHE_PREFIX = 'juku-';
 const PRECACHE = [
   './', 'index.html', 'style.css', 'manifest.json',

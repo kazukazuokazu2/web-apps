@@ -45,7 +45,7 @@ function renderQ() {
   const card = h('div', { class: 'card qcard', 'data-id': q.id, 'data-type': q.type },
     h('div', { class: 'qmeta' }, R(q.subject, 'span', 'tag'), R(q.lesson, 'span', 'tag'), R(q.field, 'span', 'tag'),
       h('span', { class: 'tag' }, TYPE_LABEL[q.type])),
-    R(q.question, 'div', 'qtext'));
+    h('div', { class: 'qline' }, R(q.question, 'div', 'qtext'), q.say ? sayBtn(q.say, q.sayLang, 'sayQ') : null));
   if (q.hint) {
     const hint = h('div', { class: 'hint', hidden: true }, h('b', null, '💡 ヒント：'), R(q.hint));
     const btn = h('button', { class: 'mini hintbtn', onclick: () => { hint.hidden = false; btn.remove(); } }, '💡 ヒントを見る');
@@ -130,10 +130,12 @@ function answered(it, ok, extra, fb) {
   playSound(ok);
   const last = S.idx >= S.items.length - 1;
   const next = h('button', { class: 'btn primary block', id: 'nextBtn', onclick: nextQ }, last ? '🏁 けっかを見る' : 'つぎへ ▶');
+  const sayText = answerSay(q);
   const box = h('div', { class: 'fb ' + (ok ? 'ok' : 'ng'), role: 'status' },
     h('div', { class: 'big' }, ok ? pick(PRAISE) : 'おしい！もういちど見てみよう'),
     extra.card ? null : [h('div', { class: 'lbl' }, 'せいかい'), R(answerText(q), 'div', 'ans')],
     !ok && extra.mine != null ? [h('div', { class: 'lbl' }, 'あなたのこたえ'), h('div', null, extra.mine)] : null,
+    sayText ? h('div', { class: 'sayrow' }, sayBtn(sayText, q.sayLang, 'sayA'), h('span', null, 'えいごを もういちど聞く')) : null,
     q.explanation ? [h('div', { class: 'lbl' }, 'かいせつ'), R(q.explanation, 'div', 'exp')] : null,
     h('div', { class: 'row' }, next));
   fb.append(box);
@@ -163,6 +165,41 @@ function stars(box) {
     setTimeout(() => s.remove(), 1000);
   }
 }
+/* ----- 英語の読み上げ（🔊） -----
+   ・ボタンを押したときだけ読む（自動では読まない。iPhone の Safari もタップの中でないと読めない）
+   ・使えないブラウザでは、ボタン自体を出さない */
+function canSpeak() {
+  try { return 'speechSynthesis' in window && typeof window.SpeechSynthesisUtterance === 'function'; }
+  catch (e) { return false; }
+}
+// 回答後に読む英語：say があればそれ。なければ「英語」の選択問題の、正解の選択肢（英語の文字だけのとき）
+function answerSay(q) {
+  if (q.say) return q.say;
+  if (q.subject !== '英語' || q.type !== 'choice') return '';
+  const t = plain(q.choices[q.answer]).trim();
+  return /[A-Za-z]/.test(t) && !/[぀-ヿ㐀-鿿ｦ-ﾟ]/.test(t) ? t : '';
+}
+function speak(text, lang) {
+  try {
+    const ss = window.speechSynthesis;
+    ss.cancel();
+    const u = new SpeechSynthesisUtterance(plain(text));
+    u.lang = lang || 'en-US';
+    u.rate = 0.85;
+    // 端末の中の声を優先する（ネットにつながる声はなるべく使わない）
+    const want = u.lang.toLowerCase().replace('_', '-');
+    const vs = (ss.getVoices() || []).filter(v => v.localService && String(v.lang).toLowerCase().replace('_', '-').startsWith(want.split('-')[0]));
+    const v = vs.find(v => String(v.lang).toLowerCase().replace('_', '-') === want) || vs[0];
+    if (v) u.voice = v;
+    ss.speak(u);
+  } catch (e) { /* 読めなくても続ける */ }
+}
+function sayBtn(text, lang, id) {
+  if (!text || !canSpeak()) return null;
+  return h('button', { type: 'button', class: 'saybtn', id, 'aria-label': 'えいごを読み上げる',
+    onclick: () => speak(text, lang) }, '🔊');
+}
+
 let audioCtx = null;
 function playSound(ok) {
   if (!settings.sound) return;

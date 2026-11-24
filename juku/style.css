@@ -121,6 +121,12 @@ body.in-quiz #quiz.on, body.in-quiz #result.on { display: block; }
 .qtext { font-size: var(--qsize); font-weight: 700; line-height: 1.9; margin: 4px 0 14px; overflow-wrap: anywhere; }
 .hint { background: #fffbe6; border-radius: 14px; padding: 10px 14px; margin: 0 0 12px; }
 .hintbtn { margin-bottom: 12px; }
+.qline { display: flex; align-items: flex-start; gap: 10px; }
+.qline .qtext { flex: 1; min-width: 0; }
+.saybtn { flex: none; width: 52px; height: 52px; border-radius: 50%; background: #fff; border: 2px solid var(--sc); font-size: 1.5em; line-height: 1; display: grid; place-items: center; box-shadow: 0 3px 0 rgba(0,0,0,.12); }
+.saybtn:active { transform: translateY(2px); box-shadow: none; }
+.saybtn:focus-visible { outline: 3px solid var(--sd); outline-offset: 2px; }
+.sayrow { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-weight: 700; }
 
 .choices { display: grid; gap: 10px; }
 @media (min-width: 640px) { .choices.two { grid-template-columns: 1fr 1fr; } }
