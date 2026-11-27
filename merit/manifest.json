@@ -1,0 +1,18 @@
+{
+  "id": "./",
+  "name": "広域メリットオーダー体験",
+  "short_name": "メリットオーダー",
+  "description": "3つのエリアと連系線の簡単なモデルで、インバランスネッティングと広域メリットオーダーを体験して学ぶ学習用アプリです（数値はすべて架空）。",
+  "lang": "ja",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "theme_color": "#14171d",
+  "background_color": "#0f1115",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

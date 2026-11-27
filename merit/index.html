@@ -1,0 +1,633 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>広域メリットオーダー体験</title>
+<meta name="description" content="3つのエリアと連系線の簡単なモデルで、インバランスネッティングと広域メリットオーダーを体験して学ぶ学習用アプリです（数値はすべて架空）。">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#14171d">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+  :root {
+    --bg: #0f1115;
+    --surface: #181b22;
+    --surface-2: #20242d;
+    --text: #e8eaee;
+    --text-2: #b9bec8;
+    --muted: #8a909b;
+    --border: rgba(255, 255, 255, 0.10);
+    --accent: #5b8ff5;
+    --ok: #3fbf8a;
+    --ng: #e66767;
+    --ng-text: #ff9c9c;
+    /* エリアの色（識別用） */
+    --aE: #5b8ff5; --aC: #eda33b; --aW: #c47fd9;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Yu Gothic UI", Meiryo, sans-serif;
+    font-size: 14px; line-height: 1.6;
+    padding-bottom: 96px; /* 下部の注記の分 */
+  }
+  button, input, select { font: inherit; color: inherit; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 16px 16px 24px; }
+  header h1 { font-size: 20px; margin: 0; line-height: 1.35; }
+  header .lead { color: var(--text-2); margin: 4px 0 12px; font-size: 13px; }
+  header .back { color: var(--muted); font-size: 12px; text-decoration: none; }
+  header .back:hover { color: var(--accent); }
+
+  /* 画面のタブ */
+  .tabs {
+    display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 4px;
+    position: sticky; top: 0; z-index: 5; margin: 0 -2px 10px;
+  }
+  .tabs button {
+    border: 0; background: transparent; border-radius: 7px; padding: 8px 0;
+    font-size: 13px; font-weight: 600; color: var(--text-2); cursor: pointer; white-space: nowrap;
+  }
+  .tabs button[aria-selected="true"] { background: var(--accent); color: #fff; }
+  .tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  @media (max-width: 400px) { .tabs button { font-size: 12px; } }
+
+  /* 方式の切り替え（①②③） */
+  .modes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 6px; }
+  .modes[hidden] { display: none; }
+  .modes button {
+    border: 1px solid var(--border); background: var(--surface); border-radius: 9px; padding: 6px 4px;
+    cursor: pointer; font-size: 12px; line-height: 1.3; font-weight: 600; color: var(--text-2);
+  }
+  .modes button b { display: block; font-size: 14px; }
+  .modes button[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--surface)); color: var(--text); }
+  .modes button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .modesum { font-size: 12px; color: var(--text-2); margin: 0 0 12px; }
+  .modesum[hidden] { display: none; }
+  .modesum b { color: var(--text); font-size: 15px; }
+
+  .screen[hidden] { display: none; }
+  h2 { font-size: 16px; margin: 0 0 4px; }
+  h3 { font-size: 14px; margin: 0 0 8px; }
+  .hint { color: var(--muted); font-size: 12px; margin: 0 0 10px; }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 14px; }
+  .btn { border: 1px solid var(--border); background: var(--surface-2); border-radius: 8px; padding: 8px 14px; cursor: pointer; font-weight: 600; font-size: 13px; }
+  .btn:hover:not(:disabled) { border-color: var(--accent); }
+  .btn:disabled { opacity: .4; cursor: default; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .neg { color: var(--ng-text); } .pos { color: var(--ok); }
+  [data-a="E"] { --ac: var(--aE); } [data-a="C"] { --ac: var(--aC); } [data-a="W"] { --ac: var(--aW); }
+  .achip { display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: var(--ac); margin-right: 4px; vertical-align: -1px; }
+  .fade { animation: fade .35s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  /* ===== 画面1：全体図 ===== */
+  .map { display: grid; grid-template-columns: minmax(0, 1fr) 62px minmax(0, 1fr) 62px minmax(0, 1fr); align-items: center; }
+  .area { background: var(--surface-2); border: 1px solid var(--border); border-top: 4px solid var(--ac); border-radius: 9px; padding: 8px 6px; text-align: center; min-width: 0; }
+  .area .an { font-size: 12px; font-weight: 700; }
+  .area .ad { font-size: 20px; font-weight: 800; line-height: 1.2; font-variant-numeric: tabular-nums; }
+  .area .al { font-size: 10px; color: var(--muted); }
+  .area .after { font-size: 12px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .area .use { font-size: 11px; margin-top: 4px; color: var(--text-2); line-height: 1.4; }
+  .link { position: relative; text-align: center; font-size: 11px; line-height: 1.3; padding: 0 2px; }
+  .link .wire { height: 4px; border-radius: 2px; background: var(--muted); margin: 4px 0; transition: background .3s; }
+  .link .flow { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .link .cap { color: var(--muted); font-size: 10px; white-space: nowrap; }
+  .link .tag { display: inline-block; font-size: 10px; font-weight: 700; border-radius: 4px; padding: 0 4px; background: var(--ng); color: #fff; }
+  .link.full .wire { background: var(--ng); }
+  .link.full .flow { color: var(--ng-text); }
+  .link.zero .wire { background: repeating-linear-gradient(90deg, var(--muted) 0 4px, transparent 4px 8px); opacity: .6; }
+  .total { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border); }
+  .total .big { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .ng-box { border: 1px solid var(--ng); background: color-mix(in srgb, var(--ng) 16%, var(--surface-2)); color: var(--ng-text); border-radius: 8px; padding: 8px 12px; font-weight: 700; margin-top: 10px; }
+  table.det { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+  table.det th, table.det td { border-bottom: 1px solid var(--border); padding: 6px 4px; text-align: right; vertical-align: top; }
+  table.det th:first-child { text-align: left; color: var(--muted); font-weight: 600; }
+  table.det thead th { color: var(--text); font-weight: 700; border-top: 3px solid var(--ac, transparent); }
+  .flows { margin: 10px 0 0; padding-left: 1.2em; font-size: 13px; color: var(--text-2); }
+
+  /* ===== 画面2：メリットオーダー表 ===== */
+  .mo { display: grid; gap: 10px; }
+  .mo-row { display: grid; grid-template-columns: 5.4em minmax(0, 1fr) 5.6em; gap: 4px 8px; align-items: center; }
+  .mo-row .nm { font-size: 12px; line-height: 1.3; }
+  .mo-row .nm b { font-size: 13px; }
+  .mo-row .bar { position: relative; height: 18px; }
+  .mo-row .full { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: color-mix(in srgb, var(--ac) 22%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ac) 50%, transparent); }
+  .mo-row .used { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: var(--ac); transition: width .4s; }
+  .mo-row .v { font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .mo-row .why { grid-column: 2 / 4; font-size: 11px; color: var(--muted); margin-top: -2px; }
+  .mo-row .why.blk { color: var(--ng-text); }
+  .mo-row.off .nm { color: var(--muted); }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--text-2); margin-top: 10px; }
+  .legend .sw-u { display: inline-block; width: 14px; height: 10px; border-radius: 2px; background: var(--text-2); margin-right: 4px; vertical-align: -1px; }
+  .legend .sw-r { display: inline-block; width: 14px; height: 10px; border-radius: 2px; box-shadow: inset 0 0 0 1px var(--text-2); background: color-mix(in srgb, var(--text-2) 20%, transparent); margin-right: 4px; vertical-align: -1px; }
+  .lastp { margin-top: 12px; padding: 8px 12px; border-radius: 8px; background: var(--surface-2); font-size: 13px; }
+  .lastp b { font-size: 16px; }
+
+  /* ===== 画面3：操作パネル ===== */
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; }
+  .presets .btn { font-size: 12px; padding: 6px 10px; text-align: left; }
+  .sl { margin-bottom: 12px; }
+  .sl label { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; margin-bottom: 2px; }
+  .sl label b { font-variant-numeric: tabular-nums; }
+  .sl input[type=range] { width: 100%; margin: 0; accent-color: var(--accent); }
+  .sl .rng { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); }
+  table.res { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.res th, table.res td { border-bottom: 1px solid var(--border); padding: 6px 4px; text-align: left; }
+  table.res thead th { font-size: 12px; color: var(--muted); font-weight: 600; }
+  table.res input { width: 100%; max-width: 84px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; font-variant-numeric: tabular-nums; }
+  table.res input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  table.res input.bad { border-color: var(--ng); }
+  .mini { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .mini div { background: var(--surface-2); border-radius: 8px; padding: 6px 8px; font-size: 12px; color: var(--text-2); }
+  .mini b { display: block; font-size: 15px; color: var(--text); font-variant-numeric: tabular-nums; }
+  .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+
+  /* ===== 画面4：比較 ===== */
+  .cmp { display: grid; gap: 10px; }
+  .cmp-row { display: grid; grid-template-columns: 8.6em minmax(0, 1fr); gap: 8px; align-items: center; }
+  .cmp-row .nm { font-size: 12px; line-height: 1.3; }
+  .cmp-row .bar { position: relative; height: 26px; }
+  .cmp-row .fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 0 4px 4px 0; background: var(--text-2); min-width: 2px; transition: width .4s; }
+  .cmp-row.cur .fill { background: var(--accent); }
+  .cmp-row .val { position: absolute; top: 0; line-height: 26px; font-size: 13px; font-weight: 700; padding-left: 6px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .diffs { display: grid; gap: 4px; margin-top: 12px; font-size: 13px; }
+  .diffs b { font-variant-numeric: tabular-nums; }
+  .explain { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 6px; }
+  .explain li { background: var(--surface-2); border-left: 4px solid var(--accent); border-radius: 6px; padding: 8px 10px; font-size: 13px; }
+  .explain li.ok { border-left-color: var(--ok); } .explain li.ng { border-left-color: var(--ng); }
+
+  /* ===== 画面5：クイズ ===== */
+  .q-head { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+  .q-bar { height: 4px; background: var(--surface-2); border-radius: 2px; margin-bottom: 12px; overflow: hidden; }
+  .q-bar i { display: block; height: 100%; background: var(--accent); transition: width .3s; }
+  .q-text { font-size: 16px; font-weight: 700; margin: 0 0 12px; }
+  .opts { display: grid; gap: 8px; }
+  .opt { text-align: left; border: 1px solid var(--border); background: var(--surface-2); border-radius: 9px; padding: 10px 12px; cursor: pointer; font-size: 14px; display: flex; gap: 8px; }
+  .opt:hover:not(:disabled) { border-color: var(--accent); }
+  .opt:disabled { cursor: default; }
+  .opt .k { color: var(--muted); font-weight: 700; }
+  .opt.correct { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 18%, var(--surface-2)); }
+  .opt.wrong { border-color: var(--ng); background: color-mix(in srgb, var(--ng) 16%, var(--surface-2)); }
+  .opt:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .feedback { margin-top: 12px; border-radius: 9px; padding: 10px 12px; background: var(--surface-2); }
+  .feedback .res { font-weight: 700; margin-bottom: 2px; }
+  .feedback .res.ok { color: var(--ok); } .feedback .res.ng { color: var(--ng-text); }
+  .q-next { margin-top: 12px; display: flex; justify-content: flex-end; }
+  .score { text-align: center; padding: 10px 0 4px; }
+  .score .big { font-size: 40px; font-weight: 800; }
+  .review { list-style: none; padding: 0; margin: 12px 0; display: grid; gap: 6px; font-size: 13px; }
+  .review li { display: grid; grid-template-columns: 1.4em 1fr; gap: 4px; background: var(--surface-2); border-radius: 8px; padding: 8px 10px; }
+  .review .ans { color: var(--text-2); font-size: 12px; }
+  .yes { color: var(--ok); font-weight: 700; } .no-t { color: var(--ng-text); font-weight: 700; }
+
+  /* 下部の注記（常に表示） */
+  .disclaimer {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+    background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(6px);
+    border-top: 1px solid var(--border); color: var(--text-2);
+    font-size: 11px; line-height: 1.5; padding: 7px 16px calc(7px + env(safe-area-inset-bottom));
+  }
+  .disclaimer p { max-width: 848px; margin: 0 auto; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <a class="back" href="../">← Webアプリ集</a>
+    <h1>広域メリットオーダー体験</h1>
+    <p class="lead">3つのエリアと連系線の簡単なモデルで、インバランスネッティングと広域メリットオーダーを体験します（1コマ＝30分、数値はすべて架空）。</p>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="画面の切り替え">
+    <button role="tab" id="tab-map" aria-controls="scr-map" aria-selected="true">全体図</button>
+    <button role="tab" id="tab-mo" aria-controls="scr-mo" aria-selected="false">調整力</button>
+    <button role="tab" id="tab-op" aria-controls="scr-op" aria-selected="false">操作</button>
+    <button role="tab" id="tab-cmp" aria-controls="scr-cmp" aria-selected="false">比較</button>
+    <button role="tab" id="tab-qz" aria-controls="scr-qz" aria-selected="false">クイズ</button>
+  </nav>
+
+  <div class="modes" id="modes" role="group" aria-label="方式の切り替え">
+    <button data-m="1" aria-pressed="false"><b>①</b>エリア単独</button>
+    <button data-m="2" aria-pressed="false"><b>②</b>ネッティング</button>
+    <button data-m="3" aria-pressed="true"><b>③</b>広域メリットオーダー</button>
+  </div>
+  <p class="modesum" id="modesum" aria-live="polite"></p>
+
+  <!-- 画面1：全体図 -->
+  <section class="screen" id="scr-map" role="tabpanel" aria-labelledby="tab-map">
+    <div class="panel">
+      <h2>全体図</h2>
+      <p class="hint">エリアの数字は、もとの過不足（MW）です（不足は赤、余剰は緑）。連系線の矢印は潮流の向きと量、下は空き容量です。</p>
+      <div class="map" id="map"></div>
+      <ul class="flows" id="flows"></ul>
+      <div id="mapNg"></div>
+      <div class="total"><span>上げ調整力のコスト（このコマ）</span><span class="big" id="mapCost"></span></div>
+    </div>
+    <div class="panel">
+      <h3>エリアごとの内訳（MW）</h3>
+      <table class="det" id="det"></table>
+      <p class="hint" style="margin:8px 0 0">送受：連系線で受け取った量はプラス、送り出した量はマイナス。送受後の余剰は、下げ調整力で処理します（コストは0とする簡略化）。</p>
+    </div>
+  </section>
+
+  <!-- 画面2：調整力のメリットオーダー表 -->
+  <section class="screen" id="scr-mo" role="tabpanel" aria-labelledby="tab-mo" hidden>
+    <div class="panel">
+      <h2>調整力のメリットオーダー表</h2>
+      <p class="hint">上げ調整力の候補を、価格の安い順に並べています。棒の長さ＝量、色＝エリア。塗りつぶしは使った量、薄い部分は残りです。</p>
+      <div class="mo" id="mo"></div>
+      <div class="legend" id="moLegend"></div>
+      <div class="lastp" id="lastp" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <!-- 画面3：操作パネル -->
+  <section class="screen" id="scr-op" role="tabpanel" aria-labelledby="tab-op" hidden>
+    <div class="panel">
+      <h2>操作パネル</h2>
+      <p class="hint">例のボタンを押すと、最初の状態から、その条件だけを変えます。</p>
+      <div class="presets" id="presets"></div>
+    </div>
+    <div class="panel">
+      <h3>いまの結果（上げ調整力のコスト）</h3>
+      <div class="mini" id="mini"></div>
+    </div>
+    <div class="panel">
+      <h3>各エリアの過不足（MW）</h3>
+      <div id="slD"></div>
+      <h3 style="margin-top:6px">連系線の空き容量（MW）</h3>
+      <div id="slCap"></div>
+    </div>
+    <div class="panel">
+      <h3>上げ調整力の候補</h3>
+      <div style="overflow-x:auto">
+        <table class="res" id="resTable"></table>
+      </div>
+      <p class="hint" style="margin:8px 0 0">量（MW）と価格（円/kWh）を変えられます。コスト（万円）＝使った量（MW）×価格×0.05（＝MW×1000kW×0.5時間×価格÷1万円）。</p>
+    </div>
+    <div class="actions"><button class="btn" id="reset">最初に戻す</button></div>
+  </section>
+
+  <!-- 画面4：比較 -->
+  <section class="screen" id="scr-cmp" role="tabpanel" aria-labelledby="tab-cmp" hidden>
+    <div class="panel">
+      <h2>3つの方式の比較</h2>
+      <p class="hint">上げ調整力のコスト（万円）。いまの条件で、3つの方式を計算しています。</p>
+      <div class="cmp" id="cmpBars"></div>
+      <div class="diffs" id="diffs"></div>
+      <ul class="explain" id="explain" aria-live="polite"></ul>
+    </div>
+  </section>
+
+  <!-- 画面5：確認クイズ -->
+  <section class="screen" id="scr-qz" role="tabpanel" aria-labelledby="tab-qz" hidden>
+    <h2>確認クイズ</h2>
+    <p class="hint" id="qHint"></p>
+    <div class="panel" id="quiz" aria-live="polite"></div>
+  </section>
+</div>
+
+<footer class="disclaimer">
+  <p>架空のモデルです。実際の広域需給調整は、エリア数、連系線の制約、調整力の種類・応動時間、約定のルールなど、はるかに複雑です。最新は原典（広域機関、EPRXの資料）で確認してください</p>
+</footer>
+
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmt = x => String(Math.round(x * 100) / 100);       // 322.5 など
+const sgn = x => x > 0 ? `+${x}` : x < 0 ? `−${-x}` : '0';  // 過不足の表示（全角のマイナス）
+
+// ===== モデル（すべて架空の学習用データ） =====
+const AREAS = [
+  { id: 'E', name: '東エリア', short: '東' },
+  { id: 'C', name: '中央エリア', short: '中央' },
+  { id: 'W', name: '西エリア', short: '西' },
+];
+const AN = Object.fromEntries(AREAS.map(a => [a.id, a]));
+const INIT = {
+  d: { E: -300, C: 100, W: 50 },          // 過不足（MW）：負＝不足、正＝余剰
+  cap: { EC: 200, CW: 150 },              // 連系線の空き容量（MW）
+  res: [                                  // 上げ調整力の候補（量MW・価格 円/kWh）
+    { id: 'E1', a: 'E', mw: 150, p: 18 }, { id: 'E2', a: 'E', mw: 150, p: 25 },
+    { id: 'C1', a: 'C', mw: 80, p: 12 }, { id: 'C2', a: 'C', mw: 100, p: 20 },
+    { id: 'W1', a: 'W', mw: 120, p: 10 }, { id: 'W2', a: 'W', mw: 100, p: 22 },
+  ],
+};
+const clone = o => JSON.parse(JSON.stringify(o));
+let st = clone(INIT);
+let mode = 3;
+const MODES = { 1: '①エリア単独', 2: '②ネッティング', 3: '③広域メリットオーダー' };
+const STEP = 5; // 全探索の刻み（MW）
+const COST_RATE = 0.05; // MW×円/kWh → 万円（×1000kW×0.5h÷1万円）
+
+// ===== 計算 =====
+// 送受後の過不足（f1＝E–C の潮流、C→E を正。f2＝C–W の潮流、W→C を正）
+const afterOf = (f1, f2) => ({ E: st.d.E + f1, C: st.d.C - f1 + f2, W: st.d.W - f2 });
+// 不足のエリアは、そのエリアの上げ調整力を安い順に使う。足りなければ null（不成立）
+function evalFlow(f1, f2) {
+  const after = afterOf(f1, f2), use = {};
+  let raw = 0;
+  for (const a of AREAS) {
+    let need = -after[a.id];
+    if (need <= 0) continue;
+    const list = st.res.filter(r => r.a === a.id).slice().sort((x, y) => x.p - y.p);
+    for (const r of list) {
+      if (need <= 0) break;
+      const u = Math.min(r.mw, need);
+      if (u > 0) { use[r.id] = u; raw += u * r.p; need -= u; }
+    }
+    if (need > 1e-9) return null;
+  }
+  return { f1, f2, after, use, raw, cost: raw * COST_RATE };
+}
+const range = cap => { const out = []; for (let x = -cap; x <= cap + 1e-9; x += STEP) out.push(x); if (out[out.length - 1] !== cap) out.push(cap); return out; };
+// ②の条件：もとが余剰（0以上）のエリアは送受後も0以上、もとが不足のエリアは送受後も0以下。
+// あわせて、余剰のエリアは送るだけ（送受後 ≤ もと）、不足のエリアは受け取るだけ（送受後 ≥ もと）とする。
+// こうしないと、不足のエリアが自分の上げ調整力で他エリアへ送れてしまい、「上げ調整力を運ばない」にならないため
+const nettingOk = after => AREAS.every(a => {
+  const d = st.d[a.id], x = after[a.id];
+  return d >= 0 ? x >= 0 && x <= d : x <= 0 && x >= d;
+});
+function solve(m) {
+  if (m === 1) return evalFlow(0, 0);
+  let best = null;
+  for (const f1 of range(st.cap.EC)) for (const f2 of range(st.cap.CW)) {
+    if (m === 2 && !nettingOk(afterOf(f1, f2))) continue;
+    const s = evalFlow(f1, f2);
+    if (!s) continue;
+    // コストが同じなら、潮流の小さい組み合わせを選ぶ
+    if (!best || s.raw < best.raw - 1e-9 || (Math.abs(s.raw - best.raw) <= 1e-9 && Math.abs(f1) + Math.abs(f2) < Math.abs(best.f1) + Math.abs(best.f2))) best = s;
+  }
+  return best;
+}
+let SOL = {};
+function solveAll() { SOL = { 1: solve(1), 2: solve(2), 3: solve(3) }; }
+
+// 使わなかった（残った）候補の理由
+function reasonOf(r, sol, m) {
+  const used = sol ? (sol.use[r.id] || 0) : 0;
+  if (!sol || used >= r.mw) return '';
+  const usedList = st.res.filter(x => sol.use[x.id]);
+  if (!usedList.length) return { t: '不足がないので、上げ調整力は使いませんでした', blk: false };
+  const last = Math.max(...usedList.map(x => x.p));
+  if (r.p < last) return m === 3 ? { t: '連系線の上限のため、運べません', blk: true } : { t: 'この方式では、エリアをまたいで調整力を運びません', blk: true };
+  return { t: 'より安い手段で足りました', blk: false };
+}
+
+// ===== 表示 =====
+const costText = s => s ? `${fmt(s.cost)}万円` : '不成立';
+function flowText(f, from, to) {
+  if (f === 0) return '潮流なし';
+  return f > 0 ? `${AN[from].short}→${AN[to].short} ${f}MW` : `${AN[to].short}→${AN[from].short} ${-f}MW`;
+}
+function renderModes() {
+  document.querySelectorAll('#modes button').forEach(b => b.setAttribute('aria-pressed', String(Number(b.dataset.m) === mode)));
+  const s = SOL[mode];
+  $('modesum').innerHTML = `${MODES[mode]}：<b>${costText(s)}</b>　<span style="color:var(--muted)">（① ${costText(SOL[1])}／② ${costText(SOL[2])}／③ ${costText(SOL[3])}）</span>`;
+}
+function linkHtml(f, cap, leftId, rightId, name) {
+  // f：右側から左側へ向かう向きを正（E–C は C→E、C–W は W→C）
+  const full = cap > 0 && Math.abs(f) >= cap, zero = cap === 0;
+  const arrow = f > 0 ? `◀ ${f}` : f < 0 ? `${-f} ▶` : '0';
+  const label = f === 0 ? `${name}：潮流なし` : `${name}：${f > 0 ? AN[rightId].short + 'から' + AN[leftId].short : AN[leftId].short + 'から' + AN[rightId].short}へ ${Math.abs(f)}MW`;
+  return `<div class="link${full ? ' full' : ''}${zero ? ' zero' : ''}" role="img" aria-label="${esc(label)}、空き容量${cap}MW${full ? '、上限' : ''}">
+    <div class="flow">${arrow}</div><div class="wire"></div>
+    <div class="cap">空き ${cap}</div>${full ? '<span class="tag">上限</span>' : zero ? '<span class="cap">使えない</span>' : ''}</div>`;
+}
+function renderMap() {
+  const s = SOL[mode];
+  const f1 = s ? s.f1 : 0, f2 = s ? s.f2 : 0, after = s ? s.after : afterOf(0, 0);
+  const area = a => {
+    const d = st.d[a.id], af = after[a.id];
+    const ups = st.res.filter(r => r.a === a.id && s && s.use[r.id]).map(r => `上げ ${r.id} ${s.use[r.id]}`);
+    const down = af > 0 ? [`下げ ${af}`] : [];
+    return `<div class="area" data-a="${a.id}">
+      <div class="an">${a.short}（${a.id}）</div>
+      <div class="ad ${d < 0 ? 'neg' : d > 0 ? 'pos' : ''}">${sgn(d)}</div>
+      <div class="al">${d < 0 ? '不足' : d > 0 ? '余剰' : '過不足なし'}</div>
+      <div class="after">送受後 <b class="${af < 0 ? 'neg' : af > 0 ? 'pos' : ''}">${sgn(af)}</b></div>
+      <div class="use">${[...ups, ...down].join('<br>') || '—'}</div></div>`;
+  };
+  $('map').innerHTML = area(AREAS[0]) + linkHtml(f1, st.cap.EC, 'E', 'C', 'E–C') + area(AREAS[1]) + linkHtml(f2, st.cap.CW, 'C', 'W', 'C–W') + area(AREAS[2]);
+  $('flows').innerHTML = s
+    ? `<li>E–C：${flowText(f1, 'C', 'E')}（空き容量 ${st.cap.EC}MW${st.cap.EC > 0 && Math.abs(f1) >= st.cap.EC ? '・上限' : ''}）</li>
+       <li>C–W：${flowText(f2, 'W', 'C')}（空き容量 ${st.cap.CW}MW${st.cap.CW > 0 && Math.abs(f2) >= st.cap.CW ? '・上限' : ''}）</li>`
+    : '';
+  $('mapNg').innerHTML = s ? '' : `<div class="ng-box">${MODES[mode]}では、調整力が足りません（不成立）。不足を補える組み合わせがありません。</div>`;
+  $('mapCost').textContent = costText(s);
+  // 内訳の表（行＝項目、列＝エリア）
+  const col = fn => AREAS.map(a => `<td>${fn(a.id)}</td>`).join('');
+  const recv = { E: f1, C: -f1 + f2, W: -f2 };
+  const upOf = id => s ? st.res.filter(r => r.a === id).reduce((t, r) => t + (s.use[r.id] || 0), 0) : 0;
+  $('det').innerHTML = `<thead><tr><th></th>${AREAS.map(a => `<th data-a="${a.id}">${a.short}（${a.id}）</th>`).join('')}</tr></thead><tbody>
+    <tr><th>もとの過不足</th>${col(id => `<span class="${st.d[id] < 0 ? 'neg' : st.d[id] > 0 ? 'pos' : ''}">${sgn(st.d[id])}</span>`)}</tr>
+    <tr><th>送受</th>${col(id => sgn(recv[id]))}</tr>
+    <tr><th>送受後</th>${col(id => `<span class="${after[id] < 0 ? 'neg' : after[id] > 0 ? 'pos' : ''}">${sgn(after[id])}</span>`)}</tr>
+    <tr><th>上げ調整力</th>${col(id => upOf(id) || '—')}</tr>
+    <tr><th>下げ調整力</th>${col(id => after[id] > 0 ? after[id] : '—')}</tr></tbody>`;
+}
+function renderMo() {
+  const s = SOL[mode];
+  const list = st.res.map((r, i) => ({ r, i })).sort((x, y) => x.r.p - y.r.p || x.i - y.i).map(x => x.r);
+  const max = Math.max(1, ...list.map(r => r.mw));
+  $('mo').innerHTML = list.map(r => {
+    const used = s ? (s.use[r.id] || 0) : 0, why = reasonOf(r, s, mode);
+    return `<div class="mo-row${used ? '' : ' off'}" data-a="${r.a}">
+      <span class="nm"><span class="achip"></span><b>${r.id}</b><br>${fmt(r.p)}円/kWh</span>
+      <span class="bar" role="img" aria-label="${r.id}：${r.mw}MWのうち${used}MWを使用"><span class="full" style="width:${r.mw / max * 100}%"></span><span class="used" style="width:${used / max * 100}%"></span></span>
+      <span class="v">${used}／${r.mw}MW</span>
+      ${why ? `<span class="why${why.blk ? ' blk' : ''}">${used ? `残り${r.mw - used}MW：` : ''}${why.t}</span>` : ''}</div>`;
+  }).join('');
+  if (!s) { $('lastp').innerHTML = `<span class="neg">${MODES[mode]}では、調整力が足りません（不成立）。</span>`; return; }
+  const usedList = list.filter(r => s.use[r.id]);
+  if (!usedList.length) { $('lastp').innerHTML = '上げ調整力は使っていません（不足がありません）。'; return; }
+  const last = usedList.reduce((m, r) => r.p >= m.p ? r : m, usedList[0]);
+  $('lastp').innerHTML = `最後に使った価格：<b>${fmt(last.p)}円/kWh</b>（${last.id}・${AN[last.a].name}）　コスト：<b>${fmt(s.cost)}万円</b>`;
+}
+function renderMini() {
+  $('mini').innerHTML = [1, 2, 3].map(m => `<div>${MODES[m]}<b>${costText(SOL[m])}</b></div>`).join('');
+}
+function renderCmp() {
+  const vals = [1, 2, 3].map(m => SOL[m] ? SOL[m].cost : null);
+  const max = Math.max(1, ...vals.filter(v => v != null));
+  $('cmpBars').innerHTML = [1, 2, 3].map((m, i) => {
+    const v = vals[i], w = v == null ? 0 : v / max * 100;
+    const valStyle = w > 70 ? `right:${100 - w}%;padding-right:6px;color:#0f1115` : `left:${w}%`;
+    return `<div class="cmp-row${m === mode ? ' cur' : ''}"><span class="nm">${MODES[m].replace('広域', '広域<br>')}</span>
+      <span class="bar" role="img" aria-label="${MODES[m]}：${costText(SOL[m])}">${v == null ? '' : `<span class="fill" style="width:${w}%"></span>`}<span class="val" style="${v == null ? 'left:0;color:var(--ng-text)' : valStyle}">${costText(SOL[m])}</span></span></div>`;
+  }).join('');
+  const diff = (a, b) => a == null || b == null ? '—（不成立のため計算できません）' : `${b - a <= 0 ? '−' : '+'}${fmt(Math.abs(b - a))}万円`;
+  $('diffs').innerHTML = `<div>①→②の差額：<b>${diff(vals[0], vals[1])}</b></div><div>②→③の差額：<b>${diff(vals[1], vals[2])}</b></div>`;
+  // 状況に応じた説明
+  const [c1, c2, c3] = vals, ex = [];
+  const eq = (a, b) => a != null && b != null && Math.abs(a - b) < 1e-9;
+  if (c3 === 0 && c2 === 0) ex.push(['ok', 'ネッティングで不足がなくなったので、上げ調整力を使う必要がありません。']);
+  else {
+    if (c1 == null && c2 != null) ex.push(['ok', 'エリア単独では調整力が足りませんが、ネッティングで不足と余剰を相殺すると、足りるようになりました。']);
+    else if (c2 != null && c1 != null && c2 < c1 - 1e-9) ex.push(['ok', 'ネッティングで、不足と余剰を相殺し、調整する量が減りました']);
+    else if (eq(c1, c2)) ex.push(['', 'ネッティングでは、相殺できる余剰がありません（余剰がないか、連系線で運べません）。']);
+    if (c3 != null && (c2 == null || c3 < c2 - 1e-9)) ex.push(['ok', '安い調整力を、エリアをまたいで使えました']);
+    else if (eq(c2, c3)) ex.push(['ng', '連系線の空き容量が足りず、広域で使える安い調整力がありません']);
+  }
+  if (c3 == null) ex.push(['ng', 'どの方式でも、調整力が足りません。負荷遮断などの緊急対応が必要になるおそれがあります。']);
+  $('explain').innerHTML = ex.map(([c, t]) => `<li class="${c}">${esc(t)}</li>`).join('');
+}
+function renderAll() { solveAll(); renderModes(); renderMap(); renderMo(); renderMini(); renderCmp(); }
+
+// ===== 操作パネル =====
+const PRESETS = [
+  { name: '例1：初期状態', apply: () => {} },
+  { name: '例2：E–Cの空き容量を100に絞る', apply: s => { s.cap.EC = 100; } },
+  { name: '例3：E–Cの空き容量を0にする（連系線が使えない）', apply: s => { s.cap.EC = 0; } },
+  { name: '例4：E–Cの空き容量を300に広げる', apply: s => { s.cap.EC = 300; } },
+  { name: '例5：Wも不足（W＝−80）にする', apply: s => { s.d.W = -80; } },
+];
+const SLIDERS = [
+  ...AREAS.map(a => ({ box: 'slD', key: `d.${a.id}`, label: `${a.name}（${a.id}）の過不足`, min: -400, max: 400, area: a.id })),
+  { box: 'slCap', key: 'cap.EC', label: 'E–C の空き容量', min: 0, max: 300 },
+  { box: 'slCap', key: 'cap.CW', label: 'C–W の空き容量', min: 0, max: 300 },
+];
+const getK = k => { const [o, p] = k.split('.'); return st[o][p]; };
+const setK = (k, v) => { const [o, p] = k.split('.'); st[o][p] = v; };
+function buildOp() {
+  $('presets').innerHTML = PRESETS.map((p, i) => `<button class="btn" data-i="${i}">${esc(p.name)}</button>`).join('');
+  $('presets').addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    st = clone(INIT); PRESETS[Number(b.dataset.i)].apply(st);
+    syncOp(); renderAll();
+  });
+  ['slD', 'slCap'].forEach(box => {
+    $(box).innerHTML = SLIDERS.filter(s => s.box === box).map(s => `<div class="sl"${s.area ? ` data-a="${s.area}"` : ''}>
+      <label for="sl-${s.key}">${s.area ? '<span class="achip"></span>' : ''}${esc(s.label)}<b id="v-${s.key}"></b></label>
+      <input type="range" id="sl-${s.key}" data-k="${s.key}" min="${s.min}" max="${s.max}" step="10">
+      <div class="rng"><span>${s.min}</span><span>${s.max}</span></div></div>`).join('');
+    $(box).addEventListener('input', e => {
+      const k = e.target.dataset.k;
+      if (!k) return;
+      setK(k, Number(e.target.value)); syncOp(); renderAll();
+    });
+  });
+  $('resTable').addEventListener('input', e => {
+    const t = e.target, r = st.res.find(x => x.id === t.dataset.id);
+    if (!r) return;
+    const v = Number(t.value);
+    const ok = t.value !== '' && Number.isFinite(v) && v >= 0 && (t.dataset.f === 'p' || Number.isInteger(v));
+    t.classList.toggle('bad', !ok);
+    if (!ok) return;
+    r[t.dataset.f] = v; renderAll();
+  });
+  $('reset').addEventListener('click', () => { st = clone(INIT); syncOp(); renderAll(); });
+}
+function syncOp() {
+  SLIDERS.forEach(s => {
+    const v = getK(s.key);
+    $(`sl-${s.key}`).value = v;
+    $(`v-${s.key}`).innerHTML = s.area ? `<span class="${v < 0 ? 'neg' : v > 0 ? 'pos' : ''}">${sgn(v)}MW（${v < 0 ? '不足' : v > 0 ? '余剰' : 'なし'}）</span>` : `${v}MW`;
+  });
+  $('resTable').innerHTML = `<thead><tr><th>候補</th><th>エリア</th><th>量（MW）</th><th>価格（円/kWh）</th></tr></thead><tbody>${st.res.map(r => `
+    <tr data-a="${r.a}"><td><b>${r.id}</b></td><td><span class="achip"></span>${AN[r.a].short}</td>
+      <td><input type="number" inputmode="numeric" min="0" step="1" value="${r.mw}" data-id="${r.id}" data-f="mw" aria-label="${r.id}の量（MW）"></td>
+      <td><input type="number" inputmode="decimal" min="0" step="0.1" value="${r.p}" data-id="${r.id}" data-f="p" aria-label="${r.id}の価格（円/kWh）"></td></tr>`).join('')}</tbody>`;
+}
+
+// ===== 画面5：クイズ =====
+const QUIZ = [
+  { q: 'インバランスネッティングとは？', a: 'エリア間の過不足を相殺すること',
+    wrong: ['連系線の空き容量を増やすこと', '調整力を前日に確保すること', '発電計画を、実需給の1時間前に変更すること'],
+    exp: 'Aエリアが不足、Bエリアが余剰なら、互いに相殺して、調整する量を減らします。調整力を動かす量が減るので、そのぶんコストも下がります。' },
+  { q: '広域メリットオーダーの考え方は？', a: '連系線の空き容量の範囲で、安い調整力から順に、エリアをまたいで使う',
+    wrong: ['各エリアが、自エリアの調整力だけを使う', '応動時間の短い調整力から、価格に関係なく使う', '連系線の空き容量を気にせず、最も安い調整力だけを使う'],
+    exp: '必要な量に達するまで、安い順に使います。ただし、連系線の空き容量を超えて運ぶことはできません。' },
+  { q: '連系線の空き容量が小さくなると、広域メリットオーダーの効果は？', a: '小さくなる',
+    wrong: ['大きくなる', '変わらない', '空き容量とは関係がない'],
+    exp: '安い調整力があっても、運べないためです。空き容量が0なら、エリア単独と同じ結果になります。' },
+  { q: 'Aエリアが250不足、Bエリアが100余剰のとき、ネッティング後に調整が必要な量は？', a: '150',
+    wrong: ['100', '250', '350'],
+    exp: '250−100＝150です。残りの150を、調整力で補います。' },
+  { q: '需給調整市場で調整力を確保する（kW）のに対し、広域需給調整システムが行うのは？', a: '確保した調整力を、広域メリットオーダーで当日に動かす',
+    wrong: ['前日に、調整力（ΔkW）の入札を受け付けて約定させる', '卸電力市場（スポット）で、電力量（kWh）を取引する', '事後に、インバランスの精算だけを行う'],
+    exp: '市場で確保した調整力の情報を、中給と連係して、発動します。確保（kW）と発動（kWh）は、別の段階です。' },
+];
+const shuffle = arr => { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+let qs = [], qi = 0, results = [];
+function startQuiz() { qs = shuffle(QUIZ).map(q => ({ ...q, opts: shuffle([q.a, ...q.wrong]) })); qi = 0; results = []; renderQ(); }
+function renderQ() {
+  if (qi >= qs.length) return renderScore();
+  const q = qs[qi];
+  $('quiz').innerHTML = `<div class="fade">
+    <div class="q-head"><span>第${qi + 1}問 / 全${qs.length}問</span><span>正解 ${results.filter(Boolean).length}</span></div>
+    <div class="q-bar"><i style="width:${qi / qs.length * 100}%"></i></div>
+    <p class="q-text">${esc(q.q)}</p>
+    <div class="opts">${q.opts.map((o, i) => `<button class="opt" data-i="${i}"><span class="k">${'ABCD'[i]}</span><span>${esc(o)}</span></button>`).join('')}</div>
+    <div id="qFb"></div></div>`;
+  $('quiz').querySelectorAll('.opt').forEach(b => b.addEventListener('click', () => answer(Number(b.dataset.i))));
+}
+function answer(i) {
+  const q = qs[qi], ok = q.opts[i] === q.a;
+  results.push(ok);
+  $('quiz').querySelectorAll('.opt').forEach((b, j) => { b.disabled = true; if (q.opts[j] === q.a) b.classList.add('correct'); else if (j === i) b.classList.add('wrong'); });
+  const last = qi === qs.length - 1;
+  $('qFb').innerHTML = `<div class="feedback fade"><div class="res ${ok ? 'ok' : 'ng'}">${ok ? '○ 正解' : '× 不正解'}（正解：${esc(q.a)}）</div><div>${esc(q.exp)}</div></div>
+    <div class="q-next"><button class="btn primary" id="qNext">${last ? '結果を見る' : '次の問題 →'}</button></div>`;
+  $('qNext').addEventListener('click', () => { qi++; renderQ(); });
+  $('qNext').focus({ preventScroll: true });
+}
+function renderScore() {
+  const n = results.filter(Boolean).length;
+  const msg = n === qs.length ? '全問正解です！' : n >= Math.ceil(qs.length * 0.6) ? 'よくできました。間違えた問題を、全体図と比較で確かめましょう。' : '全体図と比較の画面を見直してから、もう一度挑戦しましょう。';
+  $('quiz').innerHTML = `<div class="fade"><div class="score"><div class="hint" style="margin:0">あなたの点数</div><div class="big">${n} / ${qs.length}</div><div>${msg}</div></div>
+    <ul class="review">${qs.map((q, i) => `<li><span class="${results[i] ? 'yes' : 'no-t'}">${results[i] ? '○' : '×'}</span><span>${esc(q.q)}<br><span class="ans">正解：${esc(q.a)}</span></span></li>`).join('')}</ul>
+    <div class="q-next"><button class="btn primary" id="qAgain">もう一度（問題を並べ替えて）</button></div></div>`;
+  $('qAgain').addEventListener('click', startQuiz);
+}
+
+// ===== タブ・方式の切り替え =====
+const TABS = ['map', 'mo', 'op', 'cmp', 'qz'];
+function showTab(name) {
+  TABS.forEach(t => { $('tab-' + t).setAttribute('aria-selected', String(t === name)); $('scr-' + t).hidden = t !== name; });
+  // 方式の切り替えは、全体図・調整力・操作の画面で表示する
+  const showModes = ['map', 'mo', 'op'].includes(name);
+  $('modes').hidden = !showModes; $('modesum').hidden = !showModes;
+  try { localStorage.setItem('merit-tab', name); } catch (e) {}
+}
+TABS.forEach((t, i) => {
+  const b = $('tab-' + t);
+  b.addEventListener('click', () => showTab(t));
+  b.addEventListener('keydown', e => {
+    const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+    if (!d) return;
+    const n = TABS[(i + d + TABS.length) % TABS.length];
+    showTab(n); $('tab-' + n).focus();
+  });
+});
+$('modes').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  mode = Number(b.dataset.m); renderAll();
+});
+
+// ===== 初期表示 =====
+$('qHint').textContent = `全${QUIZ.length}問の4択です。問題と選択肢の順番は毎回変わります。`;
+$('moLegend').innerHTML = AREAS.map(a => `<span data-a="${a.id}"><span class="achip"></span>${a.name}</span>`).join('') +
+  '<span><span class="sw-u"></span>使った量</span><span><span class="sw-r"></span>残り</span>';
+buildOp(); syncOp(); renderAll(); startQuiz();
+let saved = null;
+try { saved = localStorage.getItem('merit-tab'); } catch (e) {}
+showTab(TABS.includes(saved) ? saved : 'map');
+
+// オフラインでも開けるように、サービスワーカーを登録する（相対パスなのでサブフォルダ公開でも動く）
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
