@@ -1,5 +1,5 @@
 {
- "updatedAt": "2026-11-27T18:27:17+00:00",
+ "updatedAt": "2026-11-27T19:38:48+00:00",
  "source": "Yahoo!ファイナンス（yfinance で取得）",
  "quotes": {
   "^N225": {
@@ -24,7 +24,7 @@
    "date": "2026-11-27"
   },
   "USDJPY": {
-   "price": 159.534,
+   "price": 159.551,
    "prevClose": 159.215,
    "monthAgo": 157.528,
    "yearStart": 156.413,
@@ -87,21 +87,21 @@
    "date": "2026-11-27"
   },
   "DAL": {
-   "price": 84.47,
+   "price": 84.82,
    "prevClose": 82.95,
    "monthAgo": 81.45,
    "yearStart": 69.4,
    "date": "2026-11-27"
   },
   "GEV": {
-   "price": 732.195,
+   "price": 735.31,
    "prevClose": 715.0,
    "monthAgo": 895.08,
    "yearStart": 653.57,
    "date": "2026-11-27"
   },
   "OKLO": {
-   "price": 20.47,
+   "price": 20.85,
    "prevClose": 19.47,
    "monthAgo": 27.33,
    "yearStart": 71.76,
